@@ -897,7 +897,8 @@ for (const mode of ['managed', 'trusted', 'direct', 'preview'] as const) {
             assert.equal(response.status, 200, body);
             assert.doesNotMatch(body, /refreshed-access-token|valid-refresh-token|next-refresh-token/);
             assert.equal(hitCount, 1, 'successful authentication must not silently lose KB results');
-            assert.deepEqual(searchTokens, [refreshedToken, refreshedToken]);
+            // Search and weighting share one owner-bound persistence adapter.
+            assert.deepEqual(searchTokens, [refreshedToken]);
             assert.deepEqual(searchCalls, ['search_knowledge_fts', 'search_knowledge_trigram']);
             assert.equal(refreshCalls, 1);
             assert.deepEqual(cookieWrites, [refreshedToken, 'next-refresh-token']);

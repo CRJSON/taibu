@@ -25,6 +25,7 @@ import { selectPrimarySavedBaziChart } from '@/lib/user/charts-client';
 import { filterMentionsByFeature, getEnabledDataSourceTypes } from '@/lib/data-sources/catalog';
 import { readLocalVisualizationSettings } from '@/lib/visualization/settings';
 import type { ChatStreamTaskRunner } from '@/lib/chat/chat-stream-manager';
+import { useAgentChat } from '@/lib/agent/use-agent-chat';
 
 function shouldShowCheckKeyAction(message?: string): boolean {
     if (!message) return false;
@@ -109,6 +110,7 @@ export function useChatMessaging({
     router,
     searchParams,
 }: UseChatMessagingParams) {
+    const agent = useAgentChat(state, userId, refreshViewerState);
     const {
         messages, setMessages,
         inputValue, setInputValue,
@@ -324,13 +326,29 @@ export function useChatMessaging({
 
     // Stop AI reply
     const handleStop = useCallback(() => {
+        if (agent.active) { agent.stop(); return; }
         if (!activeConversationId) return;
         chatStreamManager.stopTask(activeConversationId);
-    }, [activeConversationId]);
+    }, [activeConversationId, agent]);
+
+    const handleQueueMessage = async () => {
+        if (!agent.active || !inputValue.trim() || isSendingToList) return;
+        setIsSendingToList(true);
+        try { await agent.sendCommand(inputValue.trim(), true); setInputValue(''); setMentions([]); }
+        catch (error) { showToast('error', error instanceof Error ? error.message : '发送失败'); }
+        finally { setIsSendingToList(false); }
+    };
 
     // Send message
     const handleSend = async () => {
         const trimmedInput = inputValue.trim();
+        if (agent.active && trimmedInput && !isSendingToList) {
+            setIsSendingToList(true);
+            try { await agent.sendCommand(trimmedInput); setInputValue(''); setMentions([]); }
+            catch (error) { showToast('error', error instanceof Error ? error.message : '发送失败'); }
+            finally { setIsSendingToList(false); }
+            return;
+        }
         if (!trimmedInput || isLoading || isSendingToList) return;
         if (isDreamMode && dreamContextLoading) return;
         setIsSendingToList(true);
@@ -392,6 +410,26 @@ export function useChatMessaging({
             const activeCustomProvider = getCustomProvider();
             const customProviderLabel = getCustomProviderDisplayName(activeCustomProvider);
             const effectiveModelId = activeCustomProvider ? `custom:${activeCustomProvider.modelId}` : selectedModel;
+            if (agent.mode === 'agent') {
+                setMessages(newMessages);
+                try {
+                    let fileContent: string | undefined;
+                    if (attachmentState.file) {
+                        const form = new FormData(); form.append('mode', 'file'); form.append('query', trimmedInput); form.append('file', attachmentState.file);
+                        const response = await fetch('/api/dify/enhance', { method: 'POST', body: form });
+                        const result = await response.json();
+                        if (!response.ok || !result.success) throw new Error(result.error || '附件解析失败');
+                        fileContent = result.data?.file_content;
+                    }
+                    await agent.start(conversationId, userMessage, { model: selectedModel, reasoning: reasoningEnabled, mentions: messageMentions, provider: activeCustomProvider, fileContent });
+                    setInputValue(''); setMentions([]); setAttachmentState(prev => ({ ...prev, file: undefined }));
+                } catch (error) {
+                    if (conversationId === activeConversationIdRef.current) setMessages(messages);
+                    void state.retryConversationLoad();
+                    showToast('error', error instanceof Error ? error.message : '创建任务失败');
+                }
+                return;
+            }
             const assistantMessageId = (Date.now() + 1).toString();
             const initialAssistantMessage: ChatMessage = {
                 id: assistantMessageId, role: 'assistant', content: '', createdAt: new Date().toISOString(), model: effectiveModelId,
@@ -485,6 +523,7 @@ export function useChatMessaging({
 
     // Edit message and resend
     const handleEditMessage = async (messageId: string, newContent: string, nextMentions?: Mention[]) => {
+        if (agent.active) { showToast('info', '请先停止当前任务，再编辑历史消息'); return; }
         const targetConversationId = activeConversationIdRef.current;
         if (!targetConversationId) return;
         const isTargetActive = () => targetConversationId === activeConversationIdRef.current;
@@ -500,7 +539,7 @@ export function useChatMessaging({
 
         const existingVersions = [...(originalMessage.versions || [])];
         if (existingVersions.length === 0 && originalMessage.content) {
-            existingVersions.push({ userContent: originalMessage.content, mentions: originalMessage.mentions ? [...originalMessage.mentions] : undefined, aiContent: originalAiContent, createdAt: originalMessage.createdAt, subsequentMessages: subsequentMessages.length > 0 ? subsequentMessages : undefined });
+            existingVersions.push({ userContent: originalMessage.content, mentions: originalMessage.mentions ? [...originalMessage.mentions] : undefined, aiContent: originalAiContent, aiAgent: originalAiMessage?.agent, aiMetadata: originalAiMessage?.metadata, createdAt: originalMessage.createdAt, subsequentMessages: subsequentMessages.length > 0 ? subsequentMessages : undefined });
         } else if (existingVersions.length > 0 && subsequentMessages.length > 0) {
             const idx = originalMessage.currentVersionIndex ?? existingVersions.length - 1;
             if (existingVersions[idx] && !existingVersions[idx].subsequentMessages) existingVersions[idx] = { ...existingVersions[idx], subsequentMessages };
@@ -509,6 +548,12 @@ export function useChatMessaging({
         const messageMentions = sanitizeOutgoingMentions(Array.isArray(nextMentions) ? nextMentions : (originalMessage.mentions ?? []));
         const updatedUserMessage: ChatMessage = { ...originalMessage, content: newContent, mentions: messageMentions.length ? [...messageMentions] : undefined, versions: existingVersions, currentVersionIndex: existingVersions.length - 1 };
         const newMessages = [...previousMessages, updatedUserMessage];
+        if (agent.mode === 'agent') {
+            if (isTargetActive()) setMessages(newMessages);
+            try { await agent.start(targetConversationId, updatedUserMessage, { model: selectedModel, reasoning: reasoningEnabled, mentions: messageMentions, provider: getCustomProvider(), replaceFromMessageId: originalMessage.id }); }
+            catch (error) { if (isTargetActive()) setMessages(originalSnapshot); showToast('error', error instanceof Error ? error.message : '编辑失败'); }
+            return;
+        }
         if (isTargetActive()) setMessages(newMessages);
 
         const assistantMessageId = (Date.now() + 1).toString();
@@ -564,6 +609,7 @@ export function useChatMessaging({
 
     // Regenerate AI response
     const handleRegenerateResponse = async (messageId: string) => {
+        if (agent.active) { showToast('info', '请先停止当前任务，再重新生成'); return; }
         const targetConversationId = activeConversationIdRef.current;
         if (!targetConversationId) return;
         const isTargetActive = () => targetConversationId === activeConversationIdRef.current;
@@ -579,13 +625,19 @@ export function useChatMessaging({
         const userMessageIndex = [...previousMessages].reverse().findIndex(msg => msg.role === 'user');
         const lastUserMessage = userMessageIndex >= 0 ? previousMessages[previousMessages.length - 1 - userMessageIndex] : undefined;
         const messageMentions = sanitizeOutgoingMentions(lastUserMessage?.mentions ?? []);
+        if (agent.mode === 'agent' && lastUserMessage) {
+            if (isTargetActive()) setMessages(previousMessages);
+            try { await agent.start(targetConversationId, lastUserMessage, { model: selectedModel, reasoning: reasoningEnabled, mentions: messageMentions, provider: getCustomProvider(), replaceFromMessageId: lastUserMessage.id }); }
+            catch (error) { if (isTargetActive()) setMessages(originalSnapshot); showToast('error', error instanceof Error ? error.message : '重新生成失败'); }
+            return;
+        }
 
         let updatedPreviousMessages = previousMessages;
         let existingVersions: NonNullable<ChatMessage['versions']> = [];
         if (lastUserMessage) {
             existingVersions = [...(lastUserMessage.versions || [])];
             if (existingVersions.length === 0 && oldAiContent) {
-                existingVersions.push({ userContent: lastUserMessage.content, mentions: lastUserMessage.mentions ? [...lastUserMessage.mentions] : undefined, aiContent: oldAiContent, createdAt: oldAiMessage.createdAt || new Date().toISOString(), subsequentMessages: subsequentMessages.length > 0 ? subsequentMessages : undefined });
+                existingVersions.push({ userContent: lastUserMessage.content, mentions: lastUserMessage.mentions ? [...lastUserMessage.mentions] : undefined, aiContent: oldAiContent, aiAgent: oldAiMessage.agent, aiMetadata: oldAiMessage.metadata, createdAt: oldAiMessage.createdAt || new Date().toISOString(), subsequentMessages: subsequentMessages.length > 0 ? subsequentMessages : undefined });
             } else if (existingVersions.length > 0 && subsequentMessages.length > 0) {
                 const currentVersionIdx = lastUserMessage.currentVersionIndex ?? existingVersions.length - 1;
                 if (existingVersions[currentVersionIdx] && !existingVersions[currentVersionIdx].subsequentMessages) existingVersions[currentVersionIdx] = { ...existingVersions[currentVersionIdx], subsequentMessages };
@@ -659,6 +711,7 @@ export function useChatMessaging({
 
     // Switch message version
     const handleSwitchVersion = useCallback((messageId: string, versionIndex: number) => {
+        if (agent.active) return;
         setMessages(prev => {
             const messageIndex = prev.findIndex(m => m.id === messageId);
             if (messageIndex === -1) return prev;
@@ -668,15 +721,17 @@ export function useChatMessaging({
             const previousMessages = prev.slice(0, messageIndex);
             const versionMentions = sanitizeOutgoingMentions(version.mentions ?? message.mentions);
             const updatedUserMessage: ChatMessage = { ...message, content: version.userContent, mentions: versionMentions ? [...versionMentions] : undefined, currentVersionIndex: versionIndex };
-            const aiMessage: ChatMessage = { id: `ai-version-${versionIndex}-${Date.now()}`, role: 'assistant', content: version.aiContent, createdAt: version.createdAt };
+            const aiMessage: ChatMessage = { id: `ai-version-${versionIndex}-${Date.now()}`, role: 'assistant', content: version.aiContent, createdAt: version.createdAt, agent: version.aiAgent, metadata: version.aiMetadata };
             let newMessages = [...previousMessages, updatedUserMessage, aiMessage];
             if (version.subsequentMessages?.length) newMessages = [...newMessages, ...version.subsequentMessages];
             if (userId && activeConversationId) void saveMessages(activeConversationId, newMessages);
             return newMessages;
         });
-    }, [activeConversationId, sanitizeOutgoingMentions, saveMessages, setMessages, userId]);
+    }, [activeConversationId, agent.active, sanitizeOutgoingMentions, saveMessages, setMessages, userId]);
 
     return {
+        agent,
+        handleQueueMessage,
         scrollToBottom,
         handleMessageListScroll,
         markCreditsExhausted,

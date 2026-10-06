@@ -583,3 +583,72 @@ CREATE TABLE public.ziwei_charts (
 
 -- Agent schema additions from 20261005_100000_agent_runtime.sql.
 -- Apply the complete migration for indexes, RLS, grants, functions and triggers.
+CREATE TABLE public.agent_runs (
+  id uuid PRIMARY KEY,
+  user_id uuid NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  conversation_id uuid NOT NULL REFERENCES public.conversations(id) ON DELETE CASCADE,
+  request_id text NOT NULL,
+  request_hash text NOT NULL,
+  status text NOT NULL DEFAULT 'queued' CHECK (status IN ('queued','running','awaiting_input','cancelling','completed','cancelled','failed')),
+  input jsonb NOT NULL,
+  checkpoint jsonb NOT NULL,
+  public_message jsonb NOT NULL,
+  billing text NOT NULL CHECK (billing IN ('charged','exempt','refunded')),
+  worker_id text,
+  fence bigint NOT NULL DEFAULT 0,
+  lease_until timestamptz,
+  cancel_requested boolean NOT NULL DEFAULT false,
+  record_id uuid REFERENCES public.ming_records(id) ON DELETE SET NULL,
+  event_cursor bigint NOT NULL DEFAULT 0,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (user_id, request_id)
+);
+CREATE TABLE public.agent_run_events (
+  sequence bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  run_id uuid NOT NULL REFERENCES public.agent_runs(id) ON DELETE CASCADE,
+  type text NOT NULL,
+  payload jsonb NOT NULL DEFAULT '{}',
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE public.agent_run_commands (
+  sequence bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  run_id uuid NOT NULL REFERENCES public.agent_runs(id) ON DELETE CASCADE,
+  request_id text NOT NULL,
+  mode text NOT NULL CHECK (mode IN ('steer','follow_up','reply')),
+  message jsonb NOT NULL,
+  consumed boolean NOT NULL DEFAULT false,
+  durable_admitted boolean NOT NULL DEFAULT false,
+  UNIQUE (run_id, request_id)
+);
+CREATE TABLE public.agent_run_artifacts (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  run_id uuid NOT NULL REFERENCES public.agent_runs(id) ON DELETE CASCADE,
+  call_id text NOT NULL,
+  tool_name text NOT NULL,
+  kind text NOT NULL CHECK (kind IN ('calculation','tool')),
+  args jsonb NOT NULL,
+  result jsonb NOT NULL,
+  chart_payload jsonb,
+  chart_id uuid,
+  chart_type text,
+  UNIQUE (run_id, call_id)
+);
+CREATE TABLE public.agent_run_credentials (
+  run_id uuid PRIMARY KEY REFERENCES public.agent_runs(id) ON DELETE CASCADE,
+  ciphertext jsonb NOT NULL
+);
+CREATE TABLE public.agent_workers (
+  id text PRIMARY KEY,
+  heartbeat_at timestamptz NOT NULL DEFAULT now(),
+  engine text NOT NULL DEFAULT 'pi-agent-core/1.0.2'
+);
+
+-- Pi Durable storage and ownership from 20261006_100000_agent_pi_durable.sql.
+CREATE TABLE public.agent_durable_commits (
+  run_id uuid NOT NULL REFERENCES public.agent_runs(id) ON DELETE CASCADE,
+  sequence bigint NOT NULL CHECK(sequence > 0),
+  writes jsonb NOT NULL CHECK(jsonb_typeof(writes)='array'),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY(run_id,sequence)
+);

@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
   "baselineRevision": "5725dde",
-  "sourceFingerprint": "2d796f8d381f05f96b98abf630affd6635d677a4397dad073288d05801852c58",
+  "sourceFingerprint": "3c7c040565c9b915db79249ff31e82e0374ea99d27d60a8ecfd532f4a9a0b9cd",
   "target": "empty local self-hosted application schema; NOT production parity or a migration replay",
   "bootstrapOrder": [
     "platform roles/extensions",
@@ -18,7 +18,7 @@
   "sources": [
     {
       "file": "supabase/tabel_export_from_supabase.sql",
-      "sha256": "6096cdbce0acd356a875e76e0294a396e5d2a1d232adc3a643aa98eadf426b9e"
+      "sha256": "50718710be9007057b6e9177c296afa9d86bc19dcec2e0c5e97d1d9623171642"
     },
     {
       "file": "supabase/migrations/20260118_create_gamification_tables.sql",
@@ -121,8 +121,20 @@
       "sha256": "cdb0ac0a501806356814d7eb08819fde0fd53d32d4e68e7eaf3086178216d56e"
     },
     {
+      "file": "supabase/migrations/20261005_100000_agent_runtime.sql",
+      "sha256": "b180b3aa3dd71ea00d05b6ad3265fabe6778c9f65669f26ffefc68095dd29b4f"
+    },
+    {
       "file": "supabase/migrations/20261005_110000_chart_time_resolution.sql",
       "sha256": "ba985d4cdbdda899a935dea2bf870a312c26412958c1305bcb9a5d46148db9fd"
+    },
+    {
+      "file": "supabase/migrations/20261005_120000_agent_chart_identity.sql",
+      "sha256": "a07ad1069420ba33c4e239faf522f590310e0f827bfe00ddb9ea323cc71936da"
+    },
+    {
+      "file": "supabase/migrations/20261006_100000_agent_pi_durable.sql",
+      "sha256": "d4bbe5f367df9d2a2eb090deb09e39c480c88aed95867c37e3a2aa6beb87c62e"
     },
     {
       "file": "supabase/selfhost/source-views.sql",
@@ -142,11 +154,11 @@
     },
     {
       "file": "src/lib/app-settings.ts",
-      "sha256": "a8ea39bce271a5c3e5ac530c9d44757247729f90ba0cf112b88e5a68d92d8524"
+      "sha256": "c2a5621a0800e8c1206c145deba5331fc62cd96193ba6639d7316925876d60c5"
     },
     {
       "file": "scripts/selfhost-schema.mjs",
-      "sha256": "c99060bc7b250674b44d51b42f97ff14e0ee7056db4e8b6a119bb9c98db3810b"
+      "sha256": "9e7ad099cdf53d73817128b173cf6c1e6403870672722cd04b88647586656c3a"
     },
     {
       "file": "src/app/api/supabase/storage/route.ts",
@@ -161,7 +173,7 @@
     "Snapshot ARRAY placeholders -> text[] for tags/yongshen_targets",
     "USER-DEFINED -> extensions.vector",
     "Inline conversations NOT VALID CHECK -> valid CHECK on empty table",
-    "Foreign keys deferred until all application tables exist",
+    "Foreign keys deferred until all application tables exist; seven Agent tables installed by the runtime and Pi Durable migrations",
     "Restore explicitly sourced uniqueness/indexes/vector metadata check and child CASCADE actions",
     "New local owner/admin policies and least-privilege ACL; not inferred production metadata",
     "Skip obsolete tables/data backfills/model seeds and credentials",
@@ -175,6 +187,48 @@
       "name": "activation_keys",
       "source": "supabase/tabel_export_from_supabase.sql",
       "security": "administrator JWT only unless explicit owner/catalog policy below",
+      "uniqueSource": null
+    },
+    {
+      "name": "agent_durable_commits",
+      "source": "supabase/tabel_export_from_supabase.sql",
+      "security": "Agent runtime migration: owner SELECT; lease-fenced or owner-checked RPC mutations; credentials administrator only",
+      "uniqueSource": null
+    },
+    {
+      "name": "agent_run_artifacts",
+      "source": "supabase/tabel_export_from_supabase.sql",
+      "security": "Agent runtime migration: owner SELECT; lease-fenced or owner-checked RPC mutations; credentials administrator only",
+      "uniqueSource": null
+    },
+    {
+      "name": "agent_run_commands",
+      "source": "supabase/tabel_export_from_supabase.sql",
+      "security": "Agent runtime migration: owner SELECT; lease-fenced or owner-checked RPC mutations; credentials administrator only",
+      "uniqueSource": null
+    },
+    {
+      "name": "agent_run_credentials",
+      "source": "supabase/tabel_export_from_supabase.sql",
+      "security": "Agent runtime migration: owner SELECT; lease-fenced or owner-checked RPC mutations; credentials administrator only",
+      "uniqueSource": null
+    },
+    {
+      "name": "agent_run_events",
+      "source": "supabase/tabel_export_from_supabase.sql",
+      "security": "Agent runtime migration: owner SELECT; lease-fenced or owner-checked RPC mutations; credentials administrator only",
+      "uniqueSource": null
+    },
+    {
+      "name": "agent_runs",
+      "source": "supabase/tabel_export_from_supabase.sql",
+      "security": "Agent runtime migration: owner SELECT; lease-fenced or owner-checked RPC mutations; credentials administrator only",
+      "uniqueSource": null
+    },
+    {
+      "name": "agent_workers",
+      "source": "supabase/tabel_export_from_supabase.sql",
+      "security": "Agent runtime migration: owner SELECT; lease-fenced or owner-checked RPC mutations; credentials administrator only",
       "uniqueSource": null
     },
     {
@@ -468,6 +522,117 @@
         "src/app/api/admin/ai-models/[id]/sources/[sourceId]/route.ts"
       ],
       "source": "supabase/migrations/20260409_140500_full_atomicity_repairs.sql",
+      "status": "defined",
+      "reason": null
+    },
+    {
+      "name": "agent_cache_tool",
+      "callers": [
+        "src/lib/agent/tools.server.ts"
+      ],
+      "source": "supabase/migrations/20261005_100000_agent_runtime.sql",
+      "status": "defined",
+      "reason": null
+    },
+    {
+      "name": "agent_cancel_run",
+      "callers": [
+        "src/lib/agent/api.server.ts"
+      ],
+      "source": "supabase/migrations/20261005_100000_agent_runtime.sql",
+      "status": "defined",
+      "reason": null
+    },
+    {
+      "name": "agent_checkpoint",
+      "callers": [
+        "src/lib/agent/runtime.server.ts"
+      ],
+      "source": "supabase/migrations/20261005_100000_agent_runtime.sql",
+      "status": "defined",
+      "reason": null
+    },
+    {
+      "name": "agent_claim_run",
+      "callers": [
+        "src/lib/agent/worker-entry.ts"
+      ],
+      "source": "supabase/migrations/20261006_100000_agent_pi_durable.sql",
+      "status": "defined",
+      "reason": null
+    },
+    {
+      "name": "agent_create_run",
+      "callers": [
+        "src/lib/agent/api.server.ts"
+      ],
+      "source": "supabase/migrations/20261005_100000_agent_runtime.sql",
+      "status": "defined",
+      "reason": null
+    },
+    {
+      "name": "agent_durable_commit",
+      "callers": [
+        "src/lib/agent/durable-storage.server.ts",
+        "src/lib/agent/durable-storage.server.ts"
+      ],
+      "source": "supabase/migrations/20261006_100000_agent_pi_durable.sql",
+      "status": "defined",
+      "reason": null
+    },
+    {
+      "name": "agent_durable_read",
+      "callers": [
+        "src/lib/agent/durable-storage.server.ts"
+      ],
+      "source": "supabase/migrations/20261006_100000_agent_pi_durable.sql",
+      "status": "defined",
+      "reason": null
+    },
+    {
+      "name": "agent_finish_run",
+      "callers": [
+        "src/lib/agent/runtime.server.ts",
+        "src/lib/agent/worker-entry.ts"
+      ],
+      "source": "supabase/migrations/20261005_120000_agent_chart_identity.sql",
+      "status": "defined",
+      "reason": null
+    },
+    {
+      "name": "agent_renew_lease",
+      "callers": [
+        "src/lib/agent/runtime.server.ts"
+      ],
+      "source": "supabase/migrations/20261005_100000_agent_runtime.sql",
+      "status": "defined",
+      "reason": null
+    },
+    {
+      "name": "agent_search_knowledge",
+      "callers": [
+        "src/lib/agent/tools.server.ts"
+      ],
+      "source": "supabase/migrations/20261005_100000_agent_runtime.sql",
+      "status": "defined",
+      "reason": null
+    },
+    {
+      "name": "agent_submit_command",
+      "callers": [
+        "src/lib/agent/api.server.ts"
+      ],
+      "source": "supabase/migrations/20261005_100000_agent_runtime.sql",
+      "status": "defined",
+      "reason": null
+    },
+    {
+      "name": "agent_worker_heartbeat",
+      "callers": [
+        "src/lib/agent/worker-entry.ts",
+        "src/lib/agent/worker-entry.ts"
+      ],
+      "source": "supabase/migrations/20261006_100000_agent_pi_durable.sql",
       "status": "defined",
       "reason": null
     },
@@ -773,6 +938,88 @@
         },
         {
           "file": "src/lib/user/activation-keys.ts",
+          "kind": "literal-from"
+        }
+      ]
+    },
+    {
+      "name": "agent_run_artifacts",
+      "kind": "table",
+      "status": "defined",
+      "callers": [
+        {
+          "file": "src/lib/agent/store.server.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/agent/store.server.ts",
+          "kind": "literal-from"
+        }
+      ]
+    },
+    {
+      "name": "agent_run_commands",
+      "kind": "table",
+      "status": "defined",
+      "callers": [
+        {
+          "file": "src/lib/agent/store.server.ts",
+          "kind": "literal-from"
+        }
+      ]
+    },
+    {
+      "name": "agent_run_credentials",
+      "kind": "table",
+      "status": "defined",
+      "callers": [
+        {
+          "file": "src/lib/agent/store.server.ts",
+          "kind": "literal-from"
+        }
+      ]
+    },
+    {
+      "name": "agent_run_events",
+      "kind": "table",
+      "status": "defined",
+      "callers": [
+        {
+          "file": "src/lib/agent/store.server.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/agent/store.server.ts",
+          "kind": "literal-from"
+        }
+      ]
+    },
+    {
+      "name": "agent_runs",
+      "kind": "table",
+      "status": "defined",
+      "callers": [
+        {
+          "file": "src/lib/agent/api.server.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/agent/store.server.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/agent/store.server.ts",
+          "kind": "literal-from"
+        }
+      ]
+    },
+    {
+      "name": "agent_workers",
+      "kind": "table",
+      "status": "defined",
+      "callers": [
+        {
+          "file": "src/lib/agent/store.server.ts",
           "kind": "literal-from"
         }
       ]
@@ -1143,6 +1390,10 @@
       "kind": "table",
       "status": "defined",
       "callers": [
+        {
+          "file": "src/lib/agent/api.server.ts",
+          "kind": "literal-from"
+        },
         {
           "file": "src/lib/annual-report.ts",
           "kind": "literal-from"
@@ -1742,6 +1993,10 @@
           "kind": "literal-from"
         },
         {
+          "file": "src/lib/agent/tools.server.ts",
+          "kind": "literal-from"
+        },
+        {
           "file": "src/lib/ai/chart-prompt-detail.ts",
           "kind": "literal-from"
         },
@@ -2007,7 +2262,7 @@
   "artifacts": [
     {
       "file": "supabase/selfhost/001-application.sql",
-      "sha256": "93bdd5564925a39d3bd9c9b346c58c504a19412ca65ce757137268c449db8c4a"
+      "sha256": "917335b41803a0202c3088e91ff1a6082e9f799e6350c36a53756e14b1da670a"
     },
     {
       "file": "supabase/selfhost/002-storage.sql",

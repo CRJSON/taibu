@@ -27,6 +27,8 @@ test('Agent schema addition rejects previous baselines while preserving SQL drif
 test('project-prefix siblings are not mistaken for owned containers', () => {
   const pattern = new RegExp(containerNameFilter('taibu-restore').slice('name='.length));
   assert.ok(pattern.test('/taibu-restore-web-1'));
+  assert.ok(pattern.test('/taibu-restore-worker-1'));
+  assert.ok(!pattern.test('/taibu-restore-v2-worker-1'));
   assert.ok(pattern.test('/taibu-restore-maintenance-attributes-run-abc123'));
   assert.ok(!pattern.test('/taibu-restore-v2-web-1'));
   assert.ok(!pattern.test('/taibu-restore-web-1-foreign'));

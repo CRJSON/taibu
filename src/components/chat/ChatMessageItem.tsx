@@ -18,6 +18,7 @@ import { useFeatureToggles } from '@/lib/hooks/useFeatureToggles';
 import { extractMentionTokens, filterMentionsByTokens, removeMentionsByTokens } from '@/lib/mention-tokens';
 import { MarkdownContent } from '@/components/ui/MarkdownContent';
 import { ThinkingBlock } from '@/components/chat/ThinkingBlock';
+import { AgentMessage } from '@/components/chat/AgentMessage';
 import { SourcePanel } from '@/components/chat/SourcePanel';
 import { buildMentionHighlightedParts } from '@/components/chat/mentionHighlight';
 import { useKnowledgeBaseFeatureEnabled } from '@/components/knowledge-base/useKnowledgeBaseFeatureEnabled';
@@ -296,7 +297,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                     )}
                 </div>
             )}
-            <MarkdownContent content={message.content} className="text-base text-foreground leading-relaxed" />
+            {message.agent ? <AgentMessage data={message.agent} /> : <MarkdownContent content={message.content} className="text-base text-foreground leading-relaxed" />}
             {showCheckKeyAction && !isCurrentStreaming && (
                 <button
                     type="button"
@@ -307,7 +308,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                     检查 Key
                 </button>
             )}
-            {isCurrentStreaming && !message.content && (
+            {isCurrentStreaming && !message.content && !message.agent && (
                 <div className="mt-3 inline-flex items-center gap-[3px] h-4">
                     {[0, 1, 2, 3].map((i) => (
                         <span key={i} className="sound-wave-bar w-[3px] rounded-full bg-foreground/30" style={{ animationDelay: `${i * 0.15}s` }} />

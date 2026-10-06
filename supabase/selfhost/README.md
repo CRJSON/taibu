@@ -1,6 +1,6 @@
 # 本地应用数据库基线
 
-仅用于**全新的、本地自托管数据库**；不是生产 schema 导出，也不是历史 migration 全量重放。复用现有 42 张业务表。生成器不联网、不启动 Docker、不连接数据库。
+仅用于**全新的、本地自托管数据库**；不是生产 schema 导出，也不是历史 migration 全量重放。复用现有 42 张业务表，新增 7 张 Agent 运行表，共 49 张表；Agent runtime 和 Pi Durable 迁移包含在空库基线中。生成器不联网、不启动 Docker、不连接数据库。
 
 ## 文件与执行顺序
 
@@ -13,7 +13,7 @@
 
 `001` 创建应用表、函数、索引、约束、触发器、RLS/ACL，以及从 `request.jwt.claims` 读取 `auth.uid()`/`auth.role()` 的访问器；**JWT 验签由 PostgREST 执行**。不会伪造 Auth/Storage 表或身份。`001` 拒绝非 `postgres` 执行和已有 public 业务表；`002` 拒绝未初始化 Storage 或已有头像 bucket。
 
-`manifest.json` 记录源文件 SHA-256、42 表与两个归档状态视图、引用 RPC，以及所有字面量 `.from()` 关系、动态 `tableName`/类型适配器/命盘工厂目录的来源和受阻功能。新增无法解析的动态关系或缺失表/视图会使生成器失败；Storage bucket 调用单独列为排除项。`source-views.sql` 保存带来源指纹的视图片段；两个视图均使用 `security_invoker`，仅授予 authenticated/service_role SELECT，底层表继续使用调用者 RLS。对话视图同时约束归档记录与对话的 `user_id`。`source-rpcs.sql` 仅保存经审查的本地 SQL 片段及原文件 SHA-256，是生成器输入，**不得直接执行**。原始本地文件不需要额外提交；未复制用户、模型、密钥或生产数据。
+`manifest.json` 记录源文件 SHA-256、49 表与两个归档状态视图、47 个引用 RPC，以及 Agent worker 的类型化调用点，以及所有字面量 `.from()` 关系、动态 `tableName`/类型适配器/命盘工厂目录的来源和受阻功能。新增无法解析的动态关系或缺失表/视图会使生成器失败；Storage bucket 调用单独列为排除项。`source-views.sql` 保存带来源指纹的视图片段；两个视图均使用 `security_invoker`，仅授予 authenticated/service_role SELECT，底层表继续使用调用者 RLS。对话视图同时约束归档记录与对话的 `user_id`。`source-rpcs.sql` 仅保存经审查的本地 SQL 片段及原文件 SHA-256，是生成器输入，**不得直接执行**。原始本地文件不需要额外提交；未复制用户、模型、密钥或生产数据。
 
 ```sh
 node scripts/selfhost-schema.mjs              # 校验来源与产物无漂移
@@ -25,7 +25,9 @@ node --test scripts/tests/selfhost-schema.test.mjs
 
 ## 命盘时间规则迁移
 
-`20261005_110000_chart_time_resolution.sql` 为既有八字／紫微表增加 `timezone` 与 `disambiguation`，保存 IANA 时区和 DST 解析规则。旧行保持默认 `Asia/Shanghai`／`reject`，不重算历史结果。已有数据库须先应用增量迁移，再部署新 Web/API；禁止重放空库基线。
+`20261005_110000_chart_time_resolution.sql` 为既有八字／紫微表增加 `timezone` 与 `disambiguation`。地点文本和经度不能表达 IANA 时区及重复／缺失时间策略，因此不能复用这些字段。旧行使用原默认 `Asia/Shanghai`／`reject`，不推断时区、不重算旧结果；所有权 RLS 与授权保持不变，无额外查询索引。Agent 的命盘去重另由 `20261005_120000_agent_chart_identity.sql` 更新，依赖运行表和时间字段迁移，随后应用 Pi Durable 迁移。
+
+空库生成器按 Agent runtime → 时间字段 → Agent 命盘身份 → Pi Durable 的顺序合入迁移。时间字段迁移本身不依赖 Agent，可独立应用。**已有数据库必须在部署新 Web/API 前按顺序应用相应迁移**；不能重放 `001-application.sql`，也不能因字段缺失而静默丢弃时间选项。新增字段需要保留用于应用回滚；先回滚应用不会删除保存的时间规则。当前仓库只提供本地迁移和验证入口，不表示已更新线上数据库。
 
 ## 来源与本地安全差异
 

@@ -94,7 +94,10 @@ supabase/migrations/*
 !supabase/migrations/20261002_101000_restrict_credit_ledger_rpc.sql
 !supabase/migrations/20261002_102000_protect_account_and_ledger_writes.sql
 !supabase/migrations/20261003_100000_fix_rate_limit_admission.sql
+!supabase/migrations/20261005_100000_agent_runtime.sql
 !supabase/migrations/20261005_110000_chart_time_resolution.sql
+!supabase/migrations/20261005_120000_agent_chart_identity.sql
+!supabase/migrations/20261006_100000_agent_pi_durable.sql
 # Additional explicit inputs for isolated Auth/PostgREST acceptance only.
 !supabase/migrations/20260110_add_user_settings_and_fix_notifications_rls.sql
 !supabase/migrations/20260113_add_app_settings.sql
@@ -112,6 +115,7 @@ docs/manual/*
 !docs/manual/Architecture.md
 !docs/manual/Refactor-Acceptance.md
 !docs/manual/Self-Hosting.md
+!docs/manual/Agent.md
 
 # AI
 .claude
@@ -120,3 +124,4 @@ docs/manual/*
 
 # skill eval workspaces
 skills/*-workspace/
+.agent/

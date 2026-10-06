@@ -92,12 +92,13 @@ function pruneKbWeightCache(now = Date.now()) {
 async function applyKnowledgeBaseWeights(
     candidates: SearchCandidate[],
     accessToken?: string,
-    userId?: string
+    userId?: string,
+    boundPersistence?: KnowledgeSearchPersistence,
 ): Promise<{ candidates: SearchCandidate[]; highKbIds: string[] }> {
     if (candidates.length === 0) return { candidates, highKbIds: [] };
     pruneKbWeightCache();
 
-    const persistence = createKnowledgeBasePersistence(createAuthedClient(requireSearchAccessToken(accessToken)));
+    const persistence = boundPersistence ?? createKnowledgeBasePersistence(createAuthedClient(requireSearchAccessToken(accessToken)));
     let effectiveUserId = userId;
     if (!effectiveUserId && accessToken) {
         const authed = createAuthedClient(accessToken);
@@ -163,9 +164,9 @@ async function applyKnowledgeBaseWeights(
 }
 
 // 知识库检索主入口：FTS -> Trigram -> Vector（可选），并做去重合并
-export async function searchCandidates(query: string, options: SearchOptions): Promise<SearchCandidate[]> {
+export async function searchCandidates(query: string, options: SearchOptions, boundPersistence?: KnowledgeSearchPersistence): Promise<SearchCandidate[]> {
     const { kbIds, limit = 20, useVector = false, accessToken } = options;
-    const persistence = createKnowledgeBasePersistence(createAuthedClient(requireSearchAccessToken(accessToken)));
+    const persistence = boundPersistence ?? createKnowledgeBasePersistence(createAuthedClient(requireSearchAccessToken(accessToken)));
     const config: SearchConfigInternal = { ...DEFAULT_SEARCH_CONFIG, ...options.searchConfig };
 
     let successfulStages = 0;
@@ -187,7 +188,7 @@ export async function searchCandidates(query: string, options: SearchOptions): P
         results = deduplicateResults([...results, ...trigram]);
     }
     if (useVector) {
-        const vector = await stage('vector', () => searchByVector(persistence, query, kbIds, limit, accessToken));
+        const vector = await stage('vector', () => searchByVector(persistence, query, kbIds, limit, accessToken, !!boundPersistence));
         results = deduplicateResults([...results, ...vector]);
     }
     if (successfulStages === 0) throw new Error('Knowledge retrieval failed');
@@ -231,10 +232,11 @@ async function searchByVector(
     query: string,
     kbIds: string[] | undefined,
     limit: number,
-    accessToken?: string
+    accessToken?: string,
+    indexValidatedByPersistence = false,
 ): Promise<SearchCandidate[]> {
     const dim = await getEmbeddingDimensionAsync();
-    const indexExists = await checkVectorIndexExists(dim, accessToken);
+    const indexExists = indexValidatedByPersistence || await checkVectorIndexExists(dim, accessToken);
     if (!indexExists) throw new Error('Vector index unavailable');
 
     const queryVector = await generateEmbedding(query);
@@ -267,13 +269,19 @@ export async function searchKnowledge(query: string, options: SearchOptions = {}
         if (!user) throw new KnowledgeSearchContextError();
         userId = user.id;
     }
+    return searchKnowledgeWithPersistence(query, userId, membership, createKnowledgeBasePersistence(createAuthedClient(requireSearchAccessToken(options.accessToken))), options);
+}
+
+/** A server adapter must bind an owner-scoped persistence implementation before using this entry point. */
+export async function searchKnowledgeWithPersistence(query: string, userId: string, membership: NonNullable<SearchOptions['membershipType']>, persistence: KnowledgeSearchPersistence, options: SearchOptions = {}): Promise<SearchCandidate[] | RankedResult[]> {
+    if (membership === 'free') return [];
     const candidates = await searchCandidates(query, {
         ...options,
         useVector: membership === 'pro' && options.useVector !== false
-    });
+    }, persistence);
     let weighted: { candidates: SearchCandidate[]; highKbIds: string[] };
     try {
-        weighted = await applyKnowledgeBaseWeights(candidates, options.accessToken, userId);
+        weighted = await applyKnowledgeBaseWeights(candidates, options.accessToken, userId, persistence);
     } catch (error) {
         if (error instanceof KnowledgeSearchContextError) throw error;
         console.warn('[knowledge-base] enrichment failed', { stage: 'weights' });
@@ -291,8 +299,8 @@ export async function searchKnowledge(query: string, options: SearchOptions = {}
                 kbIds: highKbIds,
                 limit: baseLimit + 10,
                 useVector: options.useVector !== false
-            });
-            const weightedExtra = await applyKnowledgeBaseWeights(extraCandidates, options.accessToken, userId);
+            }, persistence);
+            const weightedExtra = await applyKnowledgeBaseWeights(extraCandidates, options.accessToken, userId, persistence);
             weightedCandidates = deduplicateResults([...weightedCandidates, ...weightedExtra.candidates]);
         } catch (error) {
             if (error instanceof KnowledgeSearchContextError) throw error;

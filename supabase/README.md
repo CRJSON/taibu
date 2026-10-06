@@ -4,18 +4,20 @@
 
 ## 新增：本地自托管基线
 
-`selfhost/` 现在提供独立的空库初始化材料：42 张完整应用表、归档视图、当前 RPC 与来源/调用点清单。它是经明确审查的**本地基线**，不是生产 schema 导出；部分本地安全策略/兼容修订与社区关闭边界详见 [selfhost/README.md](selfhost/README.md)。通过 `pnpm selfhost` 组合真实 Auth/Storage 初始化，禁止直接对已有数据库执行。
+`selfhost/` 现在提供独立的空库初始化材料：49 张完整应用表（含 7 张 Agent 运行表）、归档视图、当前 RPC 与来源/调用点清单。它是经明确审查的**本地基线**，不是生产 schema 导出；部分本地安全策略/兼容修订与社区关闭边界详见 [selfhost/README.md](selfhost/README.md)。通过 `pnpm selfhost` 组合真实 Auth/Storage 初始化，禁止直接对已有数据库执行。
 
 新增 `20261003_100000_fix_rate_limit_admission.sql` 修正已跟踪限流定义在上限后仍放行的问题，进入隔离 SQL/Auth fixture 和本地基线。该迁移**未应用到托管生产数据库**。以下既有来源数量/测试记录保留其历史版本含义；本轮当前验收见 [自托管说明](../docs/manual/Self-Hosting.md)。
 
 ## 材料与可信范围
 
+新增 `20261005_100000_agent_runtime.sql` 提供 Agent 业务事务；`20261005_120000_agent_chart_identity.sql` 更新命盘身份与去重，依赖运行表和排盘时间字段迁移；`20261006_100000_agent_pi_durable.sql` 提供受租约保护的原生提交日志、消费确认和 worker 版本隔离。这些迁移仅进入隔离 fixture 和自托管空库基线，尚未通过 Supabase MCP 应用到线上。表快照追加七张表作为开发上下文；运行与验收边界见 [Agent 说明](../docs/manual/Agent.md)。
+
 | 材料 | 能说明的内容 | 不能证明的内容 |
 |---|---|---|
-| `tabel_export_from_supabase.sql` | 42 张表、字段及部分约束的上下文 | 可执行建库顺序，完整函数/RLS/索引/授权，生产部署状态 |
+| `tabel_export_from_supabase.sql` | 原 42 张表和 7 张 Agent 表、字段及部分约束的上下文 | 可执行建库顺序，完整函数/RLS/索引/授权，生产部署状态 |
 | `migrations/` 显式允许列表 | 对应历史定义的原文、静态检查及隔离契约测试输入 | 完整迁移链，或线上最终定义 |
 | `scripts/check-architecture-guards.mjs` | 声明的源码与 SQL 安全约束没有意外删除 | 实际事务、并发和授权行为 |
-| `scripts/tests/postgres-fixture.mjs` | 当前 27 项基础 SQL 来源与真实 Auth 模式的 5 项增量输入（共 32 项），以及准确的提取、加载顺序 | 生产完整迁移链或已部署定义 |
+| `scripts/tests/postgres-fixture.mjs` | 当前 30 项基础 SQL 来源与真实 Auth 模式的 5 项增量输入（共 35 项），以及准确的提取、加载顺序 | 生产完整迁移链或已部署定义 |
 | `pnpm test:db` | 下述隔离 PostgreSQL/RLS/事务契约（模拟 claims） | 真实 JWT/Auth、生产等价性、历史数据回填正确性 |
 | `pnpm test:auth` | 真实 GoTrue/PostgREST/JWT 与用户更新、塔罗、历史、知识库链路 | OAuth/邮件、完整 Next 浏览器端到端、生产配置/schema 等价 |
 

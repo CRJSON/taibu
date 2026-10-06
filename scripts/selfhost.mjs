@@ -32,11 +32,15 @@ export function createConfig(project, port, demo = false) {
   for (const key of ['DB_PASSWORD', 'AUTH_DB_PASSWORD', 'REST_DB_PASSWORD', 'STORAGE_DB_PASSWORD', 'VECTOR_DB_PASSWORD', 'REDIS_PASSWORD', 'JWT_SECRET', 'INTERNAL_API_SECRET', 'CRON_SECRET', 'ADMIN_PASSWORD', 'USER_PASSWORD', 'USER2_PASSWORD', 'DEMO_API_KEY']) config[key] = secret();
   config.ANON_KEY = signJWT('anon', config.JWT_SECRET);
   config.SERVICE_KEY = signJWT('service_role', config.JWT_SECRET);
+  config.AGENT_CREDENTIAL_ENCRYPTION_KEY = randomBytes(32).toString('base64');
+  config.TAVILY_API_KEY = '';
   return config;
 }
 export function validateConfig(config) {
   const expected = Object.keys(createConfig('taibu-validation', '3080')).sort();
-  if (!config || JSON.stringify(Object.keys(config).sort()) !== JSON.stringify(expected)) throw new Error('本地配置字段无效');
+  const optionalAgentFields = new Set(['AGENT_CREDENTIAL_ENCRYPTION_KEY','TAVILY_API_KEY']);
+  if (!config || JSON.stringify(Object.keys(config).filter(key=>!optionalAgentFields.has(key)).sort()) !== JSON.stringify(expected.filter(key=>!optionalAgentFields.has(key)))) throw new Error('本地配置字段无效');
+  if (config.AGENT_CREDENTIAL_ENCRYPTION_KEY !== undefined && (Buffer.from(config.AGENT_CREDENTIAL_ENCRYPTION_KEY,'base64').length!==32 || Buffer.from(config.AGENT_CREDENTIAL_ENCRYPTION_KEY,'base64').toString('base64')!==config.AGENT_CREDENTIAL_ENCRYPTION_KEY)) throw new Error('Agent 加密密钥格式无效');
   validateProject(config.LOCAL_PROJECT); validatePort(config.APP_PORT);
   if (config.APP_ORIGIN !== `http://127.0.0.1:${config.APP_PORT}` || !['true', 'false'].includes(config.DEMO_ENABLED)) throw new Error('本地配置地址无效');
   for (const [key, value] of Object.entries(config)) {
@@ -146,7 +150,7 @@ export function validateResourceOwnership(marker, instance, requireAbsent = fals
 export function containerNameFilter(project) {
   validateProject(project);
   // Match actual service/container names, not a different project's shared prefix.
-  return `name=^/${project}-(db|auth|rest|storage|redis|functions|web|gateway|scheduler|demo|maintenance|maintenance-attributes)-([0-9]+|run-[a-z0-9]+)$`;
+  return `name=^/${project}-(db|auth|rest|storage|redis|functions|web|worker|gateway|scheduler|demo|maintenance|maintenance-attributes)-([0-9]+|run-[a-z0-9]+)$`;
 }
 async function assertOwnedVolumes(state, env, requireAbsent = false) {
   const project = state.config.LOCAL_PROJECT;
@@ -300,9 +304,10 @@ async function up(state, run, build = false) {
   else await withStorageMigrationPrivilege(run.sql, startStorage);
   if (!storageReady) await run.sql(`BEGIN;\n${bundle.storage}\nUPDATE local_stack.state SET storage_ready=true;\nCOMMIT;`, '文件存储策略初始化');
   await seed(run, state.config);
-  await run.compose(['up', '-d', ...(build ? ['--build'] : []), 'functions', 'web', ...(state.config.DEMO_ENABLED === 'true' ? ['demo'] : [])], { timeout: 1_200_000 });
+  await run.compose(['up', '-d', ...(build ? ['--build'] : []), 'functions', 'web', 'worker', ...(state.config.DEMO_ENABLED === 'true' ? ['demo'] : [])], { timeout: 1_200_000 });
   await wait(() => httpReady(state.config.APP_ORIGIN, '/api/health'), '应用');
   await wait(() => httpReady(state.config.APP_ORIGIN, '/api/announcements?latest=1'), '应用数据库');
+  await wait(async () => (await run.sql("SELECT EXISTS(SELECT 1 FROM public.agent_workers WHERE engine='pi-durable/1.0.4' AND heartbeat_at > now() - interval '30 seconds')")).trim() === 't', 'Agent worker');
   await run.compose(['up', '-d', 'scheduler']);
   console.log(`本地服务已就绪：${state.config.APP_ORIGIN}；账号见私有 credentials.json`);
 }
@@ -422,7 +427,7 @@ export function summarizeLogs(text) {
 async function observations(run, includeLogs = false) {
   const raw = (await run.compose(['ps', '--all', '--format', 'json'], { phase: '读取服务状态' })).trim();
   const rows = JSON.parse(raw.startsWith('[') ? raw : `[${raw.split('\n').filter(Boolean).join(',')}]`);
-  const services = new Set(['db', 'auth', 'rest', 'storage', 'redis', 'functions', 'web', 'gateway', 'scheduler', 'demo', 'maintenance']);
+  const services = new Set(['db', 'auth', 'rest', 'storage', 'redis', 'functions', 'web', 'worker', 'gateway', 'scheduler', 'demo', 'maintenance']);
   for (const row of rows) {
     if (!services.has(row.Service)) continue;
     const status = ['created', 'running', 'paused', 'restarting', 'removing', 'exited', 'dead'].includes(row.State) ? row.State : 'unknown';

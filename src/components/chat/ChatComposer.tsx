@@ -33,6 +33,8 @@ const findLastAtOutsideTokens = (value: string, tokens: MentionToken[]): number 
 };
 
 interface ChatComposerProps {
+    allowDuringRun?: boolean;
+    onQueueMessage?: () => Promise<void>;
     inputValue: string;
     isLoading: boolean;
     isSendingToList?: boolean;
@@ -64,6 +66,8 @@ interface ChatComposerProps {
 }
 
 export function ChatComposer({
+    allowDuringRun = false,
+    onQueueMessage,
     inputValue,
     isLoading,
     isSendingToList = false,
@@ -288,7 +292,7 @@ export function ChatComposer({
                 }
             }
         }
-        if (e.key === 'Enter' && !e.shiftKey && !disabled && !isLoading && !isSendingToList && !dreamContextLoading && !mentionSettlingRef.current && inputValue.trim()) {
+        if (e.key === 'Enter' && !e.shiftKey && !disabled && (!isLoading || allowDuringRun) && !isSendingToList && !dreamContextLoading && !mentionSettlingRef.current && inputValue.trim()) {
             e.preventDefault();
             if (!userId && onAuthRequired) {
                 onAuthRequired();
@@ -422,6 +426,12 @@ export function ChatComposer({
                         dreamContextLoading={dreamContextLoading}
                         dreamContext={dreamContext}
                     />
+                    {allowDuringRun && isLoading && (
+                        <div className="flex justify-end gap-2 px-1 pt-2 text-xs">
+                            <button type="button" onClick={onSend} disabled={!inputValue.trim() || isSendingToList} className="rounded-lg border border-border px-3 py-1.5 hover:bg-background-secondary disabled:opacity-40">调整任务</button>
+                            <button type="button" onClick={() => void onQueueMessage?.()} disabled={!inputValue.trim() || isSendingToList} className="rounded-lg border border-border px-3 py-1.5 hover:bg-background-secondary disabled:opacity-40">排队继续</button>
+                        </div>
+                    )}
 
                     {/* 输入框区域 */}
                     <div className="relative">

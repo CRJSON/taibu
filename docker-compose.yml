@@ -11,6 +11,22 @@ services:
     ports:
       - "${WEB_PORT:-3000}:3000"
 
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: taibu-web:latest
+    restart: unless-stopped
+    env_file:
+      - .env
+    command: [node, .agent/worker.mjs]
+    healthcheck:
+      test: [CMD, node, .agent/worker.mjs, --health]
+      interval: 30s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
+
   mcp:
     build:
       context: .

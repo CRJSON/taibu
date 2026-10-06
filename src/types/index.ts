@@ -103,6 +103,8 @@ export interface MessageVersion {
     createdAt: string;
     // 编辑时被截断的后续消息（用于保留分支历史）
     subsequentMessages?: ChatMessage[];
+    aiAgent?: import('@/lib/agent/types').AgentMessageData;
+    aiMetadata?: Record<string, unknown>;
 }
 
 /** 消息附件信息（仅用户消息） */
@@ -133,6 +135,7 @@ export interface ChatMessage {
     reasoningStartTime?: number;      // 推理开始时间戳（ms）（仅AI消息，流式时使用）
     reasoningDuration?: number;       // 推理用时（秒）（仅AI消息，流式结束后设置）
     metadata?: Record<string, unknown>;
+    agent?: import('@/lib/agent/types').AgentMessageData;
     // 版本支持（仅用户消息有效）
     versions?: MessageVersion[];      // 所有版本历史
     currentVersionIndex?: number;     // 当前显示的版本索引

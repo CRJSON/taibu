@@ -19,7 +19,7 @@ ARG SUPABASE_PUBLIC_URL
 ARG SELF_HOSTED=false
 ENV SUPABASE_PUBLIC_URL=$SUPABASE_PUBLIC_URL
 ENV SELF_HOSTED=$SELF_HOSTED
-RUN pnpm build
+RUN --mount=type=cache,id=taibu-pnpm,target=/pnpm/store pnpm build
 
 FROM node:24.13.0-alpine3.23 AS runner
 WORKDIR /app
@@ -31,8 +31,12 @@ RUN addgroup -S nodejs && adduser -S nextjs -G nodejs
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+# The worker uses Next's server helpers outside Web's bundled route chunks.
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/next ./node_modules/next
 COPY --from=builder /app/LICENSE ./LICENSE
 COPY --from=builder /app/packages/core/LICENSE ./licenses/taibu-core.LICENSE
+COPY --from=builder --chown=nextjs:nodejs /app/.agent ./.agent
+RUN node .agent/worker.mjs --check
 RUN mkdir -p .next/cache && chown -R nextjs:nodejs .next/cache
 USER nextjs
 EXPOSE 3000

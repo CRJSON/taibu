@@ -112,6 +112,7 @@ function applyUserSettingsOverrides(
 
 export async function buildChatPromptContext(
   resolvedRequest: ResolvedChatRequest,
+  options?: { deferKnowledgeSearch?: boolean },
 ): Promise<ChatPromptContextResult> {
   const { body, userId, accessTokenForKB, requestedModelId, reasoningEnabled, membershipType } = resolvedRequest;
 
@@ -181,7 +182,7 @@ export async function buildChatPromptContext(
     })
     : [];
 
-  const knowledgeHits = userId && canUsePromptKnowledgeBase
+  const knowledgeHits = userId && canUsePromptKnowledgeBase && !options?.deferKnowledgeSearch
     ? await buildKnowledgeHits({
         query: userQuestionForSearch,
         userId,

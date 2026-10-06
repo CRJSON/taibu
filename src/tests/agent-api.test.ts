@@ -1,0 +1,305 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { randomBytes, randomUUID } from "node:crypto";
+import { NextRequest } from "next/server";
+import type { TestContext } from "node:test";
+import {
+  createMockAuthContext,
+  createMockSupabaseClient,
+} from "./helpers/supabase-mock";
+import { AgentStore, type AgentRunRow } from "../lib/agent/store.server";
+import {
+  agentEndpoint,
+  createAgentTask,
+  getAgentTask,
+  controlAgentTask,
+  streamAgentTask,
+  hashAgentRequest,
+} from "../lib/agent/api.server";
+import type { AIModelConfig } from "../types";
+
+const model: AIModelConfig = {
+  id: "fixture",
+  name: "fixture",
+  vendor: "other",
+  modelId: "fixture",
+  apiUrl: "https://model.example/v1",
+  apiKeyEnvVar: "FIXTURE",
+  supportsReasoning: true,
+  requiredTier: "free",
+};
+function setup(t: TestContext) {
+  const owner = randomUUID(),
+    conversation = randomUUID(),
+    writes: Array<{ name: string; args: Record<string, unknown> }> = [];
+  const client = createMockSupabaseClient({
+    tables: {
+      conversations: {
+        data: { id: conversation, messages: [], title: "fixture" },
+      },
+    },
+  });
+  const api = require("../lib/api-utils") as typeof import("../lib/api-utils");
+  const features =
+    require("../lib/app-settings") as typeof import("../lib/app-settings");
+  const aiGuard =
+    require("../lib/api/ai-feature-guard") as typeof import("../lib/api/ai-feature-guard");
+  const configs =
+    require("../lib/server/ai-config") as typeof import("../lib/server/ai-config");
+  const context =
+    require("../lib/server/chat/prompt-context") as typeof import("../lib/server/chat/prompt-context");
+  const credits =
+    require("../lib/user/credits") as typeof import("../lib/user/credits");
+  const rate =
+    require("../lib/rate-limit") as typeof import("../lib/rate-limit");
+  t.mock.method(api, "requireUserContext", async () =>
+    createMockAuthContext(client, owner),
+  );
+  t.mock.method(
+    api,
+    "getSystemAdminClient",
+    () => client as unknown as ReturnType<typeof api.getSystemAdminClient>,
+  );
+  t.mock.method(
+    features,
+    "readFeatureModuleStateFresh",
+    async () =>
+      ({ status: "enabled" }) as Awaited<
+        ReturnType<typeof features.readFeatureModuleStateFresh>
+      >,
+  );
+  t.mock.method(aiGuard, "getGlobalAIFeatureGuardResponse", async () => null);
+  t.mock.method(configs, "getModelConfigAsync", async () => model);
+  t.mock.method(configs, "getDefaultModelConfigAsync", async () => model);
+  t.mock.method(credits, "getUserAuthInfo", async () => ({
+    credits: 10,
+    hasCredits: true,
+    effectiveMembership: "plus",
+  }));
+  t.mock.method(rate, "checkRateLimit", async () => true);
+  t.mock.method(
+    context,
+    "buildChatPromptContext",
+    async (request: Parameters<typeof context.buildChatPromptContext>[0]) => ({
+      sanitizedMessages: request.body.messages,
+      metadata: { sources: [], kbSearchEnabled: false, kbHitCount: 0 },
+      systemPrompt: "trusted personality",
+      fallbackPersonality: "general",
+      promptKnowledgeBases: [],
+    }),
+  );
+  t.mock.method(AgentStore.prototype, "workerReady", async () => true);
+  t.mock.method(AgentStore.prototype, "currentRun", async () => null);
+  t.mock.method(
+    AgentStore.prototype,
+    "rpc",
+    async (name: string, args: Record<string, unknown>) => {
+      writes.push({ name, args });
+      return {
+        id: args.p_id,
+        user_id: owner,
+        conversation_id: conversation,
+        status: "queued",
+        public_message: args.p_message,
+        checkpoint: args.p_checkpoint,
+        input: args.p_input,
+        event_cursor: 1,
+        created_at: new Date().toISOString(),
+      } as AgentRunRow;
+    },
+  );
+  const body = {
+    conversationId: conversation,
+    clientRequestId: randomUUID(),
+    message: { id: "user", content: "请根据出生资料排盘" },
+    model: "fixture",
+    webEnabled: false,
+  };
+  const request = (value: unknown = body) =>
+    new NextRequest("http://localhost/api/agent/runs", {
+      method: "POST",
+      body: JSON.stringify(value),
+    });
+  return { owner, conversation, writes, body, request, client, api, credits };
+}
+
+test("Agent create uses server history and an atomic charge RPC; supplied assistant/metadata is discarded", async (t) => {
+  const fixture = setup(t);
+  const response = await agentEndpoint(() =>
+    createAgentTask(
+      fixture.request({
+        ...fixture.body,
+        message: {
+          ...fixture.body.message,
+          role: "assistant",
+          metadata: { secret: "discard" },
+          agent: { version: 1 },
+        },
+      }),
+    ),
+  );
+  assert.equal(response.status, 201);
+  assert.equal(fixture.writes.length, 1);
+  const write = fixture.writes[0];
+  assert.equal(write.name, "agent_create_run");
+  assert.equal(write.args.p_charge, true);
+  const input = write.args.p_input as AgentRunRow["input"];
+  assert.equal(input.userMessage.role, "user");
+  assert.equal(input.userMessage.metadata, undefined);
+  assert.equal(input.systemPrompt, "trusted personality");
+  const view = await response.json();
+  assert.equal(view.message.agent.version, 1);
+  assert.equal(view.cursor, 1);
+  assert.equal(view.input, undefined);
+  assert.equal(view.checkpoint, undefined);
+});
+
+test("Agent BYOK is encrypted, exempt and omitted from every public result and execution checkpoint", async (t) => {
+  const fixture = setup(t),
+    previous = process.env.AGENT_CREDENTIAL_ENCRYPTION_KEY;
+  process.env.AGENT_CREDENTIAL_ENCRYPTION_KEY =
+    randomBytes(32).toString("base64");
+  t.after(() => {
+    if (previous === undefined)
+      delete process.env.AGENT_CREDENTIAL_ENCRYPTION_KEY;
+    else process.env.AGENT_CREDENTIAL_ENCRYPTION_KEY = previous;
+  });
+  t.mock.method(fixture.credits, "getUserAuthInfo", async () => ({
+    credits: 0,
+    hasCredits: false,
+    effectiveMembership: "free",
+  }));
+  const key = "fixture-BYOK-secret";
+  const response = await agentEndpoint(() =>
+    createAgentTask(
+      fixture.request({
+        ...fixture.body,
+        customProvider: {
+          apiUrl: "https://model.example/v1",
+          apiKey: key,
+          modelId: "fixture",
+        },
+      }),
+    ),
+  );
+  assert.equal(response.status, 201);
+  const write = fixture.writes[0];
+  assert.equal(write.args.p_charge, false);
+  assert.ok(write.args.p_credential);
+  assert.ok(!JSON.stringify(write.args).includes(key));
+  assert.ok(!(await response.text()).includes(key));
+  assert.equal(
+    (write.args.p_input as AgentRunRow["input"]).customProvider?.apiUrl,
+    "https://model.example/v1",
+  );
+});
+
+test("Agent malformed inputs, private custom URLs, authentication and cross-user control fail before mutation", async (t) => {
+  const fixture = setup(t);
+  for (const body of [
+    null,
+    { ...fixture.body, conversationId: "invalid" },
+    {
+      ...fixture.body,
+      mentions: [
+        { type: "bazi_chart", id: "not-uuid", name: "x", preview: "x" },
+      ],
+    },
+    {
+      ...fixture.body,
+      customProvider: {
+        apiUrl: "https://127.0.0.1/v1",
+        apiKey: "key",
+        modelId: "x",
+      },
+    },
+  ]) {
+    const response = await agentEndpoint(() =>
+      createAgentTask(fixture.request(body)),
+    );
+    assert.equal(response.status, 400);
+  }
+  t.mock.method(AgentStore.prototype, "getRun", async () => null);
+  const id = randomUUID();
+  assert.equal(
+    (await agentEndpoint(() => getAgentTask(fixture.request(), id))).status,
+    404,
+  );
+  assert.equal(
+    (
+      await agentEndpoint(() =>
+        controlAgentTask(fixture.request(), id, "cancel"),
+      )
+    ).status,
+    404,
+  );
+  assert.equal(
+    (await agentEndpoint(() => streamAgentTask(fixture.request(), id))).status,
+    404,
+  );
+  t.mock.method(fixture.api, "requireUserContext", async () => ({
+    error: { message: "请登录", status: 401 },
+  }));
+  assert.equal(
+    (await agentEndpoint(() => createAgentTask(fixture.request()))).status,
+    401,
+  );
+  assert.equal(fixture.writes.length, 0);
+});
+
+test("Agent SSE replays stored event IDs then one atomic public snapshot with a resumable cursor", async (t) => {
+  const fixture = setup(t),
+    id = randomUUID();
+  const run = {
+    id,
+    user_id: fixture.owner,
+    conversation_id: fixture.conversation,
+    status: "completed",
+    event_cursor: 3,
+    created_at: "2026-01-01",
+    public_message: {
+      id: `agent:${id}`,
+      role: "assistant",
+      content: "最终结果",
+      createdAt: "2026-01-01",
+      agent: { version: 1, runId: id, status: "completed", parts: [] },
+    },
+  } as unknown as AgentRunRow;
+  t.mock.method(AgentStore.prototype, "getRun", async () => run);
+  t.mock.method(
+    AgentStore.prototype,
+    "events",
+    async (_id: string, after: number, through: number) => {
+      assert.equal(after, 1);
+      assert.equal(through, 3);
+      return [
+        { sequence: 2, type: "tool_execution_end", payload: { version: 1 } },
+        { sequence: 3, type: "completed", payload: {} },
+      ];
+    },
+  );
+  const response = await agentEndpoint(() =>
+    streamAgentTask(
+      new NextRequest(`http://localhost/api/agent/runs/${id}/events?after=1`),
+      id,
+    ),
+  );
+  const text = await response.text();
+  assert.match(text, /event: history\nid: 2/);
+  assert.match(text, /event: history\nid: 3/);
+  assert.match(text, /event: snapshot\nid: 3/);
+  assert.match(text, /最终结果/);
+  assert.ok(!text.includes("checkpoint"));
+  assert.ok(!text.includes("ciphertext"));
+});
+
+test("Agent request hashes are independent of object property order but distinguish edits and keys", () => {
+  assert.equal(
+    hashAgentRequest({ b: 2, a: { y: 2, x: 1 } }),
+    hashAgentRequest({ a: { x: 1, y: 2 }, b: 2 }),
+  );
+  assert.notEqual(
+    hashAgentRequest({ content: "a" }),
+    hashAgentRequest({ content: "b" }),
+  );
+});

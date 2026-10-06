@@ -24,6 +24,8 @@ import type { ChatMode } from '@/lib/chat/use-chat-state';
 import { getSettingsCenterRouteTarget, openSettingsCenter } from '@/lib/settings-center';
 
 interface ChatLayoutProps {
+    agent?: ReturnType<typeof import('@/lib/agent/use-agent-chat').useAgentChat>;
+    onQueueMessage?: () => Promise<void>;
     // Active conversation
     activeConversationId: string | null;
     conversationLoading: boolean;
@@ -99,6 +101,8 @@ export function ChatLayout(props: ChatLayoutProps) {
     } = props;
 
     const composerProps = {
+        allowDuringRun: props.agent?.active,
+        onQueueMessage: props.onQueueMessage,
         inputValue, isLoading, isSendingToList,
         onInputChange, onSend, onStop, onAuthRequired, disabled,
         chatMode, onChatModeChange,
@@ -122,6 +126,17 @@ export function ChatLayout(props: ChatLayoutProps) {
                     knowledgeBaseEnabled={knowledgeBaseEnabled}
                     aiPersonalizationEnabled={aiPersonalizationEnabled}
                 />
+                {props.agent && (
+                    <div data-agent-ready={!props.agent.restoring && !props.agent.syncing} className="mx-auto flex w-full max-w-3xl flex-wrap items-center gap-3 px-4 py-2 text-xs text-foreground-secondary">
+                        <div className="inline-flex rounded-lg border border-border p-0.5" role="group" aria-label="对话方式">
+                            <button type="button" aria-pressed={props.agent.mode === 'agent'} disabled={!props.agent.capabilities.ready || props.agent.active} onClick={() => props.agent?.setMode('agent')} className={`rounded-md px-3 py-1.5 disabled:opacity-50 ${props.agent.mode === 'agent' ? 'bg-background-secondary text-foreground' : ''}`}>Agent</button>
+                            <button type="button" aria-pressed={props.agent.mode === 'plain'} disabled={props.agent.active} onClick={() => props.agent?.setMode('plain')} className={`rounded-md px-3 py-1.5 ${props.agent.mode === 'plain' ? 'bg-background-secondary text-foreground' : ''}`}>普通对话</button>
+                        </div>
+                        {props.agent.mode === 'agent' && <label className="inline-flex items-center gap-1.5"><input type="checkbox" checked={props.agent.webEnabled && props.agent.capabilities.webAvailable && membershipType !== 'free'} disabled={!props.agent.capabilities.webAvailable || membershipType === 'free' || props.agent.active} onChange={e => props.agent?.setWebEnabled(e.target.checked)} />按需联网</label>}
+                        {props.agent.active ? <span role="status">{props.agent.reconnecting ? '正在重新连接任务' : props.agent.run?.status === 'awaiting_input' ? '补充信息后继续同一任务' : '后台执行中，离开页面后仍会继续'}</span> : !props.agent.capabilities.ready && userId ? <span>后台任务暂不可用，可使用普通对话</span> : null}
+                        {props.agent.run?.status === 'awaiting_input' && <button type="button" onClick={props.agent.stop} className="ml-auto hover:text-foreground">停止任务</button>}
+                    </div>
+                )}
 
                 {conversationError ? (
                     <div className="border-b border-[#ead9bf] bg-[#fcf8ee] px-4 py-3 text-sm text-[#946c21]">
@@ -161,7 +176,7 @@ export function ChatLayout(props: ChatLayoutProps) {
                                     onEditMessage={onEditMessage} onRegenerateResponse={onRegenerateResponse}
                                     onSwitchVersion={onSwitchVersion}
                                     onArchiveMessage={activeConversationId ? onArchiveMessage : undefined}
-                                    disabled={isCreditLocked}
+                                    disabled={isCreditLocked || props.agent?.restoring || props.agent?.syncing}
                                 />
                             </div>
                         ) : (
@@ -171,7 +186,7 @@ export function ChatLayout(props: ChatLayoutProps) {
                                     onEditMessage={onEditMessage} onRegenerateResponse={onRegenerateResponse}
                                     onSwitchVersion={onSwitchVersion}
                                     onArchiveMessage={activeConversationId ? onArchiveMessage : undefined}
-                                    disabled={isCreditLocked}
+                                    disabled={isCreditLocked || props.agent?.restoring || props.agent?.syncing}
                                 />
                             </div>
                         )}

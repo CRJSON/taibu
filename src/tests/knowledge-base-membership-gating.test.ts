@@ -102,5 +102,5 @@ test('searchKnowledge should bind caller token for RPCs and weights while reusin
 
   assert.equal(results.length, 1);
   assert.equal(results[0]?.kbId, 'kb-1');
-  assert.deepEqual(tokens, ['caller-token', 'caller-token']);
+  assert.deepEqual(tokens, ['caller-token']);
 });

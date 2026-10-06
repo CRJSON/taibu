@@ -1,6 +1,7 @@
 .git
 .github
 .next
+.agent
 .pnpm-store
 .vscode
 .worktrees

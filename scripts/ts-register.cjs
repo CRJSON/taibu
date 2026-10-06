@@ -70,6 +70,15 @@ function resolveTsSibling(request, parent) {
 
 const originalResolveFilename = Module._resolveFilename;
 Module._resolveFilename = function (request, parent, isMain, options) {
+    // Pi publishes import-only entry points. Node >=22.19 can synchronously
+    // load this ESM graph; production uses Next/esbuild's native ESM resolver.
+    if (/^@earendil-works\/(?:pi-ai|pi-durable|chord)(?:\/|$)/.test(request)) {
+        const [, packageName, ...subpath] = request.split('/');
+        const entry = subpath.length ? subpath.join('/') : 'index';
+        const target = path.join(projectRoot, 'node_modules', '@earendil-works', packageName, 'dist', entry);
+        const filename = fs.existsSync(target + '.js') ? target + '.js' : path.join(target, 'index.js');
+        return originalResolveFilename.call(this, filename, parent, isMain, options);
+    }
     const resolved = resolveAlias(request);
     if (resolved) {
         return originalResolveFilename.call(this, resolved, parent, isMain, options);

@@ -29,8 +29,11 @@ export const SQL_SOURCE_MANIFEST = {
   searchCorrection: 'supabase/migrations/20261002_100000_fix_knowledge_search_contracts.sql',
   ledgerCorrection: 'supabase/migrations/20261002_101000_restrict_credit_ledger_rpc.sql',
   rateAdmission: 'supabase/migrations/20261003_100000_fix_rate_limit_admission.sql',
-  chartTimeResolution: 'supabase/migrations/20261005_110000_chart_time_resolution.sql',
   accountProtection: 'supabase/migrations/20261002_102000_protect_account_and_ledger_writes.sql',
+  agentRuntime: 'supabase/migrations/20261005_100000_agent_runtime.sql',
+  agentDurable: 'supabase/migrations/20261006_100000_agent_pi_durable.sql',
+  chartTimeResolution: 'supabase/migrations/20261005_110000_chart_time_resolution.sql',
+  agentChartIdentity: 'supabase/migrations/20261005_120000_agent_chart_identity.sql',
 };
 
 function requireMatch(matches, description) {
@@ -81,7 +84,7 @@ function snapshotTable(snapshot, name) {
     [...snapshot.matchAll(new RegExp(`^CREATE TABLE public\\.${name} \\([\\s\\S]*?^\\);`, 'gm'))].map(match => match[0]),
     `snapshot table ${name}`,
   );
-  if (name !== 'conversations') return definition;
+  if (name !== 'conversations') return definition.replace(/\btags ARRAY\b/g, 'tags text[]');
 
   // The context-only snapshot renders an inline NOT VALID CHECK, which is not
   // executable CREATE TABLE syntax. Defer ONLY this constraint: the unchanged
@@ -161,6 +164,10 @@ CREATE FUNCTION auth.role() RETURNS text LANGUAGE sql STABLE SET search_path = p
 $$;`}`,
     // Five schema slices from the snapshot; no wholesale execution of it.
     ...['users', 'credit_transactions', 'conversations', 'mbti_readings', 'tarot_readings'].map(name => snapshotTable(sources.snapshot, name)),
+    ...['bazi_charts', 'ziwei_charts', 'ming_records'].map(name => snapshotTable(sources.snapshot, name)),
+    // Explicit bounded fixture owner policies for Agent chart/record reads.
+    // The source-only selfhost baseline separately supplies its reviewed policy contract.
+    ...['bazi_charts', 'ziwei_charts', 'ming_records'].map(name => `ALTER TABLE public.${name} ENABLE ROW LEVEL SECURITY; CREATE POLICY fixture_owner_read ON public.${name} FOR SELECT TO authenticated USING(user_id=auth.uid()); GRANT SELECT ON public.${name} TO authenticated;`),
     policies(sources.usersPolicies, 'users'),
     policies(sources.creditPolicies, 'credit_transactions'),
     policies(sources.conversationPolicies, 'conversations'),
@@ -177,7 +184,7 @@ $$;`}`,
     ...(realAuth ? [
       // Profile PATCH selects the full settings contract. Keep its existing
       // chart foreign keys; these two empty tables are only FK anchors here.
-      ...['bazi_charts', 'ziwei_charts', 'user_settings'].map(name => snapshotTable(sources.snapshot, name)),
+      snapshotTable(sources.snapshot, 'user_settings'),
       policies(sources.userSettings, 'user_settings'),
       sources.chartDetail,
       sources.appSettings,
@@ -252,5 +259,11 @@ RESET ROLE;`,
     sources.searchCorrection,
     sources.ledgerCorrection,
     sources.accountProtection,
+    'SET ROLE taibu_contract_owner;',
+    sources.agentRuntime,
+    sources.chartTimeResolution,
+    sources.agentChartIdentity,
+    sources.agentDurable,
+    'RESET ROLE;',
   ].join('\n\n');
 }
