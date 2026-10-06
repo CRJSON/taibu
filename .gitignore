@@ -27,10 +27,6 @@ yarn-error.log*
 # local env files
 .env*.local
 .env
-# Generated self-hosting credentials, state and backups (never committed).
-.taibu-local/
-.codex-deploy/
-.playwright-mcp/
 
 # vercel
 .vercel
@@ -120,3 +116,10 @@ docs/manual/*
 
 # skill eval workspaces
 skills/*-workspace/
+
+# Generated local runtime, deployment and browser artifacts
+.agent/
+.taibu-local/
+.codex-deploy/
+.playwright-mcp/
+.playwright-cli/
