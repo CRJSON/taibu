@@ -183,7 +183,7 @@ beforeEach((t) => {
     credits: 10,
     expiresAt: null,
   }));
-  t.mock.method(settings, "isFeatureModuleEnabled", async () => true);
+  t.mock.method(settings, "readFeatureModuleStateFresh", async () => ({ status: "enabled" as const }));
   t.mock.method(sdk, "isModelAvailable", () => true);
   t.mock.method(sdk, "createModelFromConfig", () => new MockLanguageModelV3());
   t.mock.method(sdk, "callWithAISDK", async () => ({
@@ -478,6 +478,77 @@ test("unsupported tools are reported without copying upstream error details", as
   assert.match((finished.args.p_message as AgentRunRow["public_message"]).agent!.error!, /不支持工具调用/);
 });
 
+test("native Durable settlement fails SDK EOF and timeout, retaining visible text without saving a record", async (t) => {
+  const sdk = require("../lib/ai/providers/ai-sdk-provider") as typeof import("../lib/ai/providers/ai-sdk-provider");
+  for (const scenario of ["eof", "timeout"] as const) {
+    const timeout = new AbortController();
+    t.mock.method(AbortSignal, "timeout", () => timeout.signal);
+    const model = new MockLanguageModelV3({ doStream: async ({ abortSignal }) => ({
+      stream: new ReadableStream({ start(controller) {
+        controller.enqueue({ type: "stream-start", warnings: [] });
+        controller.enqueue({ type: "text-start", id: "text" });
+        controller.enqueue({ type: "text-delta", id: "text", delta: "partial interrupted response" });
+        if (scenario === "eof") controller.close();
+        else {
+          abortSignal!.addEventListener("abort", () => controller.error(abortSignal!.reason), { once: true });
+          setTimeout(() => timeout.abort(), 20);
+        }
+      } }),
+    }) });
+    t.mock.method(sdk, "createModelFromConfig", () => model);
+    const store = new MemoryStore();
+    await executeAgentRun(store, row(), undefined, { config });
+    const finished = store.writes.find(w => w.name === "agent_finish_run")!;
+    assert.equal(finished.args.p_status, "failed", scenario);
+    assert.equal(finished.args.p_record, null);
+    assert.match((finished.args.p_message as AgentRunRow["public_message"]).content, /partial interrupted/);
+    assert.ok(store.log.flatMap(c => c.writes).some(w => w.type === "submission" && w.value.status === "unanswered"));
+    assert.equal(model.doStreamCalls.length, 1);
+  }
+});
+
+test("fresh unavailable or disabled Agent permission blocks every model turn even with a permissive cache", async (t) => {
+  const features = require("../lib/app-settings") as typeof import("../lib/app-settings");
+  t.mock.method(features, "isFeatureModuleEnabled", async () => true);
+  for (const state of ["disabled", "unavailable"] as const) {
+    t.mock.method(features, "readFeatureModuleStateFresh", async (feature: Parameters<typeof features.readFeatureModuleStateFresh>[0]) => ({ status: feature === "agent" ? state : "enabled" }));
+    let calls = 0;
+    const store = new MemoryStore();
+    await executeAgentRun(store, row(), undefined, { config, streamFn: scripted(() => { calls++; return [{ type: "text", text: "must not run" }]; }) });
+    assert.equal(calls, 0);
+    const finish = store.writes.find(w => w.name === "agent_finish_run")!;
+    assert.equal(finish.args.p_status, "failed");
+    assert.equal(finish.args.p_record, null);
+  }
+});
+
+test("final record permission is fresh: disabled skips saving; unavailable fails settlement without saving", async (t) => {
+  const features = require("../lib/app-settings") as typeof import("../lib/app-settings");
+  t.mock.method(console, "warn", () => {});
+  t.mock.method(features, "isFeatureModuleEnabled", async () => true);
+  for (const state of ["disabled", "unavailable"] as const) {
+    t.mock.method(features, "readFeatureModuleStateFresh", async (feature: Parameters<typeof features.readFeatureModuleStateFresh>[0]) => ({ status: feature === "records" ? state : "enabled" }));
+    const store = new MemoryStore();
+    await executeAgentRun(store, row(), undefined, { config, streamFn: scripted(() => [{ type: "text", text: "visible final text" }]) });
+    const finish = store.writes.filter(w => w.name === "agent_finish_run");
+    assert.equal(finish.length, 1);
+    assert.equal(finish[0].args.p_status, state === "disabled" ? "completed" : "failed");
+    assert.equal(finish[0].args.p_record, null);
+  }
+});
+
+test("cached private tool results cannot bypass a fresh unavailable feature state", async (t) => {
+  const features = require("../lib/app-settings") as typeof import("../lib/app-settings");
+  const store = new MemoryStore(), run = row();
+  const tools = await createAgentTools(store, run, run.checkpoint);
+  store.drafts.set("private-profile", { id: randomUUID(), call_id: "private-profile", tool_name: "read_user_profile", kind: "tool", args: {}, result: { content: [], details: { private: true } } });
+  t.mock.method(features, "isFeatureModuleEnabled", async () => true);
+  t.mock.method(features, "readFeatureModuleStateFresh", async () => ({ status: "unavailable" as const }));
+  await assert.rejects(tools.find(tool => tool.name === "read_user_profile")!.execute("private-profile", {}), /功能状态暂不可用/);
+  await assert.rejects(tools.find(tool => tool.name === "bazi")!.execute("chart", { gender: "male", birthYear: 1990, birthMonth: 1, birthDay: 1, birthHour: 9 }), /功能状态暂不可用/);
+  assert.equal(store.writes.length, 0);
+});
+
 test("recovery reuses a committed calculation result and recreates its missing toolResult once", async () => {
   const store = new MemoryStore(),
     run = row(),
@@ -770,9 +841,9 @@ test("cached reads still check current feature and membership permissions", asyn
     require("../lib/app-settings") as typeof import("../lib/app-settings");
   t.mock.method(
     features,
-    "isFeatureModuleEnabled",
-    async (feature: Parameters<typeof features.isFeatureModuleEnabled>[0]) =>
-      feature !== "ai-personalization",
+    "readFeatureModuleStateFresh",
+    async (feature: Parameters<typeof features.readFeatureModuleStateFresh>[0]) =>
+      ({ status: feature === "ai-personalization" ? "disabled" as const : "enabled" as const }),
   );
   await assert.rejects(
     tools.find((t) => t.name === "read_user_profile")!.execute("profile", {}),

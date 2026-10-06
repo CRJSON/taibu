@@ -16,7 +16,7 @@ import { getModelConfigAsync } from "@/lib/server/ai-config";
 import { isModelAllowedForMembership } from "@/lib/ai/ai-access";
 import { resolveModelContextConfig } from "@/lib/ai/prompt-builder";
 import { callWithAISDK, createModelFromConfig } from "@/lib/ai/providers/ai-sdk-provider";
-import { isFeatureModuleEnabled } from "@/lib/app-settings";
+import { readFeatureModuleStateFresh } from "@/lib/app-settings";
 import { getUserCreditInfo } from "@/lib/user/credits";
 import { AgentStore, type AgentRunRow } from "./store.server";
 import { agentMessageContent, type AgentCheckpoint, type DomainTool, type PiStreamFn } from "./types";
@@ -141,14 +141,19 @@ export async function executeAgentRun(
     } catch (error) { interrupt(); throw error; }
   });
   const finish = async (status: "completed" | "failed" | "cancelled" | "awaiting_input", text = "", unsupportedTools = false) => {
+    let record: { title: string; content: string } | null = null;
+    if (status === "completed") {
+      const state = await readFeatureModuleStateFresh("records");
+      if (state.status === "unavailable") throw new Error("AGENT_FEATURE_STATE_UNAVAILABLE");
+      if (state.status === "enabled") record = { title: run.input.title, content: text };
+    }
     const message = publicMessage();
     if (status === "failed") message.agent!.error = unsupportedTools
       ? AGENT_UNSUPPORTED_TOOLS_MESSAGE : "任务执行失败，可切换普通对话或重新发起任务";
     try {
       await store.rpc("agent_finish_run", {
         ...store.lease(run), p_status: status, p_checkpoint: checkpoint, p_message: message,
-        p_record: status === "completed" && await isFeatureModuleEnabled("records")
-          ? { title: run.input.title, content: text } : null,
+        p_record: record,
       });
     } catch (error) { interrupt(); throw error; }
   };
@@ -188,7 +193,10 @@ export async function executeAgentRun(
     const sdkStream = injected?.streamFn ?? createPiSDKStream(config, { reasoning: run.input.reasoning, apiKey });
     const authorizeModel = async () => {
       const account = await getUserCreditInfo(run.user_id, { client: store.db });
-      if (!(await isFeatureModuleEnabled("chat")) || !(await isFeatureModuleEnabled("agent")))
+      const states = await Promise.all([readFeatureModuleStateFresh("chat"), readFeatureModuleStateFresh("agent")]);
+      if (states.some(state => state.status === "unavailable"))
+        throw new Error("AGENT_FEATURE_STATE_UNAVAILABLE");
+      if (states.some(state => state.status !== "enabled"))
         throw new Error("AI 功能已关闭");
       if (!run.input.customProvider && !isModelAllowedForMembership(config, account.membership))
         throw new Error("当前会员不能使用该模型");
@@ -385,7 +393,7 @@ export async function executeAgentRun(
     if (!checkpoint.question && !checkpoint.durable.legacySettled && !stopping)
       await Promise.race([harness.waitForIdle(context), inputPause, interruption]);
     if (interrupted) return;
-    watch.stop();
+    await watch.stop();
     await projectionInFlight;
     await project();
     const transcript = await root.context(context);
@@ -400,7 +408,7 @@ export async function executeAgentRun(
     harness = undefined;
     await writeLine;
     if (interrupted) return;
-    const failed = last?.stopReason === "error" || last?.stopReason === "length" ||
+    const failed = (last !== undefined && last.stopReason !== "stop" && last.stopReason !== "toolUse") ||
       submission?.status === "unanswered";
     const status = stopping ? "cancelled" : checkpoint.question ? "awaiting_input" :
       failed ? "failed" : text.trim() || checkpoint.finalArtifacts.length ? "completed" : "failed";
@@ -408,7 +416,7 @@ export async function executeAgentRun(
   } catch (error) {
     if (interrupted || shutdown?.aborted || storage?.isUnavailable) return;
     if (error instanceof Error && /AGENT_LEASE_LOST|AGENT_DURABLE_CONFLICT/.test(error.message)) return;
-    watch?.stop();
+    await watch?.stop();
     await harness?.close(BACKGROUND_CONTEXT).catch(() => {});
     harness = undefined;
     await writeLine;
@@ -416,7 +424,7 @@ export async function executeAgentRun(
     console.warn("[agent-run]", { runId: run.id, phase: "execution", code: "FAILED" });
   } finally {
     if (heartbeat) clearInterval(heartbeat);
-    watch?.stop();
+    await watch?.stop();
     await harness?.close(BACKGROUND_CONTEXT).catch(() => {});
     scope.cancel();
     shutdown?.removeEventListener("abort", onShutdown);

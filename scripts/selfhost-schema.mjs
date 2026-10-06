@@ -232,6 +232,9 @@ for (const m of functions(source(agentChartIdentityMigration))) { active.add(m[1
 const durableMigration = '20261006_100000_agent_pi_durable';
 sql.push(source(durableMigration));
 for (const m of functions(source(durableMigration))) { active.add(m[1]); rpcSources[m[1]] = `supabase/migrations/${durableMigration}.sql`; }
+const agentLifecycleMigration = '20261006_110000_agent_lifecycle_fixes';
+sql.push(source(agentLifecycleMigration).replace(/^BEGIN;\s*$/gm, '').replace(/^COMMIT;\s*$/gm, ''));
+for (const m of functions(source(agentLifecycleMigration))) { active.add(m[1]); rpcSources[m[1]] = `supabase/migrations/${agentLifecycleMigration}.sql`; }
 for (const m of functions(source('20261002_100000_fix_knowledge_search_contracts'))) { active.add(m[1]); rpcSources[m[1]] = 'supabase/migrations/20261002_100000_fix_knowledge_search_contracts.sql'; }
 const blockedFunctions = {
   increment_community_post_view_count: 'Community prototype blocked pending counter/moderation contract.',

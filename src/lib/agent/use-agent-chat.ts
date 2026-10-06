@@ -8,6 +8,7 @@ import {
   readAgentStream,
   canAdoptAgentRun,
   postAgentRun,
+  postAgentCommand,
   AgentHttpError,
 } from "./browser-client";
 import { isAgentRunTerminal, type AgentRunView } from "./types";
@@ -18,6 +19,7 @@ type AgentCapabilities = {
   webAvailable: boolean;
   customAvailable: boolean;
 };
+type AgentCommandRequest = Parameters<typeof postAgentCommand>[1];
 export function useAgentChat(
   state: ChatStateReturn,
   userId: string | null,
@@ -35,6 +37,11 @@ export function useAgentChat(
   const [restoring, setRestoring] = useState(false);
   const [syncingRunId, setSyncingRunId] = useState<string | null>(null);
   const [webEnabled, setWebEnabled] = useState(true);
+  const identity = useRef({ userId, epoch: 0 });
+  if (identity.current.userId !== userId) {
+    identity.current = { userId, epoch: identity.current.epoch + 1 };
+  }
+  const ownerEpoch = identity.current.epoch;
   const latest = useRef({ state, refreshViewer, userId });
   latest.current = { state, refreshViewer, userId };
   const explicitMode = useRef(false);
@@ -44,6 +51,15 @@ export function useAgentChat(
   const pendingCreations = useRef(
     new Map<string, { key: string; body: Record<string, unknown> }>(),
   );
+  const pendingCommands = useRef(new Map<string, AgentCommandRequest>());
+  const captureConversation = useCallback((conversationId = latest.current.state.activeConversationIdRef.current) => {
+    const owner = latest.current.userId;
+    const epoch = identity.current.epoch;
+    const selection = latest.current.state.conversationEpochRef.current;
+    return () => owner !== null && latest.current.userId === owner && identity.current.epoch === epoch &&
+      latest.current.state.activeConversationIdRef.current === conversationId &&
+      latest.current.state.conversationEpochRef.current === selection;
+  }, []);
   const adopt = useCallback((view: AgentRunView) => {
     if (
       view.conversationId !==
@@ -76,6 +92,7 @@ export function useAgentChat(
   }, []);
   useEffect(() => {
     pendingCreations.current.clear();
+    pendingCommands.current.clear();
     if (!userId) return;
     receivedCursors.current.clear();
     latestRuns.current.clear();
@@ -123,30 +140,31 @@ export function useAgentChat(
       return;
     }
     setRestoring(true);
+    const isCurrent = captureConversation();
     const controller = new AbortController();
     void agentJson<AgentRunView | null>(
       `/api/agent/runs?conversationId=${encodeURIComponent(state.activeConversationId)}`,
       { signal: controller.signal },
     )
       .then((view) => {
-        if (view && !controller.signal.aborted) adopt(view);
+        if (view && !controller.signal.aborted && isCurrent()) adopt(view);
       })
       .catch(() => {})
       .finally(() => {
-        if (!controller.signal.aborted) setRestoring(false);
+        if (!controller.signal.aborted && isCurrent()) setRestoring(false);
       });
     return () => controller.abort();
-  }, [adopt, userId, state.activeConversationId, state.conversationLoading]);
+  }, [adopt, captureConversation, userId, state.activeConversationId, state.conversationLoading]);
   const runId = run?.id;
   useEffect(() => {
     if (
       !runId ||
       !run ||
-      isAgentRunTerminal(run.status) ||
-      run.status === "awaiting_input"
+      isAgentRunTerminal(run.status)
     )
       return;
     const controller = new AbortController();
+    const isCurrent = captureConversation();
     let cursor = run.cursor;
     const listen = async () => {
       while (!controller.signal.aborted) {
@@ -155,19 +173,17 @@ export function useAgentChat(
             `/api/agent/runs/${runId}/events?after=${cursor}`,
             { signal: controller.signal },
           );
-          setReconnecting(false);
+          if (isCurrent()) setReconnecting(false);
           let settled = false;
           await readAgentStream(response, controller.signal, (view) => {
             cursor = Math.max(cursor, view.cursor);
-            adopt(view);
-            settled =
-              isAgentRunTerminal(view.status) ||
-              view.status === "awaiting_input";
+            if (isCurrent()) adopt(view);
+            settled = isAgentRunTerminal(view.status);
           });
           if (settled) return;
         } catch {
           if (controller.signal.aborted) return;
-          setReconnecting(true);
+          if (isCurrent()) setReconnecting(true);
         }
         await new Promise((resolve) => setTimeout(resolve, 1000));
       }
@@ -176,7 +192,7 @@ export function useAgentChat(
     return () => controller.abort();
     // Snapshots update the same connection; only task/status transitions resubscribe.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [runId, run?.status, adopt]);
+  }, [runId, run?.status, adopt, captureConversation]);
 
   const setMode = useCallback(
     (value: "agent" | "plain") => {
@@ -201,6 +217,9 @@ export function useAgentChat(
       replaceFromMessageId?: string;
     },
   ) => {
+    const isOwner = () => latest.current.userId === userId && identity.current.epoch === ownerEpoch;
+    if (!userId || !isOwner()) throw new Error("登录状态已变更，请重新发送");
+    const isCurrent = captureConversation(conversationId);
     if (options.provider && !capabilities.customAvailable)
       throw new Error("自定义模型后台任务未配置，可切换普通对话");
     const body: Record<string, unknown> = {
@@ -220,8 +239,8 @@ export function useAgentChat(
           }
         : undefined,
       webEnabled,
-      dreamMode: latest.current.state.chatMode === "dream",
-      mangpaiMode: latest.current.state.chatMode === "mangpai",
+      dreamMode: state.chatMode === "dream",
+      mangpaiMode: state.chatMode === "mangpai",
     };
     const key = JSON.stringify({
       ...body,
@@ -231,6 +250,10 @@ export function useAgentChat(
     const pending = pendingCreations.current.get(conversationId);
     const requestBody = pending?.key === key ? pending.body : body;
     pendingCreations.current.set(conversationId, { key, body: requestBody });
+    const forget = () => {
+      if (pendingCreations.current.get(conversationId)?.body === requestBody)
+        pendingCreations.current.delete(conversationId);
+    };
     let view: AgentRunView;
     try {
       view = await postAgentRun(requestBody);
@@ -240,22 +263,25 @@ export function useAgentChat(
         error.status >= 400 &&
         error.status < 500
       )
-        pendingCreations.current.delete(conversationId);
+        forget();
       else {
+        if (!isOwner()) throw error;
         const recovered = await agentJson<AgentRunView | null>(
           `/api/agent/runs?conversationId=${encodeURIComponent(conversationId)}`,
         ).catch(() => null);
         if (recovered && recovered.clientRequestId === requestBody.clientRequestId) {
-          pendingCreations.current.delete(conversationId);
-          adopt(recovered);
-          void latest.current.state.retryConversationLoad();
+          forget();
+          if (isCurrent()) {
+            adopt(recovered);
+            void latest.current.state.retryConversationLoad();
+          }
           return recovered;
         }
       }
       throw error;
     }
-    pendingCreations.current.delete(conversationId);
-    if (view.userMessage)
+    forget();
+    if (isCurrent() && canAdoptAgentRun(latestRuns.current.get(conversationId), view) && view.userMessage)
       latest.current.state.setMessages((messages) =>
         messages.map((current) =>
           current.id === message.id
@@ -268,45 +294,52 @@ export function useAgentChat(
             : current,
         ),
       );
-    adopt(view);
-    void latest.current.refreshViewer();
-    void latest.current.state.refreshConversationList();
+    if (isCurrent()) adopt(view);
+    if (isOwner()) {
+      void latest.current.refreshViewer();
+      void latest.current.state.refreshConversationList();
+    }
     return view;
   };
   const active = !!run && !isAgentRunTerminal(run.status);
   const sendCommand = async (content: string, queue = false) => {
     if (!run || !active) throw new Error("任务已结束");
-    const result = await agentJson<{ message: ChatMessage; run: AgentRunView }>(
-      `/api/agent/runs/${run.id}/messages`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          content,
-          clientRequestId: crypto.randomUUID(),
-          mode:
-            run.status === "awaiting_input"
-              ? "reply"
-              : queue
-                ? "follow_up"
-                : "steer",
-        }),
-      },
-    );
-    latest.current.state.setMessages((messages) =>
-      messages.some((m) => m.id === result.message.id)
-        ? messages
-        : [...messages, result.message],
-    );
-    adopt(result.run);
+    const isCurrent = captureConversation(run.conversationId);
+    if (!userId || identity.current.epoch !== ownerEpoch || !isCurrent())
+      throw new Error("对话或登录状态已变更，请重新发送");
+    // The task can resume while a reply's HTTP receipt is lost. Retain its
+    // original mode as well as its ID, even if the observed status has changed.
+    const key = JSON.stringify([run.id, content, queue]);
+    const body: AgentCommandRequest = pendingCommands.current.get(key) ?? {
+      content, clientRequestId: crypto.randomUUID(),
+      mode: run.status === "awaiting_input" ? "reply" : queue ? "follow_up" : "steer",
+    };
+    pendingCommands.current.set(key, body);
+    const forget = () => {
+      if (pendingCommands.current.get(key) === body) pendingCommands.current.delete(key);
+    };
+    try {
+      const result = await postAgentCommand(run.id, body);
+      forget();
+      if (isCurrent() && canAdoptAgentRun(latestRuns.current.get(run.conversationId), result.run)) {
+        latest.current.state.setMessages((messages) =>
+          messages.some((m) => m.id === result.message.id) ? messages : [...messages, result.message],
+        );
+        adopt(result.run);
+      }
+    } catch (error) {
+      if (error instanceof AgentHttpError && error.status >= 400 && error.status < 500) forget();
+      throw error;
+    }
   };
   const stop = () => {
-    if (run)
+    const isCurrent = captureConversation(run?.conversationId);
+    if (run && identity.current.epoch === ownerEpoch && isCurrent())
       void agentJson<AgentRunView>(`/api/agent/runs/${run.id}/cancel`, {
         method: "POST",
       })
-        .then(adopt)
-        .catch(() => setReconnecting(true));
+        .then(view => { if (isCurrent()) adopt(view); })
+        .catch(() => { if (isCurrent()) setReconnecting(true); });
   };
   return {
     mode,
@@ -322,6 +355,7 @@ export function useAgentChat(
         syncingRunId,
     start,
     sendCommand,
+    captureConversation,
     stop,
     webEnabled,
     setWebEnabled,

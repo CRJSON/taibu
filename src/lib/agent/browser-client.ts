@@ -78,13 +78,24 @@ export class AgentHttpError extends Error {
   }
 }
 export async function postAgentRun(body: Record<string, unknown>) {
+  return postAgentJson<AgentRunView>("/api/agent/runs", body);
+}
+export async function postAgentCommand(
+  runId: string,
+  body: { content: string; clientRequestId: string; mode: "steer" | "follow_up" | "reply" },
+) {
+  return postAgentJson<{ message: ChatMessage; run: AgentRunView }>(
+    `/api/agent/runs/${runId}/messages`, body,
+  );
+}
+async function postAgentJson<T>(url: string, body: Record<string, unknown>) {
   const request = {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   };
   try {
-    return await agentJson<AgentRunView>("/api/agent/runs", request);
+    return await agentJson<T>(url, request);
   } catch (error) {
     if (
       error instanceof AgentHttpError &&
@@ -92,7 +103,7 @@ export async function postAgentRun(body: Record<string, unknown>) {
       error.status < 500
     )
       throw error;
-    return agentJson<AgentRunView>("/api/agent/runs", request);
+    return agentJson<T>(url, request);
   }
 }
 export async function agentJson<T>(

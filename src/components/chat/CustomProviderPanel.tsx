@@ -219,7 +219,7 @@ export function CustomProviderPanel({
     onClose,
     onChange,
     title = '自定义模型',
-    description = 'Key不会保存到服务器，不消耗本站积分，关闭页面自动失效',
+    description = '普通对话仅当前标签页使用；Agent任务会临时加密保存Key，结束后清除。均不消耗本站积分。',
     showByokBadge = true,
 }: CustomProviderPanelProps) {
     const { showToast } = useToast();

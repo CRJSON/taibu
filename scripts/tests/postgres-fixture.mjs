@@ -18,6 +18,7 @@ export const SQL_SOURCE_MANIFEST = {
   messages: 'supabase/migrations/20260316_create_conversation_messages.sql',
   transactions: 'supabase/migrations/20260408_z_remaining_transactional_multi_write_rpcs.sql',
   conversationAlignment: 'supabase/migrations/20260409_021500_admin_session_rpc_alignment.sql',
+  graphDelete: 'supabase/selfhost/source-rpcs.sql',
   credits: 'supabase/migrations/20260409_235900_membership_credit_redesign.sql',
   creditAlignment: 'supabase/migrations/20260411_103500_align_admin_session_service_rpcs.sql',
   activationPolicies: 'supabase/migrations/20260123_add_activation_keys_and_purchase_links.sql',
@@ -32,6 +33,7 @@ export const SQL_SOURCE_MANIFEST = {
   accountProtection: 'supabase/migrations/20261002_102000_protect_account_and_ledger_writes.sql',
   agentRuntime: 'supabase/migrations/20261005_100000_agent_runtime.sql',
   agentDurable: 'supabase/migrations/20261006_100000_agent_pi_durable.sql',
+  agentLifecycle: 'supabase/migrations/20261006_110000_agent_lifecycle_fixes.sql',
   chartTimeResolution: 'supabase/migrations/20261005_110000_chart_time_resolution.sql',
   agentChartIdentity: 'supabase/migrations/20261005_120000_agent_chart_identity.sql',
 };
@@ -215,6 +217,10 @@ $$;`}`,
     before(sources.messages, 'INSERT INTO public.conversation_messages'),
     functionDefinition(sources.transactions, 'kb_replace_source_entries'),
     grants(sources.transactions, ['kb_replace_source_entries']),
+    // Current owner-facing graph delete is exported separately from the older
+    // administrator/service variant. Exercise the actual body and its grants.
+    functionDefinition(sources.graphDelete, 'delete_conversation_graph'),
+    grants(sources.graphDelete, ['delete_conversation_graph']),
     functionDefinition(sources.transactions, 'create_analysis_conversation_with_history_as_service'),
     grants(sources.transactions, ['create_analysis_conversation_with_history_as_service']),
     // Whole narrowly scoped alignment: exact functions AND dynamic history guard
@@ -264,6 +270,7 @@ RESET ROLE;`,
     sources.chartTimeResolution,
     sources.agentChartIdentity,
     sources.agentDurable,
+    sources.agentLifecycle,
     'RESET ROLE;',
   ].join('\n\n');
 }

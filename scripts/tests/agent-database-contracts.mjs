@@ -56,7 +56,7 @@ export async function agentDatabaseContracts(
   const create = async (conversationId, options = {}) => {
     const id = options.id ?? randomUUID();
     return parsed(
-      `SELECT to_jsonb(public.agent_create_run(${quote(id)},${quote(owner)},${quote(conversationId)},${quote(options.request ?? id)},${quote(options.hash ?? "same-hash")},${json(input(id))},${json(options.checkpoint ?? checkpoint)},${json(assistant(id))},${json({ version: 1, data: "encrypted-fixture", iv: "nonce", tag: "tag" })},${options.charge !== false}));`,
+      `SELECT to_jsonb(public.agent_create_run(${quote(id)},${quote(owner)},${quote(conversationId)},${quote(options.request ?? id)},${quote(options.hash ?? "same-hash")},${json(options.input ?? input(id))},${json(options.checkpoint ?? checkpoint)},${json(assistant(id))},${json({ version: 1, data: "encrypted-fixture", iv: "nonce", tag: "tag" })},${options.charge !== false}));`,
     );
   };
   const claim = async (worker = "worker-a") =>
@@ -97,6 +97,87 @@ export async function agentDatabaseContracts(
     parsed(
       `SELECT to_jsonb(public.agent_cache_tool(${lease(run)},${quote(callId)},'bazi','calculation','{"gender":"male"}',${json({ content: [{ type: "text", text: "规范命盘" }], details: { 真实: true }, canonicalText: "规范命盘" })},${json(chart)}));`,
     );
+
+  await t.test("repeated Agent edits snapshot each selected version's complete current branch, metadata and new tail", async () => {
+    const conversationId = await createConversation();
+    const question = { id: "early-user", role: "user", content: "original", createdAt: "2026-01-01" };
+    const answer = { id: "early-answer", role: "assistant", content: "original answer", createdAt: "2026-01-02",
+      agent: { version: 1, runId: "old-run", status: "completed", parts: [{ type: "text", id: "text", text: "original answer" }] }, metadata: { kbHitCount: 2 } };
+    const tail = (id) => ({ id, role: "user", content: id, createdAt: "2026-01-03" });
+    const save = messages => asActor(owner, `SELECT public.replace_conversation_messages(${quote(conversationId)},${json(messages)});`);
+    const history = async () => JSON.parse(await asOwner(`SELECT messages FROM public.conversations WHERE id=${quote(conversationId)};`));
+    await save([question, answer, tail("original-tail")]);
+    const edit = async content => {
+      const id = randomUUID();
+      const queued = await create(conversationId, { id, charge: false, input: { ...input(id), replaceFromMessageId: question.id, userMessage: { ...question, content } } });
+      const run = await claim();
+      assert.equal(run.id, queued.id);
+      await finish(run, "completed", { ...assistant(run.id), content: `answer:${content}`, metadata: { kbHitCount: 3 } });
+      return queued;
+    };
+    await edit("first-edit");
+    let messages = await history();
+    assert.equal(messages[0].versions.length, 2);
+    assert.deepEqual(messages[0].versions[0].subsequentMessages, [tail("original-tail")]);
+    assert.deepEqual(messages[0].versions[0].aiAgent, answer.agent);
+    assert.deepEqual(messages[0].versions[0].aiMetadata, answer.metadata);
+    await save([...messages, tail("first-tail")]);
+    await edit("second-edit");
+    messages = await history();
+    assert.equal(messages[0].versions.length, 3);
+    assert.deepEqual(messages[0].versions[1].subsequentMessages, [tail("first-tail")]);
+    assert.equal(messages[0].versions[1].aiContent, "answer:first-edit");
+    const untouched = structuredClone(messages[0].versions[2]);
+    // Select the oldest branch, extend it, then regenerate: update slot zero,
+    // rather than always treating the newest version as the selected branch.
+    await save([{ ...messages[0], content: question.content, currentVersionIndex: 0 }, answer, tail("original-tail"), tail("added-after-switch")]);
+    const regenerated = await edit("original");
+    assert.equal(regenerated.input.userMessage.currentVersionIndex, 0);
+    messages = await history();
+    assert.deepEqual(messages[0].versions[0].subsequentMessages, [tail("original-tail"), tail("added-after-switch")]);
+    assert.deepEqual(messages[0].versions[2], untouched);
+    assert.equal(messages[0].currentVersionIndex, 3);
+  });
+
+  await t.test("Agent edit tolerates legacy null versions and never drops a following user message without an assistant", async () => {
+    const conversationId = await createConversation(), id = randomUUID();
+    const question = { id: "legacy-user", role: "user", content: "old", versions: null, currentVersionIndex: 9999999999, createdAt: "2026-01-01" };
+    const following = { id: "following-user", role: "user", content: "tail", createdAt: "2026-01-01" };
+    await asActor(owner, `SELECT public.replace_conversation_messages(${quote(conversationId)},${json([question, following])});`);
+    const queued = await create(conversationId, { id, charge: false, input: { ...input(id), replaceFromMessageId: question.id, userMessage: { ...question, content: "new" } } });
+    assert.equal(queued.input.userMessage.versions[0].aiContent, "");
+    assert.deepEqual(queued.input.userMessage.versions[0].subsequentMessages, [following]);
+    await finish(await claim(), "failed");
+  });
+
+  await t.test("active conversation deletion is blocked through owner/admin DELETE and graph RPC until cancellation settles once", async () => {
+    for (const status of ["queued", "running", "awaiting_input", "cancelling"]) {
+      const conversationId = await createConversation(), before = await balance();
+      const queued = await create(conversationId);
+      let run;
+      if (status !== "queued") {
+        run = await claim();
+        if (status === "awaiting_input") await finish(run, "awaiting_input");
+        if (status === "cancelling") await asActor(owner, `SELECT public.agent_cancel_run(${quote(queued.id)});`);
+      }
+      const direct = `DELETE FROM public.conversations WHERE id=${quote(conversationId)};`;
+      await assert.rejects(asActor(owner, direct), /AGENT_CONVERSATION_BUSY/, status);
+      await assert.rejects(admin(direct), /AGENT_CONVERSATION_BUSY/, status);
+      await assert.rejects(asActor(owner, `SELECT public.delete_conversation_graph(${quote(conversationId)});`), /AGENT_CONVERSATION_BUSY/, status);
+      assert.equal((await get(queued.id)).billing, "charged");
+      assert.equal(await balance(), before - 1);
+      assert.equal(await asOwner(`SELECT count(*) FROM public.agent_run_credentials WHERE run_id=${quote(queued.id)};`), "1");
+      await asActor(owner, `SELECT public.agent_cancel_run(${quote(queued.id)});`);
+      if (status === "queued" || status === "awaiting_input") run = await claim();
+      const settled = await finish(run, "cancelled");
+      assert.equal(settled.billing, "refunded");
+      assert.equal(await balance(), before);
+      await assert.rejects(finish(run, "cancelled"), /AGENT_LEASE_LOST/);
+      assert.equal(await asActor(owner, `SELECT public.delete_conversation_graph(${quote(conversationId)});`), "t");
+      assert.equal(await get(queued.id), null);
+      assert.equal(await balance(), before, "cascade only occurs after the durable refund");
+    }
+  });
 
   await t.test("Pi Durable commits checkpoints atomically, deduplicates receipts, and consumes only placed commands", async () => {
     const nativeCheckpoint = { ...checkpoint, version: 2, durable: { engine: "pi-durable/1.0.4", seeded: true } };

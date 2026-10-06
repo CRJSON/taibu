@@ -319,7 +319,8 @@ export async function createAgentTask(request: NextRequest) {
     );
   if (!custom && !account.hasCredits)
     throw new AgentApiError("积分不足", 402, "INSUFFICIENT_CREDITS");
-  if (!(await checkRateLimit(auth.user.id, "/api/chat", AI_RATE_LIMIT_CONFIG)))
+  const limit = await checkRateLimit(auth.user.id, "/api/chat", AI_RATE_LIMIT_CONFIG);
+  if (!limit.allowed)
     throw new AgentApiError("请求过于频繁，请稍后再试", 429, "RATE_LIMITED");
   const modelId = config?.id ?? custom!.modelId;
   const reasoning =
@@ -521,10 +522,7 @@ export async function streamAgentTask(request: NextRequest, id: string) {
               ),
             );
           } else controller.enqueue(encoder.encode(": heartbeat\n\n"));
-          if (
-            isAgentRunTerminal(view.status) ||
-            view.status === "awaiting_input"
-          )
+          if (isAgentRunTerminal(view.status))
             break;
           await new Promise((resolve) => setTimeout(resolve, 1000));
         }

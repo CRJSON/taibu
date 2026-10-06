@@ -76,7 +76,7 @@ function setup(t: TestContext) {
     hasCredits: true,
     effectiveMembership: "plus",
   }));
-  t.mock.method(rate, "checkRateLimit", async () => true);
+  t.mock.method(rate, "checkRateLimit", async () => ({ allowed: true, remaining: 9, resetAt: new Date(Date.now() + 60000) }));
   t.mock.method(
     context,
     "buildChatPromptContext",
@@ -120,8 +120,31 @@ function setup(t: TestContext) {
       method: "POST",
       body: JSON.stringify(value),
     });
-  return { owner, conversation, writes, body, request, client, api, credits };
+  return { owner, conversation, writes, body, request, client, api, credits, rate, features };
 }
+
+test("Agent admission honors a denied rate-limit result for platform and BYOK without creating or charging a task", async (t) => {
+  const fixture = setup(t);
+  t.mock.method(fixture.rate, "checkRateLimit", async (owner: string, endpoint: string) => {
+    assert.equal(owner, fixture.owner);
+    assert.equal(endpoint, "/api/chat");
+    return { allowed: false, remaining: 0, resetAt: new Date(Date.now() + 60000) };
+  });
+  for (const extra of [{}, { customProvider: { apiUrl: "https://model.example/v1", apiKey: "fixture", modelId: "fixture" } }]) {
+    const response = await agentEndpoint(() => createAgentTask(fixture.request({ ...fixture.body, ...extra })));
+    assert.equal(response.status, 429);
+    assert.equal((await response.json()).code, "RATE_LIMITED");
+  }
+  assert.equal(fixture.writes.length, 0);
+});
+
+test("Agent feature admission fails closed when fresh configuration cannot be read", async (t) => {
+  const fixture = setup(t);
+  t.mock.method(fixture.features, "readFeatureModuleStateFresh", async () => ({ status: "unavailable" as const }));
+  const response = await agentEndpoint(() => createAgentTask(fixture.request()));
+  assert.equal(response.status, 403);
+  assert.equal(fixture.writes.length, 0);
+});
 
 test("Agent create uses server history and an atomic charge RPC; supplied assistant/metadata is discarded", async (t) => {
   const fixture = setup(t);
@@ -302,4 +325,34 @@ test("Agent request hashes are independent of object property order but distingu
     hashAgentRequest({ content: "a" }),
     hashAgentRequest({ content: "b" }),
   );
+});
+
+test("Agent SSE stays open while awaiting input and observes another tab's resume and completion", async (t) => {
+  const fixture = setup(t), id = randomUUID();
+  let status = "awaiting_input", cursor = 1;
+  const run = () => ({
+    id, user_id: fixture.owner, conversation_id: fixture.conversation, status, event_cursor: cursor,
+    created_at: "2026-01-01", public_message: {
+      id: `agent:${id}`, role: "assistant", content: "", createdAt: "2026-01-01",
+      agent: { version: 1, runId: id, status, parts: [] },
+    },
+  }) as unknown as AgentRunRow;
+  t.mock.method(AgentStore.prototype, "getRun", async () => run());
+  t.mock.method(AgentStore.prototype, "events", async () => []);
+  const controller = new AbortController();
+  const response = await streamAgentTask(new NextRequest(`http://localhost/api/agent/runs/${id}/events`, { signal: controller.signal }), id);
+  const reader = response.body!.getReader();
+  t.after(() => { controller.abort(); void reader.cancel(); });
+  const decoder = new TextDecoder();
+  const first = await reader.read();
+  assert.equal(first.done, false);
+  assert.match(decoder.decode(first.value), /awaiting_input/);
+  status = "running"; cursor++;
+  const resumed = await reader.read();
+  assert.equal(resumed.done, false);
+  assert.match(decoder.decode(resumed.value), /running/);
+  status = "completed"; cursor++;
+  const completed = await reader.read();
+  assert.match(decoder.decode(completed.value), /completed/);
+  assert.equal((await reader.read()).done, true);
 });

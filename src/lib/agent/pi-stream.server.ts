@@ -161,6 +161,8 @@ export function createPiSDKStream(
         for (let sourceIndex = 0; sourceIndex < sources.length; sourceIndex++) {
           const source = sources[sourceIndex];
           try {
+            const requestSignal = agentModelRequestSignal(options?.signal);
+            let finished = false;
             const result = streamText({
               // The SDK's default handler logs upstream exception bodies.
               // Emit our public error event instead of logging provider secrets.
@@ -173,7 +175,7 @@ export function createPiSDKStream(
               messages: toAgentModelMessages(context.messages),
               tools,
               maxRetries: 0,
-              abortSignal: agentModelRequestSignal(options?.signal),
+              abortSignal: requestSignal,
               temperature: source.defaultTemperature ?? 0.7,
               maxOutputTokens: source.defaultMaxTokens ?? undefined,
               topP: source.defaultTopP ?? undefined,
@@ -187,6 +189,7 @@ export function createPiSDKStream(
             const blocks = new Map<string, number>();
             for await (const event of result.fullStream) {
               if (event.type === "error") throw event.error;
+              if (event.type === "abort") throw new Error("模型请求已中断");
               if (
                 event.type === "start-step" &&
                 event.warnings.some(
@@ -307,9 +310,11 @@ export function createPiSDKStream(
               } else if (event.type === "finish") {
                 if (
                   event.finishReason === "error" ||
-                  event.finishReason === "content-filter"
+                  event.finishReason === "content-filter" ||
+                  event.finishReason === "other"
                 )
                   throw new Error("模型未正常完成回复");
+                finished = true;
                 message.stopReason =
                   event.finishReason === "length"
                     ? "length"
@@ -325,6 +330,9 @@ export function createPiSDKStream(
                 };
               }
             }
+            // EOF and an SDK abort are not successful Pi terminal messages.
+            if (!finished) throw new Error("模型回复缺少结束标记");
+            requestSignal.throwIfAborted();
             if (!started) {
               started = true;
               output.push({ type: "start", partial: message });

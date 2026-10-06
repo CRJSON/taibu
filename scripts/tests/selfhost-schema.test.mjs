@@ -113,6 +113,19 @@ test('local graph deletion and vector compatibility repairs preserve tenant isol
   }
 });
 
+test('Agent lifecycle repair is included after Durable without adding tables or changing settlement', () => {
+  const migration = 'supabase/migrations/20261006_110000_agent_lifecycle_fixes.sql';
+  assert.ok(manifest.sources.some(source => source.file === migration));
+  assert.match(definition('agent_create_run'), /versions:=jsonb_set\(versions,ARRAY\[version_index::text\],version_snapshot\)/);
+  assert.match(definition('agent_protect_conversation_delete'), /status IN \('queued','running','awaiting_input','cancelling'\)/);
+  assert.match(sql, /CREATE TRIGGER agent_conversation_delete_guard BEFORE DELETE ON public.conversations/);
+  assert.ok(sql.indexOf('CREATE TRIGGER agent_conversation_delete_guard') > sql.indexOf('CREATE TABLE public.agent_durable_commits'));
+  // The Durable migration amends the catalog body with pg_get_functiondef;
+  // the generated source's last literal definition precedes that amendment.
+  assert.match(sql, /new_guard text := .*durable_admitted/);
+  assert.equal(names(sql).length, 49);
+});
+
 test('storage uses actual flat UID naming, bounded MIME/size and owner-only writes', () => {
   assert.match(storage, /2097152/);
   assert.match(storage, /name LIKE \(SELECT auth.uid\(\)\)::text \|\| '-%'/);

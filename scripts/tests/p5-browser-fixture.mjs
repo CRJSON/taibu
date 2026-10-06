@@ -29,7 +29,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const origin = 'https://taibu-fixture.invalid';
 
 const entry = String.raw`
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { useQueryClient } from '@tanstack/react-query';
 import { ClientProviders, useSessionSafe } from '@/components/providers/ClientProviders';
@@ -39,6 +39,8 @@ import { openSettingsCenter } from '@/lib/settings-center';
 import { AIModelPanel } from '@/components/admin/AIModelPanel';
 import { AnnouncementManagementPanel } from '@/components/admin/AnnouncementManagementPanel';
 import { ConversationListProvider, useConversationList } from '@/lib/chat/ConversationListContext';
+import { useChatState } from '@/lib/chat/use-chat-state';
+import { useChatMessaging } from '@/lib/chat/use-chat-messaging';
 import { ChatStreamManager } from '@/lib/chat/chat-stream-manager';
 import { ChartPickerModal } from '@/components/common/ChartPickerModal';
 import { useComposerState } from '@/components/chat/composer/useComposerState';
@@ -72,6 +74,18 @@ import { deleteHistorySummary } from '@/lib/history/client';
 import { removeKnowledgeBaseArchive } from '@/lib/knowledge-base/browser-client';
 const sourceTypes = ['bazi_chart'];
 const empty = [];
+function AgentChatProbe() {
+  const { user } = useSessionSafe();
+  const router = useMemo(() => ({ replace() {}, push() {} }), []);
+  const searchParams = useMemo(() => new URLSearchParams(), []);
+  const state = useChatState({ userId: user?.id ?? null, sessionLoading: false, bootstrapLoading: false, router, searchParams });
+  const messaging = useChatMessaging({ state, userId: user?.id ?? null, user, membership: { type: 'plus', isActive: true }, credits: 20,
+    refreshViewerState: async () => {}, markViewerCreditsExhausted() {}, showToast: (...args) => { window.fixture.agentToasts.push(args); }, router, searchParams });
+  window.fixture.agentChat = { state, messaging };
+  return <section data-testid="agent-chat"><input aria-label="Agent fixture draft" value={state.inputValue} onChange={event => state.setInputValue(event.target.value)} />
+    <output data-testid="agent-status">{messaging.agent.run?.status ?? 'none'}</output>
+    <output data-testid="agent-messages">{JSON.stringify(state.messages)}</output></section>;
+}
 function ComposerProbe() {
   const { user } = useSessionSafe();
   const state = useComposerState({ userId: user?.id, isLoading: true, membershipType: 'pro',
@@ -98,7 +112,7 @@ let client;
 const manager = new ChatStreamManager();
 const invalidations = [];
 
-window.fixture = { user: 'alice', invalidations, client, manager };
+window.fixture = { user: 'alice', invalidations, client, manager, agentToasts: [] };
 function Shell() {
   const queryClient = useQueryClient();
   const { user } = useSessionSafe();
@@ -120,8 +134,11 @@ function Shell() {
   const [drawerMounted, setDrawerMounted] = useState(false);
   const [recordsMounted, setRecordsMounted] = useState(false);
   const [selectedMounted, setSelectedMounted] = useState(false);
+  const [agentMounted, setAgentMounted] = useState(false);
+  const [modelMountKey, setModelMountKey] = useState(0);
+  window.fixture.remountModels = () => setModelMountKey(current => current + 1);
   window.fixture.mount = { composer: setComposerMounted, history: setHistoryMounted, drawer: setDrawerMounted,
-    records: setRecordsMounted, picker: setPickerOpen, selected: setSelectedMounted };
+    records: setRecordsMounted, picker: setPickerOpen, selected: setSelectedMounted, agent: setAgentMounted };
   window.fixture.chartKey = queryKeys.userCharts;
   window.fixture.chartClient = chartClient;
   window.fixture.deleteHistory = deleteHistorySummary;
@@ -175,10 +192,11 @@ function Shell() {
     </section>}
     <button onClick={() => manager.stopTask('alice-1')}>Stop actual stream manager</button>
     <output data-testid="stream">{stream ? stream.status + ':' + stream.content : 'idle'}</output>
-    {route === '/models' && <section data-testid="models"><AIModelPanel /></section>}
+    {route === '/models' && <section data-testid="models"><AIModelPanel key={modelMountKey} /></section>}
     {route === '/announcements' && <section data-testid="announcements"><AnnouncementManagementPanel /></section>}
     {composerMounted && <ComposerProbe />}
     {selectedMounted && <SelectedChartProbe />}
+    {agentMounted && <AgentChatProbe />}
     {historyMounted && <section data-testid="history-page"><HistoryPageTemplate {...historyConfig} /></section>}
     {drawerMounted && <section data-testid="history-drawer"><HistoryDrawer type="tarot" /></section>}
     {recordsMounted && <section data-testid="records"><RecordsPage /></section>}
@@ -242,7 +260,7 @@ export async function build(outputDirectory) {
         `;
         if (args.path.endsWith('/ChatTaskToastBridge')) contents = 'export function ChatTaskToastBridge() { return null; }';
         if (args.path.endsWith('/AnnouncementPopupHost')) contents = 'export function AnnouncementPopupHost({ children }) { return children; }';
-        if (args.path.endsWith('/useFeatureToggles')) contents = 'const enabled = () => true; export function useFeatureToggles() { return { loaded: true, isFeatureEnabled: enabled }; }';
+        if (args.path.endsWith('/useFeatureToggles')) contents = 'const enabled = () => true; export function useFeatureToggles() { return { loaded: true, isLoading: false, isFeatureEnabled: enabled }; }';
         if (args.path.endsWith('/useCurrentUserProfile')) contents = "import { useSessionSafe } from '@/lib/hooks/session-context'; export function useCurrentUserProfile() { const {user} = useSessionSafe(); return { profile: user ? { is_admin: user.id === 'alice' } : null, loading: false, error: null }; }";
         if (args.path.endsWith('/AccountAdminPanels')) contents = "export { AIModelPanel as AdminAIServicesContent } from '@/components/admin/AIModelPanel'; export const AdminAnnouncementsContent = () => null; export const AdminFeaturesContent = () => null;";
         return { contents, loader: 'jsx', resolveDir: root };
@@ -279,8 +297,64 @@ export async function run(existingPage, bundlePath) {
   await context.addInitScript(() => {
     // Keep actual fetch/Response behavior; only hold JSON completion when a test asks.
     const nativeFetch = window.fetch.bind(window);
+    // In-memory Agent HTTP boundary supplies real Response/ReadableStream objects
+    // to the production chat hooks, including held receipts and cross-tab SSE.
+    const agentIO = window.fixtureAgentIO = { requests: [], runs: {}, commands: {}, streams: [], held: [], holdNext: false, failReceipts: 0, resumeOnCommand: false };
+    agentIO.view = (conversationId, status = 'running', id = 'run-' + conversationId, cursor = 1) => ({
+      id, conversationId, status, cursor, createdAt: '2026-10-06T00:00:00Z',
+      message: { id: 'agent:' + id, role: 'assistant', content: '', createdAt: '2026-10-06T00:00:00Z', agent: { version: 1, runId: id, status, parts: [] } },
+    });
+    agentIO.emit = view => {
+      agentIO.runs[view.conversationId] = view;
+      for (const stream of agentIO.streams) if (!stream.closed && stream.runId === view.id) {
+        stream.controller.enqueue(new TextEncoder().encode('event: snapshot\ndata: ' + JSON.stringify(view) + '\n\n'));
+        if (['completed', 'cancelled', 'failed'].includes(view.status)) { stream.closed = true; stream.controller.close(); }
+      }
+    };
     window.fixtureNetwork = { next: 0, requests: {}, jsonGate: null };
     window.fetch = async (input, init) => {
+      const url = new URL(String(input), location.origin);
+      if (url.pathname.startsWith('/api/agent/')) {
+        const method = init?.method ?? 'GET', body = init?.body ? JSON.parse(init.body) : null;
+        agentIO.requests.push({ url: url.pathname, search: url.search, method, body });
+        if (url.pathname === '/api/agent/status') return Response.json({ enabled: true, ready: true, webAvailable: false, customAvailable: true });
+        if (url.pathname === '/api/agent/runs' && method === 'GET') return Response.json(agentIO.runs[url.searchParams.get('conversationId')] ?? null);
+        const events = url.pathname.match(/^\/api\/agent\/runs\/([^/]+)\/events$/);
+        if (events) {
+          let stream;
+          return new Response(new ReadableStream({
+            start(controller) {
+              stream = { controller, runId: events[1], closed: false };
+              agentIO.streams.push(stream);
+              const view = Object.values(agentIO.runs).find(view => view.id === events[1]);
+              if (view) controller.enqueue(new TextEncoder().encode('event: snapshot\ndata: ' + JSON.stringify(view) + '\n\n'));
+            }, cancel() { stream.closed = true; },
+          }), { headers: { 'Content-Type': 'text/event-stream' } });
+        }
+        let payload;
+        if (url.pathname === '/api/agent/runs' && method === 'POST') {
+          const existing = Object.values(agentIO.runs).find(view => view.clientRequestId === body.clientRequestId);
+          payload = existing ?? { ...agentIO.view(body.conversationId, 'queued', 'created-' + body.conversationId), clientRequestId: body.clientRequestId,
+            userMessage: { ...body.message, role: 'user', createdAt: '2026-10-06T00:00:00Z' } };
+          agentIO.runs[body.conversationId] = payload;
+        } else {
+          const command = url.pathname.match(/^\/api\/agent\/runs\/([^/]+)\/messages$/);
+          if (!command) throw new Error('Unhandled Agent fixture: ' + url.pathname);
+          const key = command[1] + ':' + body.clientRequestId;
+          let receipt = agentIO.commands[key];
+          if (!receipt) {
+            const view = Object.values(agentIO.runs).find(view => view.id === command[1]);
+            const resumed = { ...view, cursor: view.cursor + 1, status: agentIO.resumeOnCommand ? 'running' : view.status };
+            resumed.message = { ...resumed.message, agent: { ...resumed.message.agent, status: resumed.status } };
+            receipt = agentIO.commands[key] = { message: { id: 'command:' + body.clientRequestId, role: 'user', content: body.content, createdAt: '2026-10-06T00:00:00Z' }, run: resumed };
+            agentIO.emit(resumed);
+          }
+          payload = receipt;
+        }
+        if (agentIO.holdNext) { agentIO.holdNext = false; await new Promise(resolve => agentIO.held.push(resolve)); }
+        if (agentIO.failReceipts > 0) { agentIO.failReceipts--; throw new TypeError('lost committed receipt'); }
+        return Response.json(payload);
+      }
       const network = window.fixtureNetwork;
       const id = String(++network.next);
       const headers = new Headers(init?.headers || (input instanceof Request ? input.headers : undefined));
@@ -477,6 +551,10 @@ export async function run(existingPage, bundlePath) {
     }
     const conversation = url.pathname.match(/^\/api\/conversations\/([^/]+)$/);
     if (conversation) {
+      if (method === 'GET') {
+        const user = await page.evaluate(() => window.fixtureAuth.cookieUser);
+        return ok({ conversation: { id: conversation[1], user_id: user, personality: 'general', title: 'Agent test', messages: [], created_at: '2026-01-01', updated_at: '2026-01-01', source_type: 'chat' } });
+      }
       if (control?.fail) return ok({ saved: false });
       if (method === 'DELETE') {
         if (failDelete) { failDelete = false; return denied(); }
@@ -722,11 +800,13 @@ export async function run(existingPage, bundlePath) {
         check('Announcement DELETE invalidates once', JSON.stringify(await page.evaluate(() => window.fixture.invalidations)) === JSON.stringify([{ queryKey: ['announcements'] }]));
       }
     }
-    // StrictMode starts overlapping real loadModels calls on remount.
+    // Explicitly remount while a real loadModels receipt is held. React's
+    // development effect replay count varies for later conditional mounts.
     const oldModelLoad = holdNext('/api/admin/ai-models', 'GET');
     oldModelLoad.snapshot = { models: models.map(model => model.id === 'model-1' ? { ...model, displayName: 'Stale older reload' } : model) };
     await page.getByRole('button', { name: 'Fixture Models route', exact: true }).click();
     await intercepted(oldModelLoad);
+    await page.evaluate(() => window.fixture.remountModels());
     await page.getByText('Edited Fixture Model', { exact: true }).waitFor();
     oldModelLoad.release();
     await page.waitForTimeout(40);
@@ -1126,6 +1206,127 @@ export async function run(existingPage, bundlePath) {
       await recordPanel.getByRole('heading', { name: 'Event refreshed record', exact: true }).isVisible() &&
       await recordPanel.getByRole('heading', { name: 'Event saved record', exact: true }).count() === 0);
     await page.evaluate(() => window.fixture.mount.records(false));
+
+    await page.evaluate(() => window.fixture.mount.agent(true));
+    await until(() => window.fixture.agentChat?.messaging.agent.capabilities.ready);
+    await page.evaluate(() => window.fixture.agentChat.messaging.agent.setMode('agent'));
+    const selectAgentConversation = async (id, status = null) => {
+      await page.evaluate(async ({ id, status }) => {
+        const io = window.fixtureAgentIO;
+        if (status) io.runs[id] = io.view(id, status, io.runs[id]?.id ?? 'run-' + id, (io.runs[id]?.cursor ?? 0) + 1);
+        await window.fixture.agentChat.state.handleSelectConversation(id);
+      }, { id, status });
+      await until(({ id, status }) => window.fixture.agentChat.state.activeConversationId === id &&
+        !window.fixture.agentChat.messaging.agent.restoring &&
+        (status ? window.fixture.agentChat.messaging.agent.run?.conversationId === id : !window.fixture.agentChat.messaging.agent.run), { id, status });
+      await renderBarrier();
+    };
+    const sendHeldAgent = async (queue = false) => {
+      await page.evaluate(queue => {
+        window.fixtureAgentIO.holdNext = true;
+        window.fixture.agentSend = queue ? window.fixture.agentChat.messaging.handleQueueMessage() : window.fixture.agentChat.messaging.handleSend();
+      }, queue);
+      await until(() => window.fixtureAgentIO.held.length > 0);
+    };
+    const releaseAgent = async () => {
+      await page.evaluate(async () => { window.fixtureAgentIO.held.shift()(); await window.fixture.agentSend; });
+      await renderBarrier();
+    };
+    await selectAgentConversation('agent-a', 'running');
+    await page.getByLabel('Agent fixture draft').fill('supplement for A');
+    await sendHeldAgent();
+    await selectAgentConversation('agent-b');
+    await page.evaluate(() => {
+      const state = window.fixture.agentChat.state;
+      state.setInputValue('new B draft');
+      state.setMentions([{ type: 'bazi_chart', name: 'B reference', preview: 'B', id: '00000000-0000-4000-8000-000000000001' }]);
+      state.setAttachmentState({ file: new File(['B'], 'b.txt'), webSearchEnabled: false });
+    });
+    await renderBarrier();
+    await releaseAgent();
+    check('Late command receipts cannot append A messages to B or clear B draft, mentions and file', await page.evaluate(() => {
+      const state = window.fixture.agentChat.state;
+      return state.messages.every(message => !message.id.startsWith('command:')) && state.inputValue === 'new B draft' && state.mentions[0]?.name === 'B reference' && state.attachmentState.file?.name === 'b.txt';
+    }));
+
+    await selectAgentConversation('agent-a', 'running');
+    await page.getByLabel('Agent fixture draft').fill('old visit A');
+    await sendHeldAgent(true);
+    await selectAgentConversation('agent-b');
+    await selectAgentConversation('agent-a', 'running');
+    await page.getByLabel('Agent fixture draft').fill('new visit A');
+    await releaseAgent();
+    check('A to B to A invalidates the old visit receipt even when the conversation ID matches again', await page.evaluate(() => {
+      const state = window.fixture.agentChat.state;
+      return state.inputValue === 'new visit A' && !state.messages.some(message => message.content === 'old visit A');
+    }));
+
+    await selectAgentConversation('agent-waiting', 'awaiting_input');
+    const waitingConnections = await page.evaluate(() => window.fixtureAgentIO.requests.filter(request => request.url.endsWith('/events')).length);
+    await page.evaluate(() => {
+      const io = window.fixtureAgentIO, current = io.runs['agent-waiting'];
+      io.emit({ ...current, status: 'running', cursor: current.cursor + 1, message: { ...current.message, agent: { ...current.message.agent, status: 'running' } } });
+    });
+    await until(() => window.fixture.agentChat.messaging.agent.run?.status === 'running');
+    await page.evaluate(async () => window.fixture.agentChat.state.retryConversationLoad());
+    await until(() => !window.fixture.agentChat.messaging.agent.restoring && window.fixture.agentChat.messaging.agent.run?.status === 'running');
+    await page.evaluate(() => {
+      const io = window.fixtureAgentIO, current = io.runs['agent-waiting'];
+      io.emit({ ...current, status: 'cancelled', cursor: current.cursor + 1, message: { ...current.message, agent: { ...current.message.agent, status: 'cancelled' } } });
+    });
+    await until(() => window.fixture.agentChat.messaging.agent.run?.status === 'cancelled' && !window.fixture.agentChat.messaging.agent.syncing);
+    check('Awaiting input keeps observing other-tab resume and cancellation, including a same-conversation reload', await page.evaluate(count =>
+      window.fixture.agentChat.messaging.agent.run?.status === 'cancelled' && count > 0, waitingConnections));
+
+    await selectAgentConversation('agent-retry', 'awaiting_input');
+    await page.getByLabel('Agent fixture draft').fill('one human reply');
+    await page.evaluate(async () => {
+      window.fixtureAgentIO.failReceipts = 2;
+      window.fixtureAgentIO.resumeOnCommand = true;
+      await window.fixture.agentChat.messaging.handleSend();
+    });
+    await until(() => window.fixture.agentChat.messaging.agent.run?.status === 'running');
+    await page.evaluate(async () => window.fixture.agentChat.messaging.handleSend());
+    await until(() => window.fixture.agentChat.state.inputValue === '');
+    check('Manual retry after both lost receipts and awaiting-to-running transition retains the original reply ID and mode', await page.evaluate(() => {
+      const io = window.fixtureAgentIO;
+      const attempts = io.requests.filter(request => request.url === '/api/agent/runs/run-agent-retry/messages');
+      return attempts.length === 3 && attempts.every(request => JSON.stringify(request.body) === JSON.stringify(attempts[0].body)) &&
+        attempts[0].body.mode === 'reply' && Object.values(io.commands).filter(receipt => receipt.run.id === 'run-agent-retry').length === 1;
+    }));
+
+    await selectAgentConversation('agent-new-task');
+    await page.evaluate(() => { const state = window.fixture.agentChat.state; state.setMentions([]); state.setAttachmentState({ webSearchEnabled: false }); });
+    await page.getByLabel('Agent fixture draft').fill('original task');
+    await sendHeldAgent();
+    await page.evaluate(() => {
+      const state = window.fixture.agentChat.state;
+      state.setInputValue('next task draft');
+      state.setMentions([{ type: 'bazi_chart', name: 'next reference', preview: 'next' }]);
+      state.setAttachmentState({ file: new File(['next'], 'next.txt'), webSearchEnabled: false });
+    });
+    await renderBarrier();
+    await releaseAgent();
+    check('Successful delayed task creation preserves a newer draft, mention and attachment in the same conversation', await page.evaluate(() => {
+      const state = window.fixture.agentChat.state;
+      return state.inputValue === 'next task draft' && state.mentions[0]?.name === 'next reference' && state.attachmentState.file?.name === 'next.txt';
+    }));
+
+    await selectAgentConversation('agent-account', 'running');
+    await page.getByLabel('Agent fixture draft').fill('Alice pending command');
+    await sendHeldAgent();
+    await page.getByRole('button', { name: 'Fixture Logout', exact: true }).click();
+    await until(() => window.fixture.user === null);
+    await page.getByRole('button', { name: 'Fixture Alice', exact: true }).click();
+    await until(() => window.fixture.user === 'alice');
+    await selectAgentConversation('agent-account', 'running');
+    await page.getByLabel('Agent fixture draft').fill('Alice new session draft');
+    await releaseAgent();
+    check('Logout and relogin to the same account invalidate old async receipts and draft clearing', await page.evaluate(() =>
+      window.fixture.agentChat.state.inputValue === 'Alice new session draft' && !window.fixture.agentChat.state.messages.some(message => message.content === 'Alice pending command')));
+    await page.evaluate(() => window.fixture.mount.agent(false));
+    await renderBarrier();
+    check('Unmount cancels all nonterminal Agent event readers', await page.evaluate(() => window.fixtureAgentIO.streams.every(stream => stream.closed)));
 
     check('No unhandled network requests escaped fixtures', blocked.length === 0);
     check('No browser runtime exceptions', browserErrors.length === 0);

@@ -10,7 +10,7 @@
 
 ## 材料与可信范围
 
-新增 `20261005_100000_agent_runtime.sql` 提供 Agent 业务事务；`20261005_120000_agent_chart_identity.sql` 更新命盘身份与去重，依赖运行表和排盘时间字段迁移；`20261006_100000_agent_pi_durable.sql` 提供受租约保护的原生提交日志、消费确认和 worker 版本隔离。这些迁移仅进入隔离 fixture 和自托管空库基线，尚未通过 Supabase MCP 应用到线上。表快照追加七张表作为开发上下文；运行与验收边界见 [Agent 说明](../docs/manual/Agent.md)。
+新增 `20261005_100000_agent_runtime.sql` 提供 Agent 业务事务；`20261005_120000_agent_chart_identity.sql` 更新命盘身份与去重，依赖运行表和排盘时间字段迁移；`20261006_100000_agent_pi_durable.sql` 提供受租约保护的原生提交日志、消费确认和 worker 版本隔离；其后的 `20261006_110000_agent_lifecycle_fixes.sql` 修复重复编辑分支快照并保护活动对话删除，复用现有结构，无新增字段或回填。这些迁移仅进入隔离 fixture 和自托管空库基线，尚未通过 Supabase MCP 应用到线上。表快照追加七张表作为开发上下文；运行与验收边界见 [Agent 说明](../docs/manual/Agent.md)。
 
 | 材料 | 能说明的内容 | 不能证明的内容 |
 |---|---|---|

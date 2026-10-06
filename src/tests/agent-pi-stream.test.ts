@@ -193,7 +193,7 @@ test("unsupported tool warnings and abnormal model finish reasons fail explicitl
   const sdk =
     require("../lib/ai/providers/ai-sdk-provider") as typeof import("../lib/ai/providers/ai-sdk-provider");
   t.mock.method(console, "warn", () => {});
-  for (const scenario of ["tools", "error", "content-filter"] as const) {
+  for (const scenario of ["tools", "error", "content-filter", "other"] as const) {
     const model = mockModel([
       {
         type: "stream-start",
@@ -223,5 +223,48 @@ test("unsupported tool warnings and abnormal model finish reasons fail explicitl
     const message = await stream.result();
     assert.equal(message.stopReason, "error", scenario);
     assert.match(message.errorMessage ?? "", /工具调用.*普通对话/);
+  }
+});
+
+test("SDK EOF without a finish marker emits a Pi error, preserving partial text without a success event", async (t) => {
+  const sdk = require("../lib/ai/providers/ai-sdk-provider") as typeof import("../lib/ai/providers/ai-sdk-provider");
+  t.mock.method(sdk, "createModelFromConfig", () => mockModel([
+    { type: "stream-start", warnings: [] }, { type: "text-start", id: "text" },
+    { type: "text-delta", id: "text", delta: "partial" }, { type: "text-end", id: "text" },
+  ]));
+  const stream = createPiSDKStream(config, { reasoning: false, apiKey: "fixture" })(piModel, context());
+  const events = [];
+  for await (const event of stream) events.push(event);
+  assert.equal((await stream.result()).stopReason, "error");
+  assert.equal(events.some(event => event.type === "done"), false);
+  assert.equal(events.at(-1)?.type, "error");
+  assert.equal((await stream.result()).content[0].type, "text");
+});
+
+test("SDK timeout and user abort both emit a Pi failure after partial output", async (t) => {
+  const sdk = require("../lib/ai/providers/ai-sdk-provider") as typeof import("../lib/ai/providers/ai-sdk-provider");
+  for (const scenario of ["timeout", "user"] as const) {
+    const timeout = new AbortController(), user = new AbortController();
+    t.mock.method(AbortSignal, "timeout", () => timeout.signal);
+    const model = new MockLanguageModelV3({
+      doStream: async ({ abortSignal }) => ({ stream: new ReadableStream<Part>({
+        start(controller) {
+          controller.enqueue({ type: "stream-start", warnings: [] });
+          controller.enqueue({ type: "text-start", id: "text" });
+          controller.enqueue({ type: "text-delta", id: "text", delta: "partial" });
+          abortSignal!.addEventListener("abort", () => controller.error(abortSignal!.reason), { once: true });
+        },
+      }) }),
+    });
+    t.mock.method(sdk, "createModelFromConfig", () => model);
+    const stream = createPiSDKStream(config, { reasoning: false, apiKey: "fixture" })(piModel, context(), { signal: user.signal });
+    const events = [];
+    for await (const event of stream) {
+      events.push(event);
+      if (event.type === "text_delta") (scenario === "timeout" ? timeout : user).abort();
+    }
+    assert.equal((await stream.result()).stopReason, scenario === "timeout" ? "error" : "aborted");
+    assert.equal(events.some(event => event.type === "done"), false, scenario);
+    assert.equal(model.doStreamCalls.length, 1);
   }
 });

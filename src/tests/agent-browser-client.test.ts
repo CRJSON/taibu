@@ -5,6 +5,7 @@ import {
   readAgentStream,
   canAdoptAgentRun,
   postAgentRun,
+  postAgentCommand,
 } from "../lib/agent/browser-client";
 import type { AgentRunView } from "../lib/agent/types";
 
@@ -51,6 +52,27 @@ test("Agent browser merges server messages without reintroducing terminal messag
     mergeAgentSnapshot(original, { ...view, status: "completed" }),
     original,
   );
+});
+
+test("commands retry an uncertain receipt with the exact same ID, mode and content", async (t) => {
+  const bodies: string[] = [];
+  const message = { id: "command", role: "user" as const, content: "reply", createdAt: "2026-01-01" };
+  t.mock.method(globalThis, "fetch", async (url: string, init?: RequestInit) => {
+    assert.equal(url, "/api/agent/runs/run/messages");
+    bodies.push(String(init?.body));
+    if (bodies.length === 1) return new Response("receipt lost", { status: 502 });
+    return Response.json({ message, run: view });
+  });
+  assert.deepEqual(await postAgentCommand("run", { content: "reply", clientRequestId: "stable", mode: "reply" }), { message, run: view });
+  assert.equal(bodies.length, 2);
+  assert.equal(bodies[0], bodies[1]);
+  let denied = 0;
+  t.mock.method(globalThis, "fetch", async () => {
+    denied++;
+    return Response.json({ error: "任务已结束" }, { status: 409 });
+  });
+  await assert.rejects(postAgentCommand("run", { content: "reply", clientRequestId: "denied", mode: "reply" }), /任务已结束/);
+  assert.equal(denied, 1);
 });
 test("late snapshots from a previous task cannot replace the current task", () => {
   const newer = { ...view, id: "new-run", createdAt: "2026-01-02", cursor: 1 };

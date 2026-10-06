@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
   "baselineRevision": "5725dde",
-  "sourceFingerprint": "3c7c040565c9b915db79249ff31e82e0374ea99d27d60a8ecfd532f4a9a0b9cd",
+  "sourceFingerprint": "aafa52b1c13357312a9b3fd67bb43eede1b0c2ff2cf5bca0a11f936887fedfd8",
   "target": "empty local self-hosted application schema; NOT production parity or a migration replay",
   "bootstrapOrder": [
     "platform roles/extensions",
@@ -137,6 +137,10 @@
       "sha256": "d4bbe5f367df9d2a2eb090deb09e39c480c88aed95867c37e3a2aa6beb87c62e"
     },
     {
+      "file": "supabase/migrations/20261006_110000_agent_lifecycle_fixes.sql",
+      "sha256": "1dad2e8fe0dd2614bcd416d479a26f314dd8b284c8f851cdc81ac9da71fefc3e"
+    },
+    {
       "file": "supabase/selfhost/source-views.sql",
       "sha256": "3ec59bffedd43530835e728dd9e9fac580ed09bbacb23e64fe460cb2775c6342"
     },
@@ -158,7 +162,7 @@
     },
     {
       "file": "scripts/selfhost-schema.mjs",
-      "sha256": "9e7ad099cdf53d73817128b173cf6c1e6403870672722cd04b88647586656c3a"
+      "sha256": "7f87500e6ae993b21eff2704701a714d43cc443129649d0eb5c0af8242ab365e"
     },
     {
       "file": "src/app/api/supabase/storage/route.ts",
@@ -566,7 +570,7 @@
       "callers": [
         "src/lib/agent/api.server.ts"
       ],
-      "source": "supabase/migrations/20261005_100000_agent_runtime.sql",
+      "source": "supabase/migrations/20261006_110000_agent_lifecycle_fixes.sql",
       "status": "defined",
       "reason": null
     },
@@ -2262,7 +2266,7 @@
   "artifacts": [
     {
       "file": "supabase/selfhost/001-application.sql",
-      "sha256": "917335b41803a0202c3088e91ff1a6082e9f799e6350c36a53756e14b1da670a"
+      "sha256": "f25829bac3e6a2cb0216f86f158f5e076112ddc958d66f75d988eab37cae3f6a"
     },
     {
       "file": "supabase/selfhost/002-storage.sql",

@@ -139,6 +139,20 @@ export function useChatMessaging({
         cacheConversationMessages,
         removeConversationDetail,
     } = state;
+    const draftRef = useRef({ inputValue, mentions, file: attachmentState.file, chatMode });
+    if (draftRef.current.inputValue !== inputValue || draftRef.current.mentions !== mentions ||
+        draftRef.current.file !== attachmentState.file || draftRef.current.chatMode !== chatMode) {
+        draftRef.current = { inputValue, mentions, file: attachmentState.file, chatMode };
+    }
+    const captureDraft = (isCurrent: () => boolean, clearAttachment = false) => {
+        const submitted = draftRef.current;
+        return () => {
+            if (!isCurrent() || draftRef.current !== submitted) return;
+            setInputValue('');
+            setMentions([]);
+            if (clearAttachment) setAttachmentState(current => ({ ...current, file: undefined }));
+        };
+    };
     const isDreamMode = chatMode === 'dream';
     const chartsQuery = useUserCharts(userId, { enabled: isDreamMode });
     const primaryChartName = useMemo(() => selectPrimarySavedBaziChart(chartsQuery.data)?.name, [chartsQuery.data]);
@@ -333,8 +347,9 @@ export function useChatMessaging({
 
     const handleQueueMessage = async () => {
         if (!agent.active || !inputValue.trim() || isSendingToList) return;
+        const clearSubmittedDraft = captureDraft(agent.captureConversation());
         setIsSendingToList(true);
-        try { await agent.sendCommand(inputValue.trim(), true); setInputValue(''); setMentions([]); }
+        try { await agent.sendCommand(inputValue.trim(), true); clearSubmittedDraft(); }
         catch (error) { showToast('error', error instanceof Error ? error.message : '发送失败'); }
         finally { setIsSendingToList(false); }
     };
@@ -343,14 +358,17 @@ export function useChatMessaging({
     const handleSend = async () => {
         const trimmedInput = inputValue.trim();
         if (agent.active && trimmedInput && !isSendingToList) {
+            const clearSubmittedDraft = captureDraft(agent.captureConversation());
             setIsSendingToList(true);
-            try { await agent.sendCommand(trimmedInput); setInputValue(''); setMentions([]); }
+            try { await agent.sendCommand(trimmedInput); clearSubmittedDraft(); }
             catch (error) { showToast('error', error instanceof Error ? error.message : '发送失败'); }
             finally { setIsSendingToList(false); }
             return;
         }
         if (!trimmedInput || isLoading || isSendingToList) return;
         if (isDreamMode && dreamContextLoading) return;
+        let isCurrent = agent.captureConversation();
+        const clearSubmittedDraft = captureDraft(() => isCurrent(), true);
         setIsSendingToList(true);
 
         const messageMentions = sanitizeOutgoingMentions(mentions);
@@ -371,9 +389,12 @@ export function useChatMessaging({
                 });
                 if (newId) {
                     conversationId = newId;
+                    if (!isCurrent()) return;
+                    state.conversationEpochRef.current += 1;
                     activeConversationIdRef.current = newId;
                     conversationValidatedRef.current = true;
                     setActiveConversationId(newId);
+                    isCurrent = agent.captureConversation(newId);
                     if (searchParams.get('id') !== newId) router.replace(`/chat?id=${newId}`);
                     setPendingSidebarTitle(null);
                     const nowIso = new Date().toISOString();
@@ -411,7 +432,7 @@ export function useChatMessaging({
             const customProviderLabel = getCustomProviderDisplayName(activeCustomProvider);
             const effectiveModelId = activeCustomProvider ? `custom:${activeCustomProvider.modelId}` : selectedModel;
             if (agent.mode === 'agent') {
-                setMessages(newMessages);
+                if (isCurrent()) setMessages(newMessages);
                 try {
                     let fileContent: string | undefined;
                     if (attachmentState.file) {
@@ -422,10 +443,12 @@ export function useChatMessaging({
                         fileContent = result.data?.file_content;
                     }
                     await agent.start(conversationId, userMessage, { model: selectedModel, reasoning: reasoningEnabled, mentions: messageMentions, provider: activeCustomProvider, fileContent });
-                    setInputValue(''); setMentions([]); setAttachmentState(prev => ({ ...prev, file: undefined }));
+                    clearSubmittedDraft();
                 } catch (error) {
-                    if (conversationId === activeConversationIdRef.current) setMessages(messages);
-                    void state.retryConversationLoad();
+                    if (isCurrent()) {
+                        setMessages(messages);
+                        void state.retryConversationLoad();
+                    }
                     showToast('error', error instanceof Error ? error.message : '创建任务失败');
                 }
                 return;
@@ -526,7 +549,7 @@ export function useChatMessaging({
         if (agent.active) { showToast('info', '请先停止当前任务，再编辑历史消息'); return; }
         const targetConversationId = activeConversationIdRef.current;
         if (!targetConversationId) return;
-        const isTargetActive = () => targetConversationId === activeConversationIdRef.current;
+        const isTargetActive = agent.captureConversation(targetConversationId);
         const originalSnapshot = messages;
         const messageIndex = messages.findIndex(m => m.id === messageId);
         if (messageIndex === -1) return;
@@ -612,7 +635,7 @@ export function useChatMessaging({
         if (agent.active) { showToast('info', '请先停止当前任务，再重新生成'); return; }
         const targetConversationId = activeConversationIdRef.current;
         if (!targetConversationId) return;
-        const isTargetActive = () => targetConversationId === activeConversationIdRef.current;
+        const isTargetActive = agent.captureConversation(targetConversationId);
         const originalSnapshot = messages;
         const messageIndex = messages.findIndex(m => m.id === messageId);
         if (messageIndex === -1 || messageIndex === 0) return;

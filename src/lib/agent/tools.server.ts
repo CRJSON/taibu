@@ -15,7 +15,7 @@ import { DATA_SOURCE_TYPES } from "@/lib/data-sources/types";
 import { getDataSourceFeatureId } from "@/lib/data-sources/catalog";
 import {
   FEATURE_MODULE_IDS,
-  isFeatureModuleEnabled,
+  readFeatureModuleStateFresh,
   type FeatureModuleId,
 } from "@/lib/app-settings";
 import { getUserCreditInfo } from "@/lib/user/credits";
@@ -98,6 +98,11 @@ function textResult(details: unknown): AgentToolResult<unknown> {
     content: [{ type: "text", text: JSON.stringify(details) }],
     details,
   };
+}
+async function featureEnabled(feature: FeatureModuleId) {
+  const state = await readFeatureModuleStateFresh(feature);
+  if (state.status === "unavailable") throw new Error("功能状态暂不可用，请稍后再试");
+  return state.status === "enabled";
 }
 const auxiliaryToolTitles: Record<string, string> = {
   list_user_data: "个人资料列表",
@@ -268,12 +273,12 @@ export async function createAgentTools(
           : name;
       if (
         FEATURE_MODULE_IDS.includes(feature as FeatureModuleId) &&
-        !(await isFeatureModuleEnabled(feature as FeatureModuleId))
+        !(await featureEnabled(feature as FeatureModuleId))
       )
         throw new Error("该功能已关闭");
       if (
         name === "search_knowledge" &&
-        (!(await isFeatureModuleEnabled("knowledge-base")) ||
+        (!(await featureEnabled("knowledge-base")) ||
           (await checkMember()).membership === "free")
       )
         throw new Error("当前会员无法使用知识库检索");
@@ -284,7 +289,7 @@ export async function createAgentTools(
         throw new Error("当前任务不能使用联网检索");
       if (
         name === "read_user_data" &&
-        !(await isFeatureModuleEnabled(
+        !(await featureEnabled(
           getDataSourceFeatureId(
             (args as { type: (typeof DATA_SOURCE_TYPES)[number] }).type,
           ),
@@ -293,7 +298,7 @@ export async function createAgentTools(
         throw new Error("该资料功能已关闭");
       if (
         name === "read_user_profile" &&
-        !(await isFeatureModuleEnabled("ai-personalization"))
+        !(await featureEnabled("ai-personalization"))
       )
         throw new Error("个性化功能已关闭");
       const cached = await store.artifact(run, callId);
@@ -407,7 +412,7 @@ export async function createAgentTools(
         const enabled = await Promise.all(
           DATA_SOURCE_TYPES.map(async (type) => ({
             type,
-            enabled: await isFeatureModuleEnabled(getDataSourceFeatureId(type)),
+            enabled: await featureEnabled(getDataSourceFeatureId(type)),
           })),
         );
         return textResult(

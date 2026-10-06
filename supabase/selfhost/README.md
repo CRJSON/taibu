@@ -27,7 +27,7 @@ node --test scripts/tests/selfhost-schema.test.mjs
 
 `20261005_110000_chart_time_resolution.sql` 为既有八字／紫微表增加 `timezone` 与 `disambiguation`。地点文本和经度不能表达 IANA 时区及重复／缺失时间策略，因此不能复用这些字段。旧行使用原默认 `Asia/Shanghai`／`reject`，不推断时区、不重算旧结果；所有权 RLS 与授权保持不变，无额外查询索引。Agent 的命盘去重另由 `20261005_120000_agent_chart_identity.sql` 更新，依赖运行表和时间字段迁移，随后应用 Pi Durable 迁移。
 
-空库生成器按 Agent runtime → 时间字段 → Agent 命盘身份 → Pi Durable 的顺序合入迁移。时间字段迁移本身不依赖 Agent，可独立应用。**已有数据库必须在部署新 Web/API 前按顺序应用相应迁移**；不能重放 `001-application.sql`，也不能因字段缺失而静默丢弃时间选项。新增字段需要保留用于应用回滚；先回滚应用不会删除保存的时间规则。当前仓库只提供本地迁移和验证入口，不表示已更新线上数据库。
+空库生成器按 Agent runtime → 时间字段 → Agent 命盘身份 → Pi Durable → Agent 生命周期修复的顺序合入迁移。`20261006_110000_agent_lifecycle_fixes.sql` 复用现有版本 JSON 保存编辑分支尾部，并在活动任务结算前拒绝对话删除；无新增表、字段、默认值、索引或历史回填。时间字段迁移本身不依赖 Agent，可独立应用。**已有数据库必须在部署新 Web/API 前按顺序应用相应迁移**；不能重放 `001-application.sql`，也不能因字段缺失而静默丢弃时间选项。新增字段需要保留用于应用回滚；先回滚应用不会删除保存的时间规则。当前仓库只提供本地迁移和验证入口，不表示已更新线上数据库。
 
 ## 来源与本地安全差异
 

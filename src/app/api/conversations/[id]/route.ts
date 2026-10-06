@@ -286,6 +286,9 @@ export async function DELETE(
         id,
     );
     if (result.error) {
+        if (result.error.message.includes('AGENT_CONVERSATION_BUSY')) {
+            return jsonError('请先停止当前 Agent 任务，再删除对话', 409, { code: 'CONVERSATION_BUSY' });
+        }
         console.error('[conversations] failed to delete conversation:', result.error);
         return jsonError('删除对话失败', 500);
     }

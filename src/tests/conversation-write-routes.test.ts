@@ -802,6 +802,19 @@ test('conversation detail DELETE should reject invalid conversation ids', async 
   assert.equal(payload.error, '对话ID格式不合法');
 });
 
+test('conversation DELETE returns a recoverable conflict while an Agent task is active', async (t) => {
+  const api = require('../lib/api-utils') as typeof import('../lib/api-utils');
+  const deletion = require('../lib/chat/conversation-delete') as typeof import('../lib/chat/conversation-delete');
+  t.mock.method(api, 'requireUserContext', async () => ({ user: { id: 'owner' }, supabase: {} }));
+  t.mock.method(deletion, 'deleteConversationGraph', async () => ({ error: { message: 'AGENT_CONVERSATION_BUSY' }, notFound: false }));
+  const { DELETE } = await import('../app/api/conversations/[id]/route');
+  const response = await DELETE(new NextRequest(`http://localhost/api/conversations/${VALID_CONVERSATION_ID}`, { method: 'DELETE' }), { params: Promise.resolve({ id: VALID_CONVERSATION_ID }) });
+  assert.equal(response.status, 409);
+  const payload = await response.json();
+  assert.equal(payload.code, 'CONVERSATION_BUSY');
+  assert.match(payload.error, /先停止/);
+});
+
 test('conversation detail route should fail loudly when message storage cannot be loaded', async (t) => {
   const apiUtilsModule = require('../lib/api-utils') as any;
   const conversationMessagesModule = require('../lib/server/conversation-messages') as any;
