@@ -36,14 +36,14 @@ echo '{"gender":"male","birthYear":1990,"birthMonth":5,"birthDay":20,"birthHour"
 | --- | --- | --- | --- | --- |
 | `astrology` | 西方占星命盘 | 根据出生信息计算本命盘与流运盘，输出基础坐标、命盘锚点、本命主星与流运触发 | [references/astrology.md](references/astrology.md) | [interpretation/astrology.md](interpretation/astrology.md) |
 | `bazi` | 八字命盘 | 根据出生信息计算四柱命盘，输出天干地支、十神、藏干、神煞、关系格局等信息 | [references/bazi.md](references/bazi.md) | [interpretation/bazi.md](interpretation/bazi.md) |
-| `bazi_pillars_resolve` | 四柱反推 | 根据年柱、月柱、日柱、时柱反推出生时间候选列表 | [references/bazi_pillars_resolve.md](references/bazi_pillars_resolve.md) | [interpretation/bazi.md](interpretation/bazi.md) |
+| `bazi_pillars_resolve` | 四柱反推 | 根据四柱搜索分钟级出生时间区间，默认1900-2100，单次最多1200年 | [references/bazi_pillars_resolve.md](references/bazi_pillars_resolve.md) | [interpretation/bazi.md](interpretation/bazi.md) |
 | `ziwei` | 紫微斗数命盘 | 根据出生信息计算紫微命盘，输出十二宫位、星曜分布、四化、大限等信息 | [references/ziwei.md](references/ziwei.md) | [interpretation/ziwei.md](interpretation/ziwei.md) |
 | `ziwei_horoscope` | 紫微斗数运限 | 根据出生信息与目标日期计算大限、小限、流年、流月、流日、流时等运限信息 | [references/ziwei_horoscope.md](references/ziwei_horoscope.md) | [interpretation/ziwei.md](interpretation/ziwei.md) |
 | `ziwei_flying_star` | 紫微斗数飞星 | 分析命盘中的四化飞布、自化、落宫与三方四正关系 | [references/ziwei_flying_star.md](references/ziwei_flying_star.md) | [interpretation/ziwei.md](interpretation/ziwei.md) |
 | `liuyao` | 六爻排卦 | 根据问题与起卦信息排出六爻盘面，输出卦象、爻位、用神体系、关系判断与时机提示 | [references/liuyao.md](references/liuyao.md) | [interpretation/liuyao.md](interpretation/liuyao.md) |
 | `meihua` | 梅花易数起卦 | 根据时间、字占、物数、报数等方式起卦，输出起卦信息、卦盘与体用推演 | [references/meihua.md](references/meihua.md) | [interpretation/meihua.md](interpretation/meihua.md) |
 | `tarot` | 塔罗抽牌 | 根据问题与牌阵抽取塔罗牌，输出牌面结果及占卜参考信息 | [references/tarot.md](references/tarot.md) | [interpretation/tarot.md](interpretation/tarot.md) |
-| `taiyi` | 太乙九星观测 | 根据问卜时间生成时空底盘、九星阵列与核心关系 | [references/taiyi.md](references/taiyi.md) | [interpretation/taiyi.md](interpretation/taiyi.md) |
+| `taiyi` | 太乙排盘 | 支持九星观测，以及采用四库本金镜七十二局立成的现代历法适配年/月/日/时计 | [references/taiyi.md](references/taiyi.md) | [interpretation/taiyi.md](interpretation/taiyi.md) |
 | `almanac` | 黄历查询 | 查询指定日期的黄历、宜忌、冲煞、值星、方位与时辰吉凶等信息 | [references/almanac.md](references/almanac.md) | [interpretation/almanac.md](interpretation/almanac.md) |
 | `bazi_dayun` | 八字大运 | 根据出生信息计算起运时间、大运列表、小运与流年链路 | [references/bazi_dayun.md](references/bazi_dayun.md) | [interpretation/bazi.md](interpretation/bazi.md) |
 | `qimen` | 奇门遁甲排盘 | 根据指定时间排出奇门盘，输出九宫、九星、八门、八神、格局等信息 | [references/qimen.md](references/qimen.md) | [interpretation/qimen.md](interpretation/qimen.md) |

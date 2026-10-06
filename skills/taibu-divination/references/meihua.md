@@ -57,4 +57,5 @@ echo '{"question":"此事后续如何？","method":"number_pair","numbers":[3,8]
 - `体用分析`
 - `阶段推演`
 - `判断参考`
+- `计算规则`
 

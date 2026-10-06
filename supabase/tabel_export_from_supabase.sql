@@ -149,6 +149,8 @@ CREATE TABLE public.bazi_charts (
   day_master text,
   day_branch text,
   longitude double precision,
+  timezone text NOT NULL DEFAULT 'Asia/Shanghai' CHECK (char_length(timezone) BETWEEN 1 AND 100 AND timezone = btrim(timezone)),
+  disambiguation text NOT NULL DEFAULT 'reject' CHECK (disambiguation IN ('reject', 'earlier', 'later', 'compatible')),
   CONSTRAINT bazi_charts_pkey PRIMARY KEY (id),
   CONSTRAINT bazi_charts_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
 );
@@ -573,6 +575,11 @@ CREATE TABLE public.ziwei_charts (
   is_leap_month boolean DEFAULT false,
   birth_place text,
   longitude double precision,
+  timezone text NOT NULL DEFAULT 'Asia/Shanghai' CHECK (char_length(timezone) BETWEEN 1 AND 100 AND timezone = btrim(timezone)),
+  disambiguation text NOT NULL DEFAULT 'reject' CHECK (disambiguation IN ('reject', 'earlier', 'later', 'compatible')),
   CONSTRAINT ziwei_charts_pkey PRIMARY KEY (id),
   CONSTRAINT ziwei_charts_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
 );
+
+-- Agent schema additions from 20261005_100000_agent_runtime.sql.
+-- Apply the complete migration for indexes, RLS, grants, functions and triggers.

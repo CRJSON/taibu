@@ -1,3 +1,4 @@
+import { withRulesJSON } from '../../shared/calculation-rules.js';
 import type {
   BaziCanonicalJSON,
 } from './json-types.js';
@@ -174,7 +175,9 @@ function buildBaziCanonicalRelations(result: Pick<BaziOutput, 'fourPillars' | 'r
 
 // ===== 八字 =====
 
-export function renderBaziCanonicalJSON(
+export const renderBaziCanonicalJSON = withRulesJSON(renderBaziCanonicalJSONBase);
+
+function renderBaziCanonicalJSONBase(
   chart: BaziOutput,
   options: BaziCanonicalTextOptions = {},
 ): BaziCanonicalJSON {

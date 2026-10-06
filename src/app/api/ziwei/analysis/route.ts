@@ -11,6 +11,7 @@ import { loadResolvedChartPromptDetailLevel } from '@/lib/ai/chart-prompt-detail
 import { generateZiweiAnalysisTitle } from '@/lib/ai/ai-analysis';
 import { SOURCE_CHART_TYPE_MAP } from '@/lib/visualization/chart-types';
 import { checkRateLimit, getClientIP } from '@/lib/rate-limit';
+import { parseBirthTimeString, resolveBirthTimeOptions, type BirthTimeResolution } from '@/lib/divination/birth-time';
 import {
     calculateZiweiChartBundle,
     generateZiweiChartText,
@@ -49,7 +50,7 @@ interface ZiweiAnalysisInput extends InterpretInput {
     chartId: string;
 }
 
-type LoadedZiweiChart = {
+type LoadedZiweiChart = BirthTimeResolution & {
     id: string;
     name: string;
     user_id: string;
@@ -69,14 +70,6 @@ type ZiweiAnalysisContext = {
     chartSummary: string;
     chartName: string;
 };
-
-function parseTimeToHourMinute(birthTime: string): { hour: number; minute: number } {
-    const parts = birthTime.split(':');
-    return {
-        hour: parseInt(parts[0] ?? '0', 10),
-        minute: parseInt(parts[1] ?? '0', 10),
-    };
-}
 
 const handleAnalyze = createInterpretHandler<ZiweiAnalysisInput, ZiweiAnalysisContext>({
     sourceType: 'ziwei',
@@ -107,7 +100,7 @@ const handleAnalyze = createInterpretHandler<ZiweiAnalysisInput, ZiweiAnalysisCo
         const supabase = db;
         const { data: chart, error: chartError } = await supabase
             .from('ziwei_charts')
-            .select('id, name, user_id, gender, birth_date, birth_time, birth_place, calendar_type, is_leap_month, longitude')
+            .select('id, name, user_id, gender, birth_date, birth_time, birth_place, calendar_type, is_leap_month, longitude, timezone, disambiguation')
             .eq('id', input.chartId)
             .eq('user_id', userId)
             .single();
@@ -120,7 +113,13 @@ const handleAnalyze = createInterpretHandler<ZiweiAnalysisInput, ZiweiAnalysisCo
             return { error: '该命盘缺少出生时辰，暂不支持 AI 分析', status: 400 };
         }
 
-        const { hour, minute } = parseTimeToHourMinute(resolvedChart.birth_time);
+        // Same strict HH:MM parsing as every other saved-chart rebuild; malformed
+        // legacy values must fail loudly instead of being silently reinterpreted.
+        const parsedBirthTime = parseBirthTimeString(resolvedChart.birth_time);
+        if (!parsedBirthTime) {
+            return { error: '该命盘出生时辰格式无效，暂不支持 AI 分析', status: 400 };
+        }
+        const { hour, minute } = parsedBirthTime;
         // 手动解析日期字符串，避免 new Date(string) 的时区歧义
         const [birthYear, birthMonth, birthDay] = resolvedChart.birth_date.split('-').map(Number);
 
@@ -136,6 +135,7 @@ const handleAnalyze = createInterpretHandler<ZiweiAnalysisInput, ZiweiAnalysisCo
             isLeapMonth: resolvedChart.is_leap_month || false,
             birthPlace: resolvedChart.birth_place || undefined,
             longitude: resolvedChart.longitude ?? undefined,
+            ...resolveBirthTimeOptions(resolvedChart),
         };
 
         const { output, astrolabe } = calculateZiweiChartBundle(formData);

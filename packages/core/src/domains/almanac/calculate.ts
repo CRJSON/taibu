@@ -6,6 +6,9 @@ import { Solar } from 'lunar-javascript';
 import type { AlmanacInput, AlmanacOutput } from './types.js';
 import type { HourlyFortuneInfo, NineStarInfo } from '../shared/types.js';
 import { calculateTenGod } from '../../shared/utils.js';
+import { TIAN_GAN } from '../../data/ganzhi.js';
+import { CoreInputError, parseCivilDate, validateCivilDateTime } from '../../shared/validation.js';
+import { DEFAULT_DIVINATION_TIMEZONE, getZonedDateTimeParts } from '../../shared/timezone-utils.js';
 
 export type {
   AlmanacInput,
@@ -25,7 +28,7 @@ function getCachedAlmanac(date: string, dayMaster?: string): AlmanacOutput | und
   const key = `${date}:${dayMaster || 'none'}`;
   const cached = almanacCache.get(key);
   if (cached && cached.expire > Date.now()) {
-    return cached.data;
+    return structuredClone(cached.data);
   }
   if (cached) almanacCache.delete(key);
   return undefined;
@@ -38,45 +41,33 @@ function setCachedAlmanac(date: string, dayMaster: string | undefined, data: Alm
     const firstKey = almanacCache.keys().next().value;
     if (firstKey !== undefined) almanacCache.delete(firstKey);
   }
-  almanacCache.set(key, { data, expire: Date.now() + ALMANAC_CACHE_TTL });
-}
-
-function parseAlmanacDate(date: string): Date {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-    throw new Error('date 格式无效，请使用 YYYY-MM-DD');
-  }
-
-  const [y, m, d] = date.split('-').map(Number);
-  const targetDate = new Date(y, m - 1, d);
-  if (
-    Number.isNaN(targetDate.getTime()) ||
-    targetDate.getFullYear() !== y ||
-    targetDate.getMonth() !== m - 1 ||
-    targetDate.getDate() !== d
-  ) {
-    throw new Error('date 日期无效，请检查日期是否存在');
-  }
-
-  return targetDate;
+  almanacCache.set(key, { data: structuredClone(data), expire: Date.now() + ALMANAC_CACHE_TTL });
 }
 
 export async function calculateDailyAlmanac(input: AlmanacInput): Promise<AlmanacOutput> {
-  // 解析日期为本地时间，避免 UTC 偏移
-  let targetDate: Date;
-  if (input.date) {
-    targetDate = parseAlmanacDate(input.date);
-  } else {
-    targetDate = new Date();
-  }
-  const dateKey = `${targetDate.getFullYear()}-${String(targetDate.getMonth() + 1).padStart(2, '0')}-${String(targetDate.getDate()).padStart(2, '0')}`;
+  const timezone = input.timezone ?? DEFAULT_DIVINATION_TIMEZONE;
+  const calculationOptions = { timezone, ruleVersion: 'almanac-2026.10' };
+  const now = getZonedDateTimeParts(new Date(), timezone);
+  const target = input.date === undefined ? now : parseCivilDate(input.date);
+  const dateKey = `${String(target.year).padStart(4, '0')}-${String(target.month).padStart(2, '0')}-${String(target.day).padStart(2, '0')}`;
 
   // 获取日主
   let dayMaster = input.dayMaster;
-  if (!dayMaster && input.birthYear && input.birthMonth && input.birthDay) {
+  if (dayMaster !== undefined && !TIAN_GAN.includes(dayMaster as typeof TIAN_GAN[number])) {
+    throw new CoreInputError('dayMaster', '日主必须为十天干之一');
+  }
+  const birthProvided = [input.birthYear, input.birthMonth, input.birthDay, input.birthHour].some(value => value !== undefined);
+  if (birthProvided) {
+    if (input.birthYear === undefined || input.birthMonth === undefined || input.birthDay === undefined) {
+      throw new CoreInputError('birth', '出生年月日必须完整提供');
+    }
+    validateCivilDateTime({ year: input.birthYear, month: input.birthMonth, day: input.birthDay, hour: input.birthHour ?? 12 }, 'birth');
+  }
+  if (!dayMaster && birthProvided) {
     const birthSolar = Solar.fromYmdHms(
-      input.birthYear,
-      input.birthMonth,
-      input.birthDay,
+      input.birthYear!,
+      input.birthMonth!,
+      input.birthDay!,
       input.birthHour ?? 12,
       0,
       0
@@ -88,18 +79,18 @@ export async function calculateDailyAlmanac(input: AlmanacInput): Promise<Almana
   // 检查缓存（只有当 dayMaster 相同时才能复用缓存）
   const cached = getCachedAlmanac(dateKey, dayMaster);
   if (cached) {
-    return cached;
+    return { ...cached, calculationOptions };
   }
 
   // 如果没有日主，尝试从缓存中获取无日主的结果
   if (!dayMaster) {
     const cachedNoDayMaster = getCachedAlmanac(dateKey, undefined);
     if (cachedNoDayMaster) {
-      return cachedNoDayMaster;
+      return { ...cachedNoDayMaster, calculationOptions };
     }
   }
 
-  const solar = Solar.fromDate(targetDate);
+  const solar = Solar.fromYmd(target.year, target.month, target.day);
   const lunar = solar.getLunar();
   const eightChar = lunar.getEightChar();
 
@@ -178,6 +169,8 @@ export async function calculateDailyAlmanac(input: AlmanacInput): Promise<Almana
     for (const t of times) {
       hourlyFortune.push({
         ganZhi: safeGetString(() => t.getGanZhi()),
+        startTime: safeGetString(() => t.getMinHm()),
+        endTime: safeGetString(() => t.getMaxHm()),
         tianShen: safeGetString(() => t.getTianShen()),
         tianShenType: safeGetString(() => t.getTianShenType()),
         tianShenLuck: safeGetString(() => t.getTianShenLuck()),
@@ -232,5 +225,5 @@ export async function calculateDailyAlmanac(input: AlmanacInput): Promise<Almana
     setCachedAlmanac(dateKey, undefined, result);
   }
 
-  return result;
+  return { ...result, calculationOptions };
 }

@@ -1,3 +1,4 @@
+import { withRulesText } from '../../shared/calculation-rules.js';
 import { Solar } from 'lunar-javascript';
 import {
   normalizeDetailLevelBinary
@@ -98,7 +99,9 @@ function buildZiweiHoroscopeTransitGroups(result: ZiweiHoroscopeOutput): Array<{
   ];
 }
 
-export function renderZiweiHoroscopeCanonicalText(result: ZiweiHoroscopeOutput, options: ZiweiHoroscopeCanonicalTextOptions = {}): string {
+export const renderZiweiHoroscopeCanonicalText = withRulesText(renderZiweiHoroscopeCanonicalTextBase);
+
+function renderZiweiHoroscopeCanonicalTextBase(result: ZiweiHoroscopeOutput, options: ZiweiHoroscopeCanonicalTextOptions = {}): string {
   const detailLevel = normalizeDetailLevelBinary(options.detailLevel);
   const parsedTargetDate = parseZiweiHoroscopeTargetDate(result.targetDate);
   const lines: string[] = [
@@ -150,6 +153,11 @@ export function renderZiweiHoroscopeCanonicalText(result: ZiweiHoroscopeOutput, 
   }
 
   if (detailLevel === 'full') {
+    lines.push('', '## 各层流曜');
+    for (const { layer, data } of periodRows) {
+      const entries = data.stars?.flatMap((stars, index) => stars.map(star => `${star.name}${star.mutagen ? `[化${star.mutagen}]` : ''}(宫位索引${index})`)) ?? [];
+      if (entries.length) lines.push(`- ${layer}: ${entries.join('、')}`);
+    }
     if (result.yearlyDecStar?.suiqian12.length) {
       lines.push('');
       lines.push('## 岁前十二星');

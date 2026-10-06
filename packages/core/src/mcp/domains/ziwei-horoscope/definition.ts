@@ -1,4 +1,5 @@
 import type { ToolDefinition } from '../../contract.js';
+import { ziweiRuleInputs } from '../../rule-input-schemas.js';
 
 export const ziweiHoroscopeDefinition: ToolDefinition = {
   name: 'ziwei_horoscope',
@@ -6,20 +7,21 @@ export const ziweiHoroscopeDefinition: ToolDefinition = {
   inputSchema: {
     type: 'object',
     properties: {
+      ...ziweiRuleInputs,
       gender: { type: 'string', enum: ['male', 'female'], description: '性别' },
-      birthYear: { type: 'number', description: '出生年 (1900-2100)' },
-      birthMonth: { type: 'number', description: '出生月 (1-12)' },
-      birthDay: { type: 'number', description: '出生日 (1-31)' },
-      birthHour: { type: 'number', description: '出生时 (0-23)' },
-      birthMinute: { type: 'number', description: '出生分 (0-59)', default: 0 },
+      birthYear: { type: 'integer', minimum: 1900, maximum: 2100, description: '出生年 (1900-2100)' },
+      birthMonth: { type: 'integer', minimum: 1, maximum: 12, description: '出生月 (1-12)' },
+      birthDay: { type: 'integer', minimum: 1, maximum: 31, description: '出生日 (1-31)' },
+      birthHour: { type: 'integer', minimum: 0, maximum: 23, description: '出生时 (0-23)' },
+      birthMinute: { type: 'integer', minimum: 0, maximum: 59, description: '出生分 (0-59)', default: 0 },
       calendarType: { type: 'string', enum: ['solar', 'lunar'], description: '历法类型（solar=公历，lunar=农历）', default: 'solar' },
       isLeapMonth: { type: 'boolean', description: '农历闰月标记', default: false },
       longitude: {
-        type: 'number',
+        type: 'number', minimum: -180, maximum: 180,
         description: '出生地经度',
       },
       targetDate: { type: 'string', description: '目标日期 (YYYY-MM-DD，省略时取当前日期)' },
-      targetTimeIndex: { type: 'number', description: '目标流时时段序号 (0-12)' },
+      targetTimeIndex: { type: 'integer', minimum: 0, maximum: 12, description: '目标流时时段序号 (0-12)' },
       detailLevel: {
         type: 'string',
         enum: ['default', 'full'],

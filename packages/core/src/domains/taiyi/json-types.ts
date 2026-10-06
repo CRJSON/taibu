@@ -1,4 +1,11 @@
 export interface TaiyiCanonicalJSON {
+  计算规则?: { 系统: string; 时区?: string; 规则版本?: string; 计法?: string; 积数口径?: string; 积年常数?: number; };
+  太乙七十二局?: {
+    流派: string; 积数: number; 积数来源: string; 局式: string; 太乙: string; 太乙宫: number;
+    文昌: string; 始击: string; 计神: string; 合神: string; 太岁: string;
+    主算: number; 主大将: number; 主参将: number; 客算: number; 客大将: number; 客参将: number;
+    十六宫: { 宫位: string; 宫神: string; 星将: string[]; }[]; 采用口径: string[];
+  };
   问卜与时空底盘: {
     占问?: string;
     时间: string;

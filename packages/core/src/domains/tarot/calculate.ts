@@ -3,6 +3,7 @@
  */
 
 import { createSeededRng, resolveSeed } from '../../shared/seeded-rng.js';
+import { CoreInputError, assertFiniteNumber, assertInteger, resolveEnum, validateCivilDateTime } from '../../shared/validation.js';
 import type {
   TarotCardDefinition,
   TarotCardResult,
@@ -148,17 +149,17 @@ export const TAROT_SPREADS: TarotSpreadDefinition[] = [
 const SPREADS: Record<string, TarotSpreadDefinition> = Object.fromEntries(TAROT_SPREADS.map((item) => [item.id, item]));
 
 // 随机抽牌
-function drawCards(count: number, allowReversed: boolean, rng: () => number): Array<{
+function drawCards(count: number, probability: number, deckCards: TarotCardDefinition[], rng: () => number, orientationRng: () => number): Array<{
   card: TarotCardDefinition;
   orientation: 'upright' | 'reversed';
 }> {
-  const deck = [...TAROT_CARDS];
+  const deck = [...deckCards];
   const drawn: Array<{ card: TarotCardDefinition; orientation: 'upright' | 'reversed'; }> = [];
 
   for (let i = 0; i < count && deck.length > 0; i++) {
     const idx = Math.floor(rng() * deck.length);
     const card = deck.splice(idx, 1)[0];
-    const orientation = allowReversed && rng() > 0.5 ? 'reversed' : 'upright';
+    const orientation = orientationRng() < probability ? 'reversed' : 'upright';
     drawn.push({ card, orientation });
   }
 
@@ -208,12 +209,40 @@ function getMajorArcanaByNumber(num: number): TarotCardDefinition | undefined {
 
 export async function calculateTarotData(input: TarotInput): Promise<TarotOutput> {
   const { spreadType = 'single', question, allowReversed = true } = input;
+  if (typeof allowReversed !== 'boolean') throw new CoreInputError('allowReversed', '必须为布尔值');
+  if (question !== undefined && typeof question !== 'string') throw new CoreInputError('question', '必须为字符串');
+  for (const field of ['seed', 'seedScope'] as const) {
+    if (input[field] !== undefined && typeof input[field] !== 'string') throw new CoreInputError(field, '必须为字符串');
+  }
+  const deckType = resolveEnum(input.deck, ['all', 'major', 'minor'], 'all', 'deck');
+  const probability = input.reversedProbability ?? (allowReversed ? 0.5 : 0);
+  assertFiniteNumber(probability, 'reversedProbability', 0, 1);
+  if (!allowReversed && probability !== 0) throw new CoreInputError('reversedProbability', '不允许逆位时概率必须为 0');
+  const referenceYear = input.referenceYear ?? new Date().getUTCFullYear();
+  assertInteger(referenceYear, 'referenceYear', 1, 9999);
+  const birthProvided = [input.birthYear, input.birthMonth, input.birthDay].some(value => value !== undefined);
+  if (birthProvided) {
+    if (input.birthYear === undefined || input.birthMonth === undefined || input.birthDay === undefined) throw new CoreInputError('birth', '出生年月日必须完整提供');
+    validateCivilDateTime({ year: input.birthYear, month: input.birthMonth, day: input.birthDay }, 'birth');
+  }
+  let spread: TarotSpreadDefinition;
+  if (spreadType === 'custom') {
+    if (!Array.isArray(input.customPositions) || input.customPositions.length < 1 || input.customPositions.length > 78 ||
+      input.customPositions.some(position => typeof position !== 'string' || !position.trim())) throw new CoreInputError('customPositions', '自定义牌阵必须提供 1–78 个非空位置名称');
+    spread = { id: 'custom', name: '自定义牌阵', positions: input.customPositions.map(position => position.trim()) };
+  } else {
+    if (!Object.hasOwn(SPREADS, spreadType)) throw new CoreInputError('spreadType', '未知牌阵');
+    if (input.customPositions !== undefined) throw new CoreInputError('customPositions', '仅自定义牌阵可以设置位置');
+    spread = SPREADS[spreadType];
+  }
+  const deckCards = TAROT_CARDS.filter(card => deckType === 'all' || (deckType === 'major' ? card.suit === 'major' : card.suit !== 'major'));
+  if (spread.positions.length > deckCards.length) throw new CoreInputError('customPositions', '牌阵数量超过所选牌库容量');
   const dateKey = new Date().toISOString().slice(0, 10);
   const seed = resolveSeed(input.seed, `${spreadType}|${question || ''}|${dateKey}`, input.seedScope);
   const rng = createSeededRng(seed);
 
-  const spread = SPREADS[spreadType] || SPREADS['single'];
-  const drawnCards = drawCards(spread.positions.length, allowReversed, rng);
+  const orientationRng = createSeededRng(`${seed}|orientation`);
+  const drawnCards = drawCards(spread.positions.length, probability, deckCards, rng, orientationRng);
 
   const cards: TarotCardResult[] = drawnCards.map((drawn, index) => {
     const result: TarotCardResult = {
@@ -221,7 +250,7 @@ export async function calculateTarotData(input: TarotInput): Promise<TarotOutput
       card: {
         name: drawn.card.name,
         nameChinese: drawn.card.nameChinese,
-        keywords: drawn.card.keywords,
+        keywords: [...drawn.card.keywords],
       },
       orientation: drawn.orientation,
       meaning: getMeaning(drawn.orientation, drawn.card.keywords, drawn.card.reversedKeywords),
@@ -230,7 +259,7 @@ export async function calculateTarotData(input: TarotInput): Promise<TarotOutput
       result.number = drawn.card.number;
     }
     if (drawn.card.reversedKeywords) {
-      result.reversedKeywords = drawn.card.reversedKeywords;
+      result.reversedKeywords = [...drawn.card.reversedKeywords];
     }
     if (drawn.card.element) {
       result.element = drawn.card.element;
@@ -247,6 +276,7 @@ export async function calculateTarotData(input: TarotInput): Promise<TarotOutput
     question,
     seed,
     cards,
+    drawOptions: { deck: deckType, reversedProbability: probability, referenceYear, ruleVersion: 'tarot-2026.10' },
   };
 
   if (input.birthYear && input.birthMonth && input.birthDay) {
@@ -256,7 +286,7 @@ export async function calculateTarotData(input: TarotInput): Promise<TarotOutput
   // 如果提供了生日信息，计算生命牌/灵魂牌/年度牌
   if (input.birthMonth && input.birthDay && input.birthYear) {
     const { personalityCard, soulCard } = calculatePersonalityAndSoulCards(input.birthYear, input.birthMonth, input.birthDay);
-    const currentYear = new Date().getFullYear();
+    const currentYear = referenceYear;
     const yearlyCard = calculateYearlyCard(input.birthMonth, input.birthDay, currentYear);
 
     const personalityArcana = getMajorArcanaByNumber(personalityCard);
@@ -268,7 +298,7 @@ export async function calculateTarotData(input: TarotInput): Promise<TarotOutput
         number: personalityCard,
         name: personalityArcana?.name || '',
         nameChinese: personalityArcana?.nameChinese || '',
-        keywords: personalityArcana?.keywords,
+        keywords: personalityArcana?.keywords ? [...personalityArcana.keywords] : undefined,
         element: personalityArcana?.element,
         astrologicalCorrespondence: personalityArcana?.astrologicalCorrespondence,
       },
@@ -276,7 +306,7 @@ export async function calculateTarotData(input: TarotInput): Promise<TarotOutput
         number: soulCard,
         name: soulArcana?.name || '',
         nameChinese: soulArcana?.nameChinese || '',
-        keywords: soulArcana?.keywords,
+        keywords: soulArcana?.keywords ? [...soulArcana.keywords] : undefined,
         element: soulArcana?.element,
         astrologicalCorrespondence: soulArcana?.astrologicalCorrespondence,
       },
@@ -284,7 +314,7 @@ export async function calculateTarotData(input: TarotInput): Promise<TarotOutput
         number: yearlyCard,
         name: yearlyArcana?.name || '',
         nameChinese: yearlyArcana?.nameChinese || '',
-        keywords: yearlyArcana?.keywords,
+        keywords: yearlyArcana?.keywords ? [...yearlyArcana.keywords] : undefined,
         element: yearlyArcana?.element,
         astrologicalCorrespondence: yearlyArcana?.astrologicalCorrespondence,
         year: currentYear,

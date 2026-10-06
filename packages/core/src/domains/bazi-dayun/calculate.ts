@@ -8,7 +8,6 @@
  * - 小运排列
  */
 
-import { Lunar, Solar } from 'lunar-javascript';
 import {
   LIU_CHONG,
   LIU_HE,
@@ -21,7 +20,9 @@ import { calculateBranchShenSha, type ShenShaContext } from '../shared/shensha.j
 import type { DayunInput, DayunOutput } from './types.js';
 import type { BranchRelation, LiunianInfo, XiaoyunInfo } from '../shared/types.js';
 import { calculateTenGod, DI_ZHI, getStemYinYang, TIAN_GAN } from '../../shared/utils.js';
-import { buildHiddenStems, getDiShi, getNaYin } from '../bazi/calculate.js';
+import { buildHiddenStems, getDiShi, getNaYin, resolveBaziCalendarContext } from '../bazi/calculate.js';
+import { CoreInputError } from '../../shared/validation.js';
+import { CALENDAR_TIMEZONE, DEFAULT_DIVINATION_TIMEZONE } from '../../shared/timezone-utils.js';
 
 export type { DayunInput, DayunOutput } from './types.js';
 export type { LiunianInfo, XiaoyunInfo } from '../shared/types.js';
@@ -176,7 +177,8 @@ function calculateTaiSui(liunianBranch: string, yearBranch: string): string[] {
 
   // 刑太岁
   for (const xing of XIANG_XING) {
-    if (xing.combination.includes(liunianBranch) && xing.combination.includes(yearBranch)) {
+    if (xing.combination.includes(liunianBranch) && xing.combination.includes(yearBranch)
+      && (liunianBranch !== yearBranch || xing.combination.length === 1)) {
       result.push('刑太岁');
       break;
     }
@@ -246,71 +248,19 @@ function calculateXiaoYun(
   return xiaoYun;
 }
 
-function formatStartAgeDetail(
-  birthYear: number,
-  birthMonth: number,
-  birthDay: number,
-  birthHour: number,
-  birthMinute: number,
-  defaultStartAge: number,
-  startSolar: Solar | null | undefined,
-): string {
-  if (!startSolar) {
-    return `${defaultStartAge}岁起运`;
-  }
-
-  try {
-    const birthDate = new Date(
-      birthYear,
-      birthMonth - 1,
-      birthDay,
-      birthHour,
-      birthMinute,
-    );
-    const qiyunDate = new Date(
-      startSolar.getYear(),
-      startSolar.getMonth() - 1,
-      startSolar.getDay(),
-      startSolar.getHour(),
-      startSolar.getMinute(),
-    );
-    const diffDays = Math.floor((qiyunDate.getTime() - birthDate.getTime()) / (1000 * 60 * 60 * 24));
-    const years = Math.floor(diffDays / 365);
-    const remainingDays = diffDays % 365;
-    const months = Math.floor(remainingDays / 30);
-    const days = remainingDays % 30;
-    return `${years}年${months}月${days}天起运`;
-  } catch {
-    return `${defaultStartAge}岁起运`;
-  }
-}
-
 export function calculateDayunData(input: DayunInput): DayunOutput {
-  const {
-    gender,
-    birthYear,
-    birthMonth,
-    birthDay,
-    birthHour,
-    birthMinute = 0,
-    calendarType = 'solar',
-    isLeapMonth = false,
-  } = input;
-
-  let lunar: ReturnType<typeof Lunar.fromYmdHms>;
-
-  if (calendarType === 'lunar') {
-    const lunarMonth = isLeapMonth ? -Math.abs(birthMonth) : birthMonth;
-    lunar = Lunar.fromYmdHms(birthYear, lunarMonth, birthDay, birthHour, birthMinute, 0);
-  } else {
-    lunar = Solar.fromYmdHms(birthYear, birthMonth, birthDay, birthHour, birthMinute, 0).getLunar();
-  }
-
+  const { gender } = input;
+  const yunSect = input.yunSect ?? 1;
+  if (yunSect !== 1 && yunSect !== 2) throw new CoreInputError('yunSect', '起运算法必须为 1 或 2');
+  const { lunar, termLunar, trueSolarTimeInfo } = resolveBaziCalendarContext(input);
   const eightChar = lunar.getEightChar();
+  eightChar.setSect(input.dayBoundary === 'zi' ? 1 : 2);
+  const termEightChar = termLunar.getEightChar();
+  termEightChar.setSect(input.dayBoundary === 'zi' ? 1 : 2);
   const dayStem = eightChar.getDayGan();
-  const yearStem = eightChar.getYearGan();
-  const yearBranch = eightChar.getYearZhi();
-  const monthBranch = eightChar.getMonthZhi();
+  const yearStem = termEightChar.getYearGan();
+  const yearBranch = termEightChar.getYearZhi();
+  const monthBranch = termEightChar.getMonthZhi();
   const dayBranch = eightChar.getDayZhi();
   const hourStem = eightChar.getTimeGan();
   const hourBranch = eightChar.getTimeZhi();
@@ -323,7 +273,7 @@ export function calculateDayunData(input: DayunInput): DayunOutput {
   const shenShaContext: ShenShaContext = {
     yearStem,
     yearBranch,
-    monthStem: eightChar.getMonthGan(),
+    monthStem: termEightChar.getMonthGan(),
     monthBranch,
     dayStem,
     dayBranch,
@@ -332,7 +282,7 @@ export function calculateDayunData(input: DayunInput): DayunOutput {
   };
 
   const genderNum = gender === 'male' ? 1 : 0;
-  const yun = eightChar.getYun(genderNum);
+  const yun = termEightChar.getYun(genderNum, yunSect);
   const daYunList = yun.getDaYun().filter((dy) => dy.getGanZhi()).slice(0, 10);
 
   const list = daYunList
@@ -409,15 +359,9 @@ export function calculateDayunData(input: DayunInput): DayunOutput {
   const firstDaYunStartAge = daYunList.length > 0 ? daYunList[0].getStartAge() : 1;
   const xiaoYun = calculateXiaoYun(hourStem, hourBranch, gender, yearStem, dayStem, firstDaYunStartAge);
   const startAge = daYunList.length > 0 ? daYunList[0].getStartAge() : yun.getStartYear();
-  const startAgeDetail = formatStartAgeDetail(
-    birthYear,
-    birthMonth,
-    birthDay,
-    birthHour,
-    birthMinute,
-    startAge,
-    yun.getStartSolar(),
-  );
-
-  return { startAge, startAgeDetail, xiaoYun, list };
+  const startAgeDetail = `${yun.getStartYear()}年${yun.getStartMonth()}月${yun.getStartDay()}天${yun.getStartHour() ? `${yun.getStartHour()}小时` : ''}起运`;
+  return { startAge, startAgeDetail, xiaoYun, list,
+    startSolar: yun.getStartSolar().toYmdHms(), direction: yun.isForward() ? 'forward' : 'backward',
+    yunSect, dayBoundary: input.dayBoundary ?? 'midnight', trueSolarTimeInfo,
+    calculationOptions: { timezone: input.timezone ?? DEFAULT_DIVINATION_TIMEZONE, startSolarTimezone: CALENDAR_TIMEZONE, ...(input.longitude === undefined ? {} : { longitude: input.longitude }), yunSect, dayBoundary: input.dayBoundary ?? 'midnight', disambiguation: input.disambiguation ?? 'reject', ageConvention: 'nominal', ruleVersion: 'bazi-dayun-2026.10' } };
 }

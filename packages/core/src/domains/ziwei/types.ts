@@ -14,7 +14,24 @@ import type {
 export interface ZiweiInput extends BirthTimeInput {
   gender: Gender;
   longitude?: number;
+  calculationOptions?: ZiweiCalculationOptions;
 }
+
+export interface ZiweiCalculationOptions {
+  algorithm?: 'default' | 'zhongzhou';
+  yearDivide?: 'normal' | 'exact';
+  horoscopeDivide?: 'normal' | 'exact';
+  ageDivide?: 'normal' | 'birthday';
+  dayDivide?: 'current' | 'forward';
+  fixLeap?: boolean;
+  mutagens?: Record<string, [string, string, string, string]>;
+}
+
+export type ZiweiCalculationMetadata = ZiweiCalculationOptions & {
+  timezone?: string;
+  disambiguation?: BirthTimeInput['disambiguation'];
+  ruleVersion?: string;
+};
 
 export interface ZiweiOutput {
   solarDate: string;
@@ -44,6 +61,7 @@ export interface ZiweiOutput {
   bodyMasterStar?: string;   // 身主星
   smallLimit?: SmallLimitEntry[];    // 小限
   scholarStars?: ScholarStarEntry[]; // 博士十二星
+  calculationOptions?: ZiweiCalculationMetadata;
 }
 
 export interface MutagenSummaryItem {

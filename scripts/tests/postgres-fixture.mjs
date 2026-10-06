@@ -29,6 +29,7 @@ export const SQL_SOURCE_MANIFEST = {
   searchCorrection: 'supabase/migrations/20261002_100000_fix_knowledge_search_contracts.sql',
   ledgerCorrection: 'supabase/migrations/20261002_101000_restrict_credit_ledger_rpc.sql',
   rateAdmission: 'supabase/migrations/20261003_100000_fix_rate_limit_admission.sql',
+  chartTimeResolution: 'supabase/migrations/20261005_110000_chart_time_resolution.sql',
   accountProtection: 'supabase/migrations/20261002_102000_protect_account_and_ledger_writes.sql',
 };
 

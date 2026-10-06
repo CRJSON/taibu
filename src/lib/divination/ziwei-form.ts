@@ -2,6 +2,7 @@ import { LunarYear } from 'lunar-javascript';
 import type { BaziFormData, CalendarType, Gender } from '@/types';
 import { DEFAULT_BAZI_FORM_DATA } from '@/components/bazi/form/options';
 import { parseLongitude } from '@/lib/divination/place-resolution';
+import { readBirthTimeOptions } from '@/lib/divination/birth-time';
 
 type SearchParamsReader = {
     get: (key: string) => string | null;
@@ -55,7 +56,7 @@ export function buildInitialZiweiFormState(searchParams: SearchParamsReader): {
 
     if (!name && !year) {
         return {
-            formData: { ...DEFAULT_BAZI_FORM_DATA },
+            formData: { ...DEFAULT_BAZI_FORM_DATA, ...readBirthTimeOptions(searchParams) },
             requiresBirthTimeConfirmation: false,
         };
     }
@@ -86,6 +87,7 @@ export function buildInitialZiweiFormState(searchParams: SearchParamsReader): {
             isLeapMonth: isLeapRequested && leapMonthOfYear === birthMonth,
             birthPlace: place || '',
             longitude: parseLongitude(longitude),
+            ...readBirthTimeOptions(searchParams),
         },
     };
 }

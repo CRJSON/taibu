@@ -8,6 +8,7 @@ import {
 
 export const baziDayunOutputSchema: OutputSchema = obj({
   起运信息: obj({
+    起运时刻: str(), 时区: str(), 顺逆: str(),
     起运年龄: num('起运年龄'),
     起运详情: str('起运详情'),
   }),

@@ -1,3 +1,4 @@
+import { withRulesJSON } from '../../shared/calculation-rules.js';
 import type {
   LiuyaoCanonicalJSON,
   LiuyaoJSON,
@@ -138,7 +139,9 @@ function buildLiuyaoBoardLines(
   });
 }
 
-export function renderLiuyaoCanonicalJSON(result: LiuyaoOutput): LiuyaoCanonicalJSON {
+export const renderLiuyaoCanonicalJSON = withRulesJSON(renderLiuyaoCanonicalJSONBase);
+
+function renderLiuyaoCanonicalJSONBase(result: LiuyaoOutput): LiuyaoCanonicalJSON {
   const hexagramInfo: LiuyaoCanonicalJSON['卦盘'] = {
     本卦: {
       卦名: result.hexagramName,
@@ -347,7 +350,9 @@ export function renderLiuyaoCanonicalJSON(result: LiuyaoOutput): LiuyaoCanonical
   };
 }
 
-export function renderLiuyaoJSON(
+export const renderLiuyaoJSON = withRulesJSON(renderLiuyaoJSONBase);
+
+function renderLiuyaoJSONBase(
   result: LiuyaoOutput,
   options?: { detailLevel?: DetailLevel; },
 ): LiuyaoJSON {

@@ -17,6 +17,7 @@ import { resolvePlaceWithAmap } from '@/lib/divination/amap-client';
 import { buildPlaceResolutionFallbackMessage } from '@/lib/divination/place-resolution';
 import { useToast } from '@/components/ui/Toast';
 import { clampDay } from '@/lib/date-utils';
+import { writeBirthTimeOptions } from '@/lib/divination/birth-time';
 import { buildInitialZiweiFormState, ZIWEI_BIRTH_TIME_REQUIRED_MESSAGE } from '@/lib/divination/ziwei-form';
 
 function ZiweiPageContent() {
@@ -137,6 +138,7 @@ function ZiweiPageContent() {
             }
 
             const params = new URLSearchParams();
+            writeBirthTimeOptions(params, formData);
             const chartId = searchParams.get('chart');
 
             params.set('name', formData.name || '命主');
@@ -162,6 +164,7 @@ function ZiweiPageContent() {
             router.push(`/ziwei/result?${params.toString()}`);
         } catch (error) {
             console.error('提交失败:', error);
+            showToast('error', error instanceof Error ? error.message : '提交失败');
         } finally {
             // Fix 11: 确保 isSubmitting 在 finally 中重置
             setIsSubmitting(false);

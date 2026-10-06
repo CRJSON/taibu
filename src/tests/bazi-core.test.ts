@@ -1,18 +1,78 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { DI_ZHI, getDiShi, STEM_ELEMENTS, TIAN_GAN, ZHI_WUXING as BRANCH_ELEMENTS } from 'taibu-core/utils';
-import { calculateBaziFiveElementsStats } from 'taibu-core/bazi';
+import { calculateBazi, calculateBaziFiveElementsStats, calculateBaziShenShaData, toBaziText } from 'taibu-core/bazi';
+import { calculateBaziDayun } from 'taibu-core/bazi-dayun';
+import { readBirthTimeOptions, resolveBirthTimeOptions, writeBirthTimeOptions } from '@/lib/divination/birth-time';
+import { buildInitialZiweiFormState } from '@/lib/divination/ziwei-form';
+import { reversePillars } from '@/lib/divination/pillars-reverse';
 import {
     HIDDEN_STEMS,
     calculateTenGod,
     calculateBaziChartBundle,
     calculateShenSha,
+    calculateProfessionalData,
+    calculateLiuYue,
+    calculateLiuRi,
+    generateBaziChartText,
     LIU_HE_TABLE,
     LIU_CHONG_TABLE,
     SAN_HE_TABLE,
 } from '@/lib/divination/bazi';
 import { parseNumberParam } from '@/lib/divination/bazi-form-utils';
 import type { HeavenlyStem, BaziFormData, TenGod } from '@/types';
+
+describe('birth time rule adapters', () => {
+    const form: BaziFormData = {
+        name: 'DST', gender: 'male', calendarType: 'solar',
+        birthYear: 2024, birthMonth: 3, birthDay: 10, birthHour: 2, birthMinute: 30,
+        timezone: 'America/New_York', disambiguation: 'later', longitude: -74,
+    };
+
+    it('validates options and preserves them through URL/form codecs', () => {
+        assert.deepEqual(resolveBirthTimeOptions({}), { timezone: 'Asia/Shanghai', disambiguation: 'reject' });
+        assert.throws(() => resolveBirthTimeOptions({ timezone: 'invalid/timezone' }));
+        assert.throws(() => resolveBirthTimeOptions({ disambiguation: 'invalid' }));
+        assert.deepEqual(readBirthTimeOptions(new URLSearchParams()), {});
+        const params = new URLSearchParams('year=2024&month=3&day=10&hour=2&minute=30');
+        writeBirthTimeOptions(params, form);
+        assert.deepEqual(readBirthTimeOptions(params), { timezone: form.timezone, disambiguation: 'later' });
+        const restored = buildInitialZiweiFormState(params).formData;
+        assert.equal(restored.timezone, form.timezone);
+        assert.equal(restored.disambiguation, 'later');
+    });
+
+    it('uses the same time rules in chart, shensha, fortune and canonical dayun calculations', () => {
+        const core = calculateBazi({ ...form, calendarType: 'solar' });
+        const dayun = calculateBaziDayun({ ...form, calendarType: 'solar' });
+        const { output, meta } = calculateBaziChartBundle(form);
+        assert.deepEqual(output, core);
+        assert.equal(meta.timezone, form.timezone);
+        assert.equal(meta.disambiguation, 'later');
+        assert.equal(meta.longitude, -74);
+        assert.deepEqual(calculateShenSha(form).pillarShenSha, calculateBaziShenShaData({ ...form, calendarType: 'solar' }).pillarShenSha);
+        assert.equal(calculateProfessionalData(form).startAgeDetail, dayun.startAgeDetail);
+        assert.equal(calculateLiuYue(2024, form).length, 12);
+        assert.equal(calculateLiuRi('2024-03-10', '2024-03-11', form).length, 2);
+        assert.equal(generateBaziChartText(output, { meta, detailLevel: 'full' }), toBaziText(core, { dayun, detailLevel: 'full' }));
+        for (const calculate of [calculateBaziChartBundle, calculateProfessionalData, calculateShenSha]) {
+            assert.throws(() => calculate({ ...form, disambiguation: 'reject' }));
+        }
+    });
+
+    it('reuses complete Core inverse search, preserving original minutes and checking hour stems', async () => {
+        const output = calculateBazi({ ...form, calendarType: 'solar' });
+        const results = await reversePillars(output.fourPillars, form);
+        assert.ok(results.some(result => result.year === 2024 && result.month === 3 && result.day === 10));
+        for (const result of results) {
+            const recalculated = calculateBazi({ ...form, calendarType: 'solar', birthYear: result.year, birthMonth: result.month, birthDay: result.day, birthHour: result.hour, birthMinute: result.minute });
+            for (const pillar of ['year', 'month', 'day', 'hour'] as const) {
+                assert.equal(recalculated.fourPillars[pillar].stem, output.fourPillars[pillar].stem);
+                assert.equal(recalculated.fourPillars[pillar].branch, output.fourPillars[pillar].branch);
+            }
+        }
+    });
+});
 
 describe('parseNumberParam', () => {
     it('preserves early-child-hour zero values from URL and form inputs', () => {

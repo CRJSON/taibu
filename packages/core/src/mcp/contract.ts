@@ -1,6 +1,7 @@
 /**
  * MCP tool contract
  */
+import { completeOutputSchema } from './output-schema-rules.js';
 
 export interface ToolAnnotation {
   readOnlyHint?: boolean;
@@ -10,7 +11,7 @@ export interface ToolAnnotation {
 }
 
 export type ToolSchema = {
-  type?: 'string' | 'number' | 'boolean' | 'array' | 'object';
+  type?: 'string' | 'number' | 'integer' | 'boolean' | 'array' | 'object';
   properties?: Record<string, ToolSchema>;
   items?: ToolSchema;
   required?: string[];
@@ -18,6 +19,7 @@ export type ToolSchema = {
   allOf?: ToolSchema[];
   anyOf?: ToolSchema[];
   oneOf?: ToolSchema[];
+  not?: ToolSchema;
   if?: ToolSchema;
   then?: ToolSchema;
   else?: ToolSchema;
@@ -27,6 +29,10 @@ export type ToolSchema = {
   maxLength?: number;
   minItems?: number;
   maxItems?: number;
+  minimum?: number;
+  maximum?: number;
+  pattern?: string;
+  additionalProperties?: boolean;
   description?: string;
   default?: unknown;
 };
@@ -39,6 +45,8 @@ export type ToolInputSchema = ToolSchema & {
 export type ToolOutputSchema = {
   type: 'object';
   properties: Record<string, unknown>;
+  required?: string[];
+  additionalProperties?: boolean;
 };
 
 export interface ToolDefinition {
@@ -72,7 +80,10 @@ export interface ToolContract<TInput = unknown, TOutput = unknown, TOptions exte
 export function defineToolContract<TInput, TOutput, TOptions extends RenderOptions = RenderOptions>(
   contract: ToolContract<TInput, TOutput, TOptions>,
 ): ToolContract<TInput, TOutput, TOptions> {
-  return contract;
+  return {
+    ...contract,
+    outputSchema: completeOutputSchema(contract.definition.name, contract.outputSchema),
+  };
 }
 
 export function normalizeTransportDetailLevel(detailLevel: unknown): TransportDetailLevel {

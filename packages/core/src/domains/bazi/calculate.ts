@@ -3,7 +3,9 @@
  */
 
 import { Lunar, LunarMonth, LunarYear, Solar } from 'lunar-javascript';
-import { resolveTrueSolarDateTime } from '../shared/true-solar.js';
+import { resolveTrueSolarDateTimeFromInstant } from '../shared/true-solar.js';
+import { CoreInputError, assertInteger, createUtcDateTime, parseCivilDate, resolveEnum, validateCivilDateTime } from '../../shared/validation.js';
+import { DEFAULT_DIVINATION_TIMEZONE, getZonedDateTimeParts, zonedTimeToUtc } from '../../shared/timezone-utils.js';
 import { calculatePillarShenSha as calculateSharedPillarShenSha } from '../shared/shensha.js';
 import type {
   BaziFiveElementsStats,
@@ -486,7 +488,7 @@ export function analyzePillarRelations(yearBranch: string, monthBranch: string, 
           description: xing.name,
         });
       }
-    } else if (matchingBranches.length >= 2) {
+    } else if (new Set(matchingBranches).size >= 2) {
       const matchingPillars = branches
         .map((b, i) => (xing.combination.includes(b) ? normalizePillarPosition(pillarNames[i]) : null))
         .filter(Boolean) as PillarPosition[];
@@ -614,6 +616,7 @@ export function calculateBaziFortuneShenSha(params: {
 }
 
 export function calculateBaziLiuYueData(year: number, context?: FortuneRuntimeContext): BaziLiuYueInfo[] {
+  assertInteger(year, 'year', 1, 9998);
   const jieQiConfig = [
     { month: 2, jieQi: '立春' },
     { month: 3, jieQi: '惊蛰' },
@@ -634,26 +637,28 @@ export function calculateBaziLiuYueData(year: number, context?: FortuneRuntimeCo
   const nextYearJieQiTable = Solar.fromYmd(year + 1, 6, 15).getLunar().getJieQiTable();
 
   const formatYmd = (date: Date) => {
-    const y = date.getFullYear();
-    const m = String(date.getMonth() + 1).padStart(2, '0');
-    const d = String(date.getDate()).padStart(2, '0');
+    const y = date.getUTCFullYear();
+    const m = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const d = String(date.getUTCDate()).padStart(2, '0');
     return `${y}-${m}-${d}`;
   };
 
-  const toDate = (solar: Solar) => new Date(solar.getYear(), solar.getMonth() - 1, solar.getDay());
+  const toDate = (solar: Solar) => createUtcDateTime({ year: solar.getYear(), month: solar.getMonth(), day: solar.getDay() });
 
   for (let i = 0; i < 12; i++) {
     const config = jieQiConfig[i];
     const segmentYear = config.month === 1 ? year + 1 : year;
     const startTable = segmentYear === year ? jieQiTable : nextYearJieQiTable;
-    const startSolar = startTable[config.jieQi] || Solar.fromYmd(segmentYear, config.month, 15);
+    const startSolar = startTable[config.jieQi];
+    if (!startSolar) throw new Error(`缺少${segmentYear}年${config.jieQi}时刻`);
 
     const nextConfig = jieQiConfig[(i + 1) % 12];
     const nextSegmentYear = config.month === 1
       ? year + 1
       : (nextConfig.month === 1 ? year + 1 : year);
     const nextTable = nextSegmentYear === year ? jieQiTable : nextYearJieQiTable;
-    const nextStartSolar = nextTable[nextConfig.jieQi] || Solar.fromYmd(nextSegmentYear, nextConfig.month, 15);
+    const nextStartSolar = nextTable[nextConfig.jieQi];
+    if (!nextStartSolar) throw new Error(`缺少${nextSegmentYear}年${nextConfig.jieQi}时刻`);
 
     const startDate = toDate(startSolar);
     const endDate = new Date(toDate(nextStartSolar).getTime() - 24 * 60 * 60 * 1000);
@@ -670,6 +675,10 @@ export function calculateBaziLiuYueData(year: number, context?: FortuneRuntimeCo
       jieQi: config.jieQi,
       startDate: formatYmd(startDate),
       endDate: formatYmd(endDate),
+      startDateTime: startSolar.toYmdHms(),
+      endDateTime: nextStartSolar.toYmdHms(),
+      endExclusive: true,
+      timezone: DEFAULT_DIVINATION_TIMEZONE,
       gan: gan || undefined,
       zhi: zhi || undefined,
       tenGod: context && gan ? calculateTenGod(context.dayStem, gan) : undefined,
@@ -691,16 +700,16 @@ export function calculateBaziLiuYueData(year: number, context?: FortuneRuntimeCo
 }
 
 export function calculateBaziLiuRiData(startDate: string, endDate: string, context?: FortuneRuntimeContext): BaziLiuRiInfo[] {
-  const [sy, sm, sd] = startDate.split('-').map(Number);
-  const [ey, em, ed] = endDate.split('-').map(Number);
-  const start = new Date(sy, sm - 1, sd);
-  const end = new Date(ey, em - 1, ed);
+  const start = createUtcDateTime(parseCivilDate(startDate, 'startDate'));
+  const end = createUtcDateTime(parseCivilDate(endDate, 'endDate'));
+  const count = (end.getTime() - start.getTime()) / 86400000 + 1;
+  if (count < 1 || count > 3660) throw new CoreInputError('dateRange', '结束日期需在开始日期之后，最多支持3660天');
   const days: BaziLiuRiInfo[] = [];
 
-  for (let cursor = new Date(start); cursor <= end; cursor.setDate(cursor.getDate() + 1)) {
-    const year = cursor.getFullYear();
-    const month = cursor.getMonth() + 1;
-    const day = cursor.getDate();
+  for (let cursor = new Date(start); cursor <= end; cursor.setUTCDate(cursor.getUTCDate() + 1)) {
+    const year = cursor.getUTCFullYear();
+    const month = cursor.getUTCMonth() + 1;
+    const day = cursor.getUTCDate();
     const solar = Solar.fromYmd(year, month, day);
     const lunar = solar.getLunar();
     const ganZhi = lunar.getDayInGanZhi();
@@ -787,9 +796,10 @@ function validateLunarDateInput(params: {
   };
 }
 
-function resolveBaziCalendarContext(input: BaziInput): {
+export function resolveBaziCalendarContext(input: BaziInput): {
   solar: ReturnType<typeof Solar.fromYmdHms>;
   lunar: ReturnType<typeof Lunar.fromYmdHms>;
+  termLunar: ReturnType<typeof Lunar.fromYmdHms>;
   trueSolarTimeInfo?: TrueSolarTimeInfo;
 } {
   const {
@@ -802,6 +812,37 @@ function resolveBaziCalendarContext(input: BaziInput): {
     isLeapMonth = false,
     longitude,
   } = input;
+
+  if (input.gender !== 'male' && input.gender !== 'female') throw new CoreInputError('gender', '必须为 male 或 female');
+  resolveEnum(calendarType, ['solar', 'lunar'], 'solar', 'calendarType');
+  resolveEnum(input.dayBoundary, ['midnight', 'zi'], 'midnight', 'dayBoundary');
+  const disambiguation = resolveEnum(input.disambiguation, ['reject', 'earlier', 'later', 'compatible'] as const, 'reject', 'disambiguation');
+  assertInteger(birthYear, 'birthYear', 1, 9999);
+  if (calendarType === 'solar') {
+    assertInteger(birthMonth, 'birthMonth', 1, 12);
+    assertInteger(birthDay, 'birthDay', 1, 31);
+  } else if (!Number.isSafeInteger(birthDay)) {
+    throw new CoreInputError('birthDay', '农历日期必须为整数');
+  }
+  assertInteger(birthHour, 'birthHour', 0, 23);
+  assertInteger(birthMinute, 'birthMinute', 0, 59);
+  if (typeof isLeapMonth !== 'boolean') throw new CoreInputError('isLeapMonth', '必须为布尔值');
+  if (calendarType === 'solar') {
+    validateCivilDateTime({ year: birthYear, month: birthMonth, day: birthDay, hour: birthHour, minute: birthMinute }, 'birth');
+    if (isLeapMonth) throw new CoreInputError('isLeapMonth', '公历输入不能指定闰月');
+  }
+  const timezone = input.timezone ?? DEFAULT_DIVINATION_TIMEZONE;
+  const termCalendar = (birthSolar: Solar) => {
+    const instant = zonedTimeToUtc({ year: birthSolar.getYear(), month: birthSolar.getMonth(), day: birthSolar.getDay(),
+      hour: birthSolar.getHour(), minute: birthSolar.getMinute() }, timezone, disambiguation);
+    const beijing = new Date(instant.getTime() + 8 * 3600000);
+    const clock = getZonedDateTimeParts(instant, timezone);
+    return {
+      instant,
+      clockSolar: Solar.fromYmdHms(clock.year, clock.month, clock.day, clock.hour, clock.minute, 0),
+      termLunar: Solar.fromYmdHms(beijing.getUTCFullYear(), beijing.getUTCMonth() + 1, beijing.getUTCDate(), beijing.getUTCHours(), beijing.getUTCMinutes(), 0).getLunar(),
+    };
+  };
 
   if (longitude != null && (typeof longitude !== 'number' || longitude < -180 || longitude > 180)) {
     throw new Error('longitude 必须是 -180 到 180 之间的数字');
@@ -824,17 +865,10 @@ function resolveBaziCalendarContext(input: BaziInput): {
       isLeapMonth,
     });
 
+    const calendar = termCalendar(prepared.solar);
+
     if (longitude != null) {
-      const resolvedDateTime = resolveTrueSolarDateTime(
-        {
-          birthYear: prepared.solar.getYear(),
-          birthMonth: prepared.solar.getMonth(),
-          birthDay: prepared.solar.getDay(),
-          birthHour: prepared.solar.getHour(),
-          birthMinute: prepared.solar.getMinute(),
-        },
-        longitude,
-      );
+      const resolvedDateTime = resolveTrueSolarDateTimeFromInstant(calendar.instant, longitude, timezone);
       const correctedSolar = Solar.fromYmdHms(
         resolvedDateTime.year,
         resolvedDateTime.month,
@@ -846,22 +880,22 @@ function resolveBaziCalendarContext(input: BaziInput): {
       return {
         solar: correctedSolar,
         lunar: correctedSolar.getLunar(),
+        termLunar: calendar.termLunar,
         trueSolarTimeInfo: resolvedDateTime.trueSolarTimeInfo,
       };
     }
 
     return {
-      solar: prepared.solar,
-      lunar: prepared.lunar,
+      solar: calendar.clockSolar,
+      lunar: calendar.clockSolar.getLunar(),
+      termLunar: calendar.termLunar,
       trueSolarTimeInfo,
     };
   }
 
+  const calendar = termCalendar(Solar.fromYmdHms(birthYear, birthMonth, birthDay, birthHour, birthMinute, 0));
   if (longitude != null) {
-    const resolvedDateTime = resolveTrueSolarDateTime(
-      { birthYear, birthMonth, birthDay, birthHour, birthMinute },
-      longitude,
-    );
+    const resolvedDateTime = resolveTrueSolarDateTimeFromInstant(calendar.instant, longitude, timezone);
     trueSolarTimeInfo = resolvedDateTime.trueSolarTimeInfo;
     effectiveYear = resolvedDateTime.year;
     effectiveMonth = resolvedDateTime.month;
@@ -870,7 +904,7 @@ function resolveBaziCalendarContext(input: BaziInput): {
     effectiveMinute = resolvedDateTime.minute;
   }
 
-  const solar = Solar.fromYmdHms(
+  const solar = longitude == null ? calendar.clockSolar : Solar.fromYmdHms(
     effectiveYear,
     effectiveMonth,
     effectiveDay,
@@ -881,6 +915,7 @@ function resolveBaziCalendarContext(input: BaziInput): {
   return {
     solar,
     lunar: solar.getLunar(),
+    termLunar: calendar.termLunar,
     trueSolarTimeInfo,
   };
 }
@@ -890,13 +925,15 @@ export function calculateBaziData(input: BaziInput): BaziOutput {
     gender,
     birthPlace,
   } = input;
-  const { lunar, trueSolarTimeInfo } = resolveBaziCalendarContext(input);
+  const { lunar, termLunar, trueSolarTimeInfo } = resolveBaziCalendarContext(input);
 
   const eightChar = lunar.getEightChar();
-  const yearStem = eightChar.getYearGan();
-  const yearBranch = eightChar.getYearZhi();
-  const monthStem = eightChar.getMonthGan();
-  const monthBranch = eightChar.getMonthZhi();
+  eightChar.setSect(input.dayBoundary === 'zi' ? 1 : 2);
+  const termEightChar = termLunar.getEightChar();
+  const yearStem = termEightChar.getYearGan();
+  const yearBranch = termEightChar.getYearZhi();
+  const monthStem = termEightChar.getMonthGan();
+  const monthBranch = termEightChar.getMonthZhi();
   const dayStem = eightChar.getDayGan();
   const dayBranch = eightChar.getDayZhi();
   const hourStem = eightChar.getTimeGan();
@@ -965,6 +1002,7 @@ export function calculateBaziData(input: BaziInput): BaziOutput {
     taiYuan: taiYuan || undefined,
     mingGong: mingGong || undefined,
     trueSolarTimeInfo,
+    calculationOptions: { dayBoundary: input.dayBoundary ?? 'midnight', timezone: input.timezone ?? DEFAULT_DIVINATION_TIMEZONE, solarTermBasis: 'instant', disambiguation: input.disambiguation ?? 'reject', ruleVersion: 'bazi-2026.10' },
   };
 }
 

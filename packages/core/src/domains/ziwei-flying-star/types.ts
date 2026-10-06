@@ -1,22 +1,20 @@
 import type {
-  BirthTimeInput,
   FlyingStarActualFlight,
   FlyingStarQuery,
-  Gender,
   MutagedPlaceInfo,
   SurroundedPalaceInfo
 } from '../shared/types.js';
+import type { ZiweiInput, ZiweiCalculationMetadata } from '../ziwei/types.js';
 
 // ===== 紫微飞星类型 =====
 
-export interface ZiweiFlyingStarInput extends BirthTimeInput {
-  gender: Gender;
-  longitude?: number;
+export interface ZiweiFlyingStarInput extends ZiweiInput {
   queries: FlyingStarQuery[];
 }
 
 export interface ZiweiFlyingStarOutput {
   results: FlyingStarResult[];
+  calculationOptions?: ZiweiCalculationMetadata;
 }
 
 export interface FlyingStarResult {

@@ -15,7 +15,7 @@
 | `tabel_export_from_supabase.sql` | 42 张表、字段及部分约束的上下文 | 可执行建库顺序，完整函数/RLS/索引/授权，生产部署状态 |
 | `migrations/` 显式允许列表 | 对应历史定义的原文、静态检查及隔离契约测试输入 | 完整迁移链，或线上最终定义 |
 | `scripts/check-architecture-guards.mjs` | 声明的源码与 SQL 安全约束没有意外删除 | 实际事务、并发和授权行为 |
-| `scripts/tests/postgres-fixture.mjs` | 当前 26 项基础 SQL 来源与真实 Auth 模式的 5 项增量输入（共 31 项），以及准确的提取、加载顺序 | 生产完整迁移链或已部署定义 |
+| `scripts/tests/postgres-fixture.mjs` | 当前 27 项基础 SQL 来源与真实 Auth 模式的 5 项增量输入（共 32 项），以及准确的提取、加载顺序 | 生产完整迁移链或已部署定义 |
 | `pnpm test:db` | 下述隔离 PostgreSQL/RLS/事务契约（模拟 claims） | 真实 JWT/Auth、生产等价性、历史数据回填正确性 |
 | `pnpm test:auth` | 真实 GoTrue/PostgREST/JWT 与用户更新、塔罗、历史、知识库链路 | OAuth/邮件、完整 Next 浏览器端到端、生产配置/schema 等价 |
 

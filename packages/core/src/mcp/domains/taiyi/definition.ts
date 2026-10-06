@@ -2,10 +2,14 @@ import type { ToolDefinition } from '../../contract.js';
 
 export const taiyiDefinition: ToolDefinition = {
   name: 'taiyi',
-  description: '太乙九星观测 - 根据问卜时间生成时空底盘、九星阵列与核心关系。',
+  description: '太乙排盘 - 支持九星观测，以及采用四库本金镜七十二局立成的现代历法适配年/月/日/时计。',
   inputSchema: {
     type: 'object',
     properties: {
+      system: { type: 'string', enum: ['nine-star', 'traditional'], default: 'nine-star', description: '九星观测或七十二局' },
+      tradition: { type: 'string', enum: ['jinjing', 'tongzong'], description: '传统分支的积数历元：金镜或统宗，默认金镜；立成表均用四库本金镜' },
+      accumulatedNumber: { type: 'integer', minimum: 1, maximum: Number.MAX_SAFE_INTEGER, description: '手工积数，覆写历元自动计算' },
+      dunType: { type: 'string', enum: ['yang', 'yin'], description: '覆写遁向；时计默认按冬夏至实际时刻，其他计默认阳遁' },
       mode: {
         type: 'string',
         enum: ['year', 'month', 'day', 'hour', 'minute'],
@@ -16,12 +20,12 @@ export const taiyiDefinition: ToolDefinition = {
         description: '观测日期 (YYYY-MM-DD)',
       },
       hour: {
-        type: 'number',
+        type: 'integer', minimum: 0, maximum: 23,
         description: '小时 (0-23)',
         default: 12,
       },
       minute: {
-        type: 'number',
+        type: 'integer', minimum: 0, maximum: 59,
         description: '分钟 (0-59)',
         default: 0,
       },
@@ -43,6 +47,7 @@ export const taiyiDefinition: ToolDefinition = {
     },
     required: ['mode', 'date'],
     allOf: [
+      { if: { properties: { system: { const: 'traditional' } }, required: ['system'] }, then: { properties: { mode: { enum: ['year', 'month', 'day', 'hour'] } } } },
       {
         if: {
           properties: {

@@ -214,6 +214,7 @@ export function BaziForm({
                 ) : (
                     <SmartPillarsInput
                         value={formData.pillars}
+                        timeOptions={formData}
                         onChange={(pillars, dateTime) => {
                             onUpdate('pillars', pillars);
                             // 如果反推出了时间，同时更新日期和时间字段

@@ -1,7 +1,8 @@
 import { calculateZiweiChartBundle, generateZiweiChartText, type ZiweiFormData } from '@/lib/divination/ziwei';
 import { resolveChartTextDetailLevel, type ChartTextDetailLevel } from '@/lib/divination/detail-level';
+import { resolveBirthTimeOptions, type BirthTimeResolution } from '@/lib/divination/birth-time';
 
-export type ZiweiPromptInput = {
+export type ZiweiPromptInput = BirthTimeResolution & {
     id?: string;
     name?: string;
     gender?: ZiweiFormData['gender'] | string;
@@ -45,6 +46,7 @@ function rebuildZiweiChart(chart: ZiweiPromptInput): ResolvedZiweiPromptData | n
             longitude: chart.longitude,
             calendarType: chart.calendarType === 'lunar' ? 'lunar' : 'solar',
             isLeapMonth: chart.isLeapMonth ?? false,
+            ...resolveBirthTimeOptions(chart),
         });
     } catch {
         return null;

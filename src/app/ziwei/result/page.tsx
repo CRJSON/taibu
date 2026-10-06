@@ -15,13 +15,14 @@ import { buildZiweiCanonicalJSON, calculateZiweiChartBundle, generateZiweiChartT
 import type { Gender, CalendarType } from '@/types';
 import { ZiweiChartGrid } from '@/components/ziwei/ZiweiChartGrid';
 import { ZiweiHoroscopePanel, type HoroscopeInfo, type HoroscopeHighlight } from '@/components/ziwei/ZiweiHoroscopePanel';
-import { supabase } from '@/lib/auth';
+import { useSessionSafe } from '@/components/providers/ClientProviders';
 import { AuthModal } from '@/components/auth/AuthModal';
 import { useToast } from '@/components/ui/Toast';
 import { useHeaderMenu } from '@/components/layout/HeaderMenuContext';
 import { getDayCount } from '@/lib/date-utils';
-import { createSavedChart, loadSavedChart } from '@/lib/user/charts-client';
-import { parseBirthTimeString } from '@/lib/divination/birth-time';
+import { createSavedChart, loadSavedChart, updateSavedChart } from '@/lib/user/charts-client';
+import { useChartMutation } from '@/lib/hooks/useUserCharts';
+import { parseBirthTimeString, readBirthTimeOptions, resolveBirthTimeOptions, writeBirthTimeOptions, type BirthTimeResolution } from '@/lib/divination/birth-time';
 import { parseLongitude } from '@/lib/divination/place-resolution';
 import { useAdminJsonCopy } from '@/lib/admin/useAdminJsonCopy';
 import { CopyTextModal } from '@/components/divination/CopyTextModal';
@@ -36,8 +37,12 @@ function ZiweiResultContent() {
         const params = ['name', 'gender', 'year', 'month', 'day', 'hour', 'calendar', 'leap', 'place'];
         return params.some((key) => searchParams.has(key));
     }, [searchParams]);
-    const [saving, setSaving] = useState(false);
-    const [saved, setSaved] = useState(false);
+    const { user, loading: sessionLoading } = useSessionSafe();
+    const userId = user?.id ?? null;
+    const { pending: saving, run: runSave } = useChartMutation(userId);
+    const [loadedForUserId, setLoadedForUserId] = useState<string | null | undefined>(undefined);
+    const [savedState, setSaved] = useState(false);
+    const saved = savedState && !searchParams.has('timezone') && !searchParams.has('disambiguation');
     const [loading, setLoading] = useState(() => Boolean(chartId) && !hasFormParams);
     const [notFound, setNotFound] = useState(false);
     const [loadError, setLoadError] = useState<string | null>(null);
@@ -51,7 +56,7 @@ function ZiweiResultContent() {
     const [showAuthModal, setShowAuthModal] = useState(false);
     const { showToast } = useToast();
 
-    type SavedZiweiChartRow = {
+    type SavedZiweiChartRow = BirthTimeResolution & {
         name: string;
         gender: Gender;
         birth_date: string;
@@ -73,11 +78,17 @@ function ZiweiResultContent() {
         }
     }, [hasFormParams]);
 
+    useEffect(() => {
+        setSaved(false);
+        setChartFromDb(null);
+    }, [userId]);
+
     // 加载已保存命盘
     useEffect(() => {
-        if (!chartId || hasFormParams) return;
+        if (sessionLoading || !chartId || hasFormParams) return;
 
         let cancelled = false;
+        const controller = new AbortController();
 
         const loadChart = async () => {
             setLoading(true);
@@ -85,7 +96,7 @@ function ZiweiResultContent() {
             setLoadError(null);
 
             try {
-                const row = await loadSavedChart('ziwei', chartId);
+                const row = await loadSavedChart('ziwei', chartId, { expectedUserId: userId ?? undefined, signal: controller.signal });
                 if (cancelled) return;
 
                 const data = row as SavedZiweiChartRow | null;
@@ -114,6 +125,7 @@ function ZiweiResultContent() {
                     isLeapMonth: (data.is_leap_month as boolean | undefined) ?? false,
                     birthPlace: (data.birth_place as string) || '',
                     longitude: parseLongitude(data.longitude),
+                    ...resolveBirthTimeOptions(data),
                 });
                 setSaved(true);
             } catch (error) {
@@ -122,6 +134,7 @@ function ZiweiResultContent() {
                 }
             } finally {
                 if (!cancelled) {
+                    setLoadedForUserId(userId);
                     setLoading(false);
                 }
             }
@@ -130,8 +143,9 @@ function ZiweiResultContent() {
         void loadChart();
         return () => {
             cancelled = true;
+            controller.abort();
         };
-    }, [chartId, hasFormParams]);
+    }, [chartId, hasFormParams, sessionLoading, userId]);
 
     // 从 URL 参数获取表单数据
     const formData: ZiweiFormData | null = useMemo(() => {
@@ -166,9 +180,13 @@ function ZiweiResultContent() {
             isLeapMonth: searchParams.get('leap') === '1',
             birthPlace: searchParams.get('place') || '',
             longitude: parseLongitude(searchParams.get('longitude')),
+            ...readBirthTimeOptions(searchParams),
         };
     }, [searchParams]);
-    const resolvedFormData = chartFromDb || formData;
+    const resolvedFormData = useMemo(() => {
+        const base = (loadedForUserId === userId ? chartFromDb : null) || formData;
+        return base ? { ...base, ...readBirthTimeOptions(searchParams) } : null;
+    }, [loadedForUserId, userId, chartFromDb, formData, searchParams]);
 
     // 应用时辰偏移
     const adjustedFormData = useMemo(() => {
@@ -227,6 +245,7 @@ function ZiweiResultContent() {
             minute: String(resolvedFormData.birthMinute || 0),
             calendar: resolvedFormData.calendarType,
         });
+        writeBirthTimeOptions(params, resolvedFormData);
         if (resolvedFormData.calendarType === 'lunar' && resolvedFormData.isLeapMonth) params.set('leap', '1');
         if (resolvedFormData.birthPlace) params.set('place', resolvedFormData.birthPlace);
         if (resolvedFormData.longitude != null) params.set('longitude', String(resolvedFormData.longitude));
@@ -236,10 +255,8 @@ function ZiweiResultContent() {
 
     const handleSave = useCallback(async () => {
         if (saving || !output || !resolvedFormData) return;
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session?.user) { showToast('warning', '请先登录后再保存命盘'); setShowAuthModal(true); return; }
-        setSaving(true);
-        try {
+        if (!userId) { showToast('warning', '请先登录后再保存命盘'); setShowAuthModal(true); return; }
+        await runSave(async (scope) => {
             const payload = {
                 name: resolvedFormData.name,
                 gender: resolvedFormData.gender,
@@ -249,22 +266,23 @@ function ZiweiResultContent() {
                 is_leap_month: resolvedFormData.isLeapMonth ?? false,
                 birth_place: resolvedFormData.birthPlace || null,
                 longitude: resolvedFormData.longitude ?? null,
+                ...resolveBirthTimeOptions(resolvedFormData),
             };
             if (chartId) {
-                const response = await fetch('/api/ziwei/charts/update', {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ chartId, payload }),
-                });
-                if (!response.ok) { const result = await response.json().catch(() => null); throw new Error(result?.error || '更新失败'); }
-            } else {
-                const insertedId = await createSavedChart('ziwei', payload);
-                if (insertedId) router.replace(`/ziwei/result?chart=${insertedId}`);
-                else throw new Error('保存失败');
+                await updateSavedChart('ziwei', chartId, payload, scope);
+                return chartId;
             }
+            return createSavedChart('ziwei', payload, scope);
+        }, (savedId) => {
             setSaved(true);
             setChartFromDb(resolvedFormData);
-        } catch (error) { console.error('保存失败:', error); showToast('error', '保存失败，请重试'); } finally { setSaving(false); }
-    }, [saving, output, resolvedFormData, chartId, router, showToast]);
+            setLoadedForUserId(userId);
+            router.replace(`/ziwei/result?chart=${savedId}`);
+        }, (error) => {
+            console.error('保存失败:', error);
+            showToast('error', '保存失败，请重试');
+        });
+    }, [saving, output, resolvedFormData, chartId, router, showToast, userId, runSave]);
 
     // 分享
     const handleShare = useCallback(async () => {
@@ -304,7 +322,7 @@ function ZiweiResultContent() {
         return () => clearMenuItems();
     }, [saving, saved, isAdmin, canonicalChart, jsonCopied, copyJson, setMenuItems, clearMenuItems, handleEdit, handleSave, handleShare]);
 
-    if (loading) return <SoundWaveLoader variant="block" text="" />;
+    if (loading || (chartId && !hasFormParams && (sessionLoading || loadedForUserId !== userId))) return <SoundWaveLoader variant="block" text="" />;
     if (notFound) {
         return (
             <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4 text-center">

@@ -1,3 +1,4 @@
+import { withRulesText } from '../../shared/calculation-rules.js';
 import { normalizeDetailLevelBinary } from '../../shared/render-utils.js';
 import type { DetailLevel } from '../shared/types.js';
 import type { XiaoliurenOutput } from './types.js';
@@ -9,7 +10,8 @@ export interface XiaoliurenCanonicalTextOptions {
   showPoem?: boolean;
 }
 
-export function toXiaoliurenText(
+export const toXiaoliurenText = withRulesText(toXiaoliurenTextBase);
+function toXiaoliurenTextBase(
   output: XiaoliurenOutput,
   options: XiaoliurenCanonicalTextOptions = {},
 ): string {
@@ -25,9 +27,12 @@ export function toXiaoliurenText(
   if (output.question) {
     lines.push(`- 占问: ${output.question}`);
   }
-  lines.push(`- 农历月: ${output.input.lunarMonth}月`);
+  if (output.input.date) lines.push(`- 公历日期: ${output.input.date}`);
+  lines.push(`- 农历月: ${output.input.isLeapMonth ? '闰' : ''}${output.input.lunarMonth}月`);
   lines.push(`- 农历日: ${output.input.lunarDay}日`);
   lines.push(`- 时辰: ${output.input.shichen}`);
+  if (output.input.isLeapMonth) lines.push(`- 闰月取法: ${output.input.leapMonthStrategy === 'advance' ? '闰月递进一月' : '闰月沿用同月'}`);
+  if (detailLevel === 'full' && output.input.hourType) lines.push(`- 小时输入口径: ${output.input.hourType}`);
   lines.push('');
 
   lines.push('## 推演链');

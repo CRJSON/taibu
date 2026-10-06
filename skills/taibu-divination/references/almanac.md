@@ -6,11 +6,12 @@
 
 | 参数 | 类型 | 必填 | 默认 | 说明 |
 | --- | --- | --- | --- | --- |
+| `timezone` | string | 否 | `"Asia/Shanghai"` | 省略日期时按此 IANA 时区取今日 |
 | `dayMaster` | enum | 否 | — | 日主天干；可选值: `甲` / `乙` / `丙` / `丁` / `戊` / `己` / `庚` / `辛` / `壬` / `癸` |
-| `birthYear` | number | 否 | — | 出生年，用于推导日主 |
-| `birthMonth` | number | 否 | — | 出生月，用于推导日主 |
-| `birthDay` | number | 否 | — | 出生日，用于推导日主 |
-| `birthHour` | number | 否 | — | 出生时，用于推导日主 |
+| `birthYear` | integer | 否 | — | 出生年，用于推导日主 |
+| `birthMonth` | integer | 否 | — | 出生月，用于推导日主 |
+| `birthDay` | integer | 否 | — | 出生日，用于推导日主 |
+| `birthHour` | integer | 否 | — | 出生时，用于推导日主 |
 | `date` | string | 否 | — | 目标日期 (YYYY-MM-DD，省略时取当前日期) |
 
 ## 调用示例
@@ -32,4 +33,5 @@ echo '{"dayMaster":"丙","date":"2026-02-14"}' | node "$TB/scripts/taibu.mjs" ca
 - `方位信息`
 - `值日信息`
 - `时辰吉凶`
+- `计算规则`
 

@@ -2,6 +2,7 @@
 // ===== 紫微运限 =====
 
 export interface ZiweiHoroscopeCanonicalJSON {
+  计算规则?: Record<string, unknown>;
   基本信息: {
     目标日期: string;
     五行局: string;
@@ -18,6 +19,7 @@ export interface ZiweiHoroscopeCanonicalJSON {
     落入本命宫位: string;
     运限四化: string[];
     十二宫重排?: string[];
+    流曜?: { 宫位索引: number; 星曜: string; 类型?: string; 亮度?: string; 四化?: string; }[];
   }>;
   流年星曜?: {
     吉星分布: string[];

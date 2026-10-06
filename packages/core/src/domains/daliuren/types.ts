@@ -19,6 +19,12 @@ export interface DaliurenInput {
   birthYear?: number;
   /** 性别（用于计算行年） */
   gender?: 'male' | 'female';
+  /** 手工月将；省略时以中气交接的实际时刻定月将。 */
+  monthGeneral?: string;
+  /** 卯至申为昼，或强制阳贵/阴贵，或按太阳高度判昼夜。 */
+  dayNight?: 'shichen' | 'day' | 'night' | 'sunrise';
+  latitude?: number;
+  longitude?: number;
 }
 
 // ===== 输出类型 =====
@@ -151,4 +157,5 @@ export interface DaliurenOutput {
   xingNian?: string;
   /** 占事 */
   question?: string;
+  calculationOptions?: { timezone: string; monthGeneral: string; monthGeneralSource: 'solar-term' | 'manual'; dayNight: NonNullable<DaliurenInput['dayNight']>; latitude?: number; longitude?: number; ruleVersion: string; };
 }

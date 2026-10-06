@@ -190,6 +190,8 @@ CREATE TABLE public.bazi_charts (
   day_master text,
   day_branch text,
   longitude double precision,
+  timezone text NOT NULL DEFAULT 'Asia/Shanghai' CHECK (char_length(timezone) BETWEEN 1 AND 100 AND timezone = btrim(timezone)),
+  disambiguation text NOT NULL DEFAULT 'reject' CHECK (disambiguation IN ('reject', 'earlier', 'later', 'compatible')),
   CONSTRAINT bazi_charts_pkey PRIMARY KEY (id)
 );
 
@@ -632,6 +634,8 @@ CREATE TABLE public.ziwei_charts (
   is_leap_month boolean DEFAULT false,
   birth_place text,
   longitude double precision,
+  timezone text NOT NULL DEFAULT 'Asia/Shanghai' CHECK (char_length(timezone) BETWEEN 1 AND 100 AND timezone = btrim(timezone)),
+  disambiguation text NOT NULL DEFAULT 'reject' CHECK (disambiguation IN ('reject', 'earlier', 'later', 'compatible')),
   CONSTRAINT ziwei_charts_pkey PRIMARY KEY (id)
 );
 
@@ -5151,6 +5155,24 @@ CREATE POLICY credit_transactions_authenticated_insert_guard
 
 
 
+-- Persist caller time resolution, not a second birth date or a new chart table.
+-- Existing place/longitude fields cannot represent an IANA zone or DST policy.
+-- Constant defaults preserve the legacy interpretation; do not recalculate old charts.
+-- Owner RLS/grants remain unchanged. These fields are not lookup keys requiring indexes.
+
+ALTER TABLE public.bazi_charts
+  ADD COLUMN IF NOT EXISTS timezone text NOT NULL DEFAULT 'Asia/Shanghai'
+    CHECK (char_length(timezone) BETWEEN 1 AND 100 AND timezone = btrim(timezone)),
+  ADD COLUMN IF NOT EXISTS disambiguation text NOT NULL DEFAULT 'reject'
+    CHECK (disambiguation IN ('reject', 'earlier', 'later', 'compatible'));
+ALTER TABLE public.ziwei_charts
+  ADD COLUMN IF NOT EXISTS timezone text NOT NULL DEFAULT 'Asia/Shanghai'
+    CHECK (char_length(timezone) BETWEEN 1 AND 100 AND timezone = btrim(timezone)),
+  ADD COLUMN IF NOT EXISTS disambiguation text NOT NULL DEFAULT 'reject'
+    CHECK (disambiguation IN ('reject', 'earlier', 'later', 'compatible'));
+
+
+
 -- BLOCKED increment_community_post_view_count: Community prototype blocked pending counter/moderation contract.
 DO $$ DECLARE signature text; BEGIN
  FOR signature IN SELECT p.oid::regprocedure::text FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname='increment_community_post_view_count' LOOP
@@ -5239,6 +5261,6 @@ GRANT SELECT ON public.conversations_with_archive_status, public.ming_records_wi
 -- Explicit local feature block; no user/model/credential seeds.
 INSERT INTO public.app_settings (setting_key, setting_value) VALUES ('feature_disabled:community', true);
 
-COMMENT ON SCHEMA public IS 'taibu-selfhost-v1:3596cd84b87ab036c3adb04dcc48b0d4801d6e3ee8ebc27366547d35bb524eb8';
+COMMENT ON SCHEMA public IS 'taibu-selfhost-v1:2d796f8d381f05f96b98abf630affd6635d677a4397dad073288d05801852c58';
 
 NOTIFY pgrst, 'reload schema';

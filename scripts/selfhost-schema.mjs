@@ -216,6 +216,8 @@ GRANT ALL ON ALL TABLES IN SCHEMA public TO service_role;
 -- service_role remains platform-only. Application administrators log in as authenticated.`);
 const correctionFiles = ['20261002_100000_fix_knowledge_search_contracts', '20261002_101000_restrict_credit_ledger_rpc', '20261002_102000_protect_account_and_ledger_writes'];
 for (const file of correctionFiles) sql.push(source(file).replace(/^BEGIN;\s*$/gm, '').replace(/^COMMIT;\s*$/gm, ''));
+const chartTimeMigration = '20261005_110000_chart_time_resolution';
+sql.push(source(chartTimeMigration).replace(/^BEGIN;\s*$/gm, '').replace(/^COMMIT;\s*$/gm, ''));
 for (const m of functions(source('20261002_100000_fix_knowledge_search_contracts'))) { active.add(m[1]); rpcSources[m[1]] = 'supabase/migrations/20261002_100000_fix_knowledge_search_contracts.sql'; }
 const blockedFunctions = {
   increment_community_post_view_count: 'Community prototype blocked pending counter/moderation contract.',
@@ -277,7 +279,8 @@ function scan(directory) {
         else {
           const expression = m[1].trim();
           const contract = expression === 'config.tableName' && ['src/app/api/history-summaries/route.ts', 'src/lib/api/chart-crud.ts'].includes(file) ? 'tableName catalog'
-              : expression === 'tableName' && file === 'src/lib/api/divination-pipeline.ts' ? 'tableName factory configuration'
+              : expression === 'tableName' && file === 'src/lib/api/chart-crud.ts' ? 'typed birth-update chart table catalog'
+            : expression === 'tableName' && file === 'src/lib/api/divination-pipeline.ts' ? 'tableName factory configuration'
               : expression === 'table' && ['src/app/api/chat/preview/route.ts', 'src/lib/chat/chat-context.ts', 'src/lib/user/membership-server.ts'].includes(file) ? 'typed from(table) adapter'
                 : expression.startsWith('getChartTable(') && file === 'src/app/api/user/charts/route.ts' ? 'getChartTable return catalog' : null;
           if (!contract) throw new Error(`Unreviewed dynamic relation ${file}: ${expression}`);

@@ -23,7 +23,7 @@ TaiBu 的命理术数算法核心库。
 | `almanac` | 黄历与择日信息 |
 | `astrology` | 西方占星命盘与流运 |
 | `qimen` | 奇门遁甲排盘 |
-| `taiyi` | 太乙九星观测 |
+| `taiyi` | 太乙九星观测与传统七十二局（现代历法适配） |
 | `daliuren` | 大六壬排盘 |
 | `xiaoliuren` | 小六壬占测 |
 
@@ -76,7 +76,7 @@ const rendered = renderToolResult('qimen', result);
 - `taibu-core`
   - 根入口，聚合常用术数能力与类型
 - `taibu-core/mcp`
-  - MCP 工具执行与输出适配
+- MCP 工具执行与输出适配
 - `taibu-core/<domain>`
   - 某个术数的算法、类型、`to*Text()`、`to*Json()`
 
@@ -129,6 +129,29 @@ const rendered = renderToolResult('qimen', result);
 
 - 如果你是人类阅读场景，读 `content`
 - 如果你是 schema 驱动场景，读 `structuredContent`
+
+MCP 在发送结构化结果前按公开 schema 校验字段类型、必需主节和完整盘面数量。
+不符合契约的结果抛出 `CoreOutputError`，错误码为 `OUTPUT_SCHEMA_MISMATCH`。
+新增输入校验通常抛出根入口导出的 `CoreInputError`，含 `code` 和 `path`；历史 API 的部分错误仍为普通 `Error`。
+
+## 算法口径与复现
+
+完整支持矩阵、边界、来源和验证范围见 [ALGORITHM_RULES.md](./ALGORITHM_RULES.md)。
+直接算法依赖固定为本次验证的版本；仓库锁文件同时固定传递依赖。独立 npm 消费者应保留自己的锁文件，重新升级依赖后重新运行规则回归测试。
+
+- 八字与大运支持 `timezone`、`disambiguation`、`dayBoundary`，大运另支持 `yunSect: 1 | 2`。
+- 四柱反推支持 `startYear`、`endYear` 和同一组历法规则，返回按分钟搜索的半开候选时间区间。
+- 紫微三工具共用 `calculationOptions`，可选算法、年界、运限界、年龄界、子时界、闰月策略和十干四化覆盖表。
+- 六爻增加 `method: 'coins'`（初爻到上爻六个 `yaoValues: 6..9`）与 `'yarrow'`（蓍草概率模型）。
+- 奇门支持转盘/飞盘、拆补/茅山/节气均分，以及显式手工阴阳遁和局数。
+- 太乙用 `system: 'traditional'` 选择七十二局，`'nine-star'` 保持原有九星功能。
+- 六壬支持手工 `monthGeneral`、强制昼夜或 `dayNight: 'sunrise'`；日出规则需要经纬度。
+- 占星支持七种宫制、显式时区、自定义相位容许度，以及带固定 `ayanamsa` 的恒星黄道。
+- 塔罗支持全牌/大牌/小牌、自定义牌阵、逆位概率和固定生命数字参考年。
+- 小六壬支持公历日期输入、明确的 `hourType` 和闰月计数策略。
+
+新增结果中的 `计算规则` 与原始结果的选项快照用于复现口径。保存历史结果时应同时保存输入、随机种子和原始输出。
+日期/时区拒绝无效值；没有实现的分支会报错。历史保存结果缺少新增元数据时仍可渲染。
 
 ## Related Packages
 

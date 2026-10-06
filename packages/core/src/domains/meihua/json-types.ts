@@ -16,6 +16,7 @@ export interface MeihuaHexagramTrackJSON {
 }
 
 export interface MeihuaCanonicalJSON {
+  计算规则?: Record<string, unknown>;
   起卦信息: {
     问题: string;
     方法: string;

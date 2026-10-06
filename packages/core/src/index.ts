@@ -132,3 +132,4 @@ export type {
 } from './domains/shared/text-options.js';
 
 export * from './types.js';
+export { CoreInputError } from './shared/validation.js';

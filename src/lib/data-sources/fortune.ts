@@ -30,7 +30,7 @@ async function loadPreferredBaziChartRow(
     const defaultId = settingsRow?.default_bazi_chart_id ?? null;
     const baseQuery = supabase
         .from('bazi_charts')
-        .select('id, name, gender, birth_date, birth_time, birth_place, longitude, calendar_type, is_leap_month, day_master, day_branch, created_at')
+        .select('id, name, gender, birth_date, birth_time, birth_place, longitude, calendar_type, is_leap_month, timezone, disambiguation, day_master, day_branch, created_at')
         .eq('user_id', userId);
 
     if (defaultId) {
@@ -48,16 +48,7 @@ async function getDefaultBaziChartForUser(userId: string, ctx?: DataSourceQueryC
     const supabase = ctx?.client ?? getSystemAdminClient();
     const data = await loadPreferredBaziChartRow(supabase, userId);
     if (!data) return null;
-    const row = data as {
-        gender: string | null;
-        birth_date: string;
-        birth_time: string | null;
-        birth_place: string | null;
-        longitude: number | null;
-        calendar_type: string | null;
-        is_leap_month: boolean | null;
-    };
-    return calculateBaziOutputFromStoredFields(row);
+    return calculateBaziOutputFromStoredFields(data as Parameters<typeof calculateBaziOutputFromStoredFields>[0]);
 }
 
 export const dailyFortuneProvider: DataSourceProvider<FortuneData> = {

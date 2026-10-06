@@ -1,13 +1,9 @@
-import type {
-  BirthTimeInput,
-  Gender
-} from '../shared/types.js';
+import type { StarInfo } from '../shared/types.js';
+import type { ZiweiInput, ZiweiCalculationMetadata } from '../ziwei/types.js';
 
 // ===== 紫微运限类型 =====
 
-export interface ZiweiHoroscopeInput extends BirthTimeInput {
-  gender: Gender;
-  longitude?: number;
+export interface ZiweiHoroscopeInput extends ZiweiInput {
   targetDate?: string;
   targetTimeIndex?: number;
 }
@@ -21,6 +17,7 @@ export interface HoroscopePeriodInfo {
   mutagen: string[];
   startAge?: number;
   endAge?: number;
+  stars?: StarInfo[][];
 }
 
 export interface TransitStarEntry {
@@ -49,4 +46,5 @@ export interface ZiweiHoroscopeOutput {
   hourly: HoroscopePeriodInfo;
   transitStars?: TransitStarEntry[];      // 流年星曜
   yearlyDecStar?: YearlyDecStarInfo;      // 流年神煞（岁前/将前十二星）
+  calculationOptions?: ZiweiCalculationMetadata;
 }

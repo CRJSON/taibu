@@ -44,6 +44,7 @@ export interface AstrologyHouseJSON {
 }
 
 export interface AstrologyCanonicalJSON {
+  计算规则?: Record<string, unknown>;
   基础坐标: {
     计算模式: string;
     说明?: string;

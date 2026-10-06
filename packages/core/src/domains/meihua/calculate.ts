@@ -1,4 +1,6 @@
 import { Solar } from 'lunar-javascript';
+import { CoreInputError, validateCivilDateTime } from '../../shared/validation.js';
+import { DEFAULT_DIVINATION_TIMEZONE, zonedWallClockToSystemDate } from '../../shared/timezone-utils.js';
 import { pinyin as convertToPinyin } from 'pinyin';
 import { MEIHUA_RUSHENG_CHAR_SET } from '../../data/meihua-rusheng.js';
 import { GUA_CI, XIANG_CI } from '../../data/hexagrams.js';
@@ -348,23 +350,13 @@ function parseWallClockDateTime(date: unknown): WallClockDateTime {
   const minute = Number(match.groups.minute);
   const second = Number(match.groups.second ?? '0');
 
-  const utcDate = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
-  const isValid =
-    utcDate.getUTCFullYear() === year &&
-    utcDate.getUTCMonth() === month - 1 &&
-    utcDate.getUTCDate() === day &&
-    utcDate.getUTCHours() === hour &&
-    utcDate.getUTCMinutes() === minute &&
-    utcDate.getUTCSeconds() === second;
-  if (!isValid) {
-    throw new Error('date 日期无效，请检查年月日时分是否合理');
-  }
+  validateCivilDateTime({ year, month, day, hour, minute, second });
 
   return { year, month, day, hour, minute, second };
 }
 
 function toSystemWallClockDate(input: WallClockDateTime): Date {
-  return new Date(input.year, input.month - 1, input.day, input.hour, input.minute, input.second);
+  return zonedWallClockToSystemDate(input, DEFAULT_DIVINATION_TIMEZONE);
 }
 
 function formatWallClockDateTime(input: WallClockDateTime): string {
@@ -372,14 +364,20 @@ function formatWallClockDateTime(input: WallClockDateTime): string {
 }
 
 function normalizePositiveInteger(value: number, label: string): number {
-  if (!Number.isInteger(value) || value <= 0) {
+  if (!Number.isSafeInteger(value) || value <= 0) {
     throw new Error(`${label} 必须是正整数`);
   }
   return value;
 }
 
+function safeSum(...values: number[]): number {
+  const total = values.reduce((sum, value) => sum + value, 0);
+  if (!Number.isSafeInteger(total)) throw new CoreInputError('numbers', '数值总和超出安全整数范围');
+  return total;
+}
+
 function normalizeMovingLine(value: number): number {
-  if (!Number.isInteger(value) || value < 1 || value > 6) {
+  if (!Number.isSafeInteger(value) || value < 1 || value > 6) {
     throw new Error('movingLine 必须是 1-6 的整数');
   }
   return value;
@@ -633,9 +631,10 @@ function castByCountWithTime(input: MeihuaInput, date: WallClockDateTime): { upp
   const hourNumber = getHourNumber(date);
   const categoryKey = normalizeCountCategory(input.countCategory);
   const upper = getTrigramByNumber(count);
-  const lowerBase = categoryKey === 'sound' ? count + hourNumber : hourNumber;
+  const total = safeSum(count, hourNumber);
+  const lowerBase = categoryKey === 'sound' ? total : hourNumber;
   const lower = getTrigramByNumber(lowerBase);
-  const movingLine = modToRange(count + hourNumber, 6);
+  const movingLine = modToRange(total, 6);
   const categoryLabel = categoryKey === 'sound' ? '声音数' : '物数';
 
   return {
@@ -657,7 +656,7 @@ function castByCountWithTime(input: MeihuaInput, date: WallClockDateTime): { upp
         upper: modToRange(count, 8),
         lower: modToRange(lowerBase, 8),
         moving: movingLine,
-        total: count + hourNumber,
+        total,
         hour: hourNumber,
       },
     },
@@ -696,7 +695,7 @@ function castByTextSplit(input: MeihuaInput, date: WallClockDateTime): { upper: 
     const rightStrokeCount = normalizePositiveInteger(input.rightStrokeCount ?? NaN, 'rightStrokeCount');
     upperNumber = leftStrokeCount;
     lowerNumber = rightStrokeCount;
-    total = leftStrokeCount + rightStrokeCount;
+    total = safeSum(leftStrokeCount, rightStrokeCount);
     resolvedMode = 'stroke';
     inputSnapshot.leftStrokeCount = leftStrokeCount;
     inputSnapshot.rightStrokeCount = rightStrokeCount;
@@ -768,7 +767,7 @@ function castByTextSplit(input: MeihuaInput, date: WallClockDateTime): { upper: 
 
   const upper = getTrigramByNumber(upperNumber);
   const lower = getTrigramByNumber(lowerNumber);
-  const movingLine = modToRange(total + hourNumber, 6);
+  const movingLine = modToRange(safeSum(total, hourNumber), 6);
 
   return {
     upper,
@@ -809,7 +808,7 @@ function castByMeasure(input: MeihuaInput, date: WallClockDateTime): { upper: Me
   const upper = getTrigramByNumber(majorValue);
   const lower = getTrigramByNumber(minorValue);
   const hourNumber = getHourNumber(date);
-  const total = majorValue + minorValue + (kind === '尺寸' ? hourNumber : 0);
+  const total = safeSum(majorValue, minorValue, kind === '尺寸' ? hourNumber : 0);
   const movingLine = modToRange(total, 6);
 
   return {
@@ -940,7 +939,8 @@ function castByExtendedNumbers(input: MeihuaInput, method: 'number_pair' | 'numb
     }
     const upper = getTrigramByNumber(numbers[0]);
     const lower = getTrigramByNumber(numbers[1]);
-    const movingLine = modToRange(numbers[0] + numbers[1], 6);
+    const total = safeSum(numbers[0], numbers[1]);
+    const movingLine = modToRange(total, 6);
     return {
       upper,
       lower,
@@ -960,7 +960,7 @@ function castByExtendedNumbers(input: MeihuaInput, method: 'number_pair' | 'numb
           upper: upper.number,
           lower: lower.number,
           moving: movingLine,
-          total: numbers[0] + numbers[1],
+          total,
         },
       },
     };
@@ -991,7 +991,7 @@ function castByExtendedNumbers(input: MeihuaInput, method: 'number_pair' | 'numb
         upper: upper.number,
         lower: lower.number,
         moving: movingLine,
-        total: numbers[0] + numbers[1] + numbers[2],
+        total: safeSum(...numbers),
       },
     },
   };
@@ -1215,6 +1215,7 @@ export function calculateMeihua(input: MeihuaInput): MeihuaOutput {
   return {
     question,
     castMeta: cast.meta,
+    calculationOptions: { method: cast.meta.method, timezone: 'Asia/Shanghai', dayBoundary: 'zi', ruleVersion: 'meihua-2026.10' },
     ganZhiTime,
     mainHexagram,
     changedHexagram,

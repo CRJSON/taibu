@@ -6,15 +6,18 @@
 
 | 参数 | 类型 | 必填 | 默认 | 说明 |
 | --- | --- | --- | --- | --- |
-| `year` | number | 是 | — | 年 (1900-2100) |
-| `month` | number | 是 | — | 月 (1-12) |
-| `day` | number | 是 | — | 日 (1-31) |
-| `hour` | number | 是 | — | 时 (0-23) |
-| `minute` | number | 否 | `0` | 分 (0-59) |
+| `year` | integer | 是 | — | 年 (1900-2100) |
+| `month` | integer | 是 | — | 月 (1-12) |
+| `day` | integer | 是 | — | 日 (1-31) |
+| `hour` | integer | 是 | — | 时 (0-23) |
+| `minute` | integer | 否 | `0` | 分 (0-59) |
 | `timezone` | string | 否 | `"Asia/Shanghai"` | IANA 时区 |
 | `question` | string | 否 | — | 占问事项 |
-| `panType` | enum | 否 | `"zhuan"` | 盘式（zhuan=转盘）；可选值: `zhuan` |
-| `juMethod` | enum | 否 | `"chaibu"` | 定局法（chaibu=拆补，maoshan=茅山）；可选值: `chaibu` / `maoshan` |
+| `panType` | enum | 否 | `"zhuan"` | 盘式（zhuan=时家转盘，fei=洛书飞盘，八门含虚中位）；可选值: `zhuan` / `fei` |
+| `juMethod` | enum | 否 | `"chaibu"` | 定局法（chaibu=拆补，maoshan=交节后每五日一元，equal=节气区间等时三分，现代扩展）；可选值: `chaibu` / `maoshan` / `equal` |
+| `flyStarMethod` | enum | 否 | — | 飞盘九星：forward=阴阳皆顺，yin-reverse=阳顺阴逆；默认阳顺阴逆；可选值: `forward` / `yin-reverse` |
+| `juNumber` | integer | 否 | — | 手工局数，必须与 dunType 同时提供 |
+| `dunType` | enum | 否 | — | 手工阴阳遁，必须与 juNumber 同时提供；可选值: `yang` / `yin` |
 | `zhiFuJiGong` | enum | 否 | `"ji_liuyi"` | 直符寄宫方式（ji_liuyi=寄六仪，ji_wugong=寄戊宫）；可选值: `ji_liuyi` / `ji_wugong` |
 | `detailLevel` | enum | 否 | `"default"` | 输出细节级别。；可选值: `default` / `full` |
 
@@ -32,4 +35,5 @@ echo '{"year":2026,"month":3,"day":15,"hour":16,"minute":51,"timezone":"Asia/Sha
 - `驿马`
 - `十干月令旺衰`：十天干在月令中的旺衰
 - `全局格局`：全局格局列表
+- `计算规则`
 

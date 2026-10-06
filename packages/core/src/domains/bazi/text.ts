@@ -1,3 +1,4 @@
+import { withRulesText } from '../../shared/calculation-rules.js';
 import {
   normalizeDetailLevelBinary
 } from '../../shared/render-utils.js';
@@ -76,7 +77,9 @@ function buildBaziCanonicalBranchRelations(result: Pick<BaziOutput, 'fourPillars
   return relationParts;
 }
 
-export function renderBaziCanonicalText(chart: BaziOutput, options: BaziCanonicalTextOptions = {}): string {
+export const renderBaziCanonicalText = withRulesText(renderBaziCanonicalTextBase);
+
+function renderBaziCanonicalTextBase(chart: BaziOutput, options: BaziCanonicalTextOptions = {}): string {
   const detailLevel = normalizeDetailLevelBinary(options.detailLevel);
   if (detailLevel === 'full') {
     return renderBaziCanonicalFullText(chart, options);

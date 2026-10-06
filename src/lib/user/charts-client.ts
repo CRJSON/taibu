@@ -2,10 +2,11 @@ import { requestBrowserJson, type BrowserRequestInit } from '@/lib/browser-api';
 import { mutationEffects } from '@/lib/query/invalidation';
 import type { BaziOutput as CoreBaziOutput } from 'taibu-core/bazi';
 import { calculateBaziOutputFromStoredFields } from '@/lib/divination/bazi-record';
+import { resolveBirthTimeOptions, type BirthTimeResolution } from '@/lib/divination/birth-time';
 
 export type UserChartType = 'bazi' | 'ziwei';
 
-export type UserChartRecord = {
+export type UserChartRecord = BirthTimeResolution & {
   id: string;
   name: string;
   gender: 'male' | 'female' | null;
@@ -108,6 +109,7 @@ function toChartRecord(row: Record<string, unknown> | null | undefined): UserCha
     calendar_type: typeof row.calendar_type === 'string' ? row.calendar_type : null,
     is_leap_month: typeof row.is_leap_month === 'boolean' ? row.is_leap_month : null,
     created_at: row.created_at,
+    ...resolveBirthTimeOptions(row),
   };
 }
 
@@ -126,7 +128,7 @@ function normalizeUserChartBundle(bundle: RawUserChartBundle | null | undefined)
   };
 }
 
-export function toSavedBaziChart(row: Record<string, unknown> | null | undefined): SavedBaziChart | null {
+export function toSavedBaziChart(row: UserChartRecord | Record<string, unknown> | null | undefined): SavedBaziChart | null {
   if (!row || typeof row !== 'object') {
     return null;
   }
@@ -139,6 +141,8 @@ export function toSavedBaziChart(row: Record<string, unknown> | null | undefined
     longitude: row.longitude as number | string | null | undefined,
     calendar_type: row.calendar_type as string | null | undefined,
     is_leap_month: row.is_leap_month as boolean | null | undefined,
+    timezone: row.timezone,
+    disambiguation: row.disambiguation,
   });
 
   if (typeof row.id !== 'string' || typeof row.name !== 'string' || !output) {

@@ -1,3 +1,4 @@
+import { withRulesJSON } from '../../shared/calculation-rules.js';
 import type {
   AlmanacCanonicalJSON
 } from './json-types.js';
@@ -11,7 +12,8 @@ import type {
   AlmanacCanonicalTextOptions
 } from '../shared/text-options.js';
 
-export function renderAlmanacCanonicalJSON(result: AlmanacOutput, options: { detailLevel?: AlmanacCanonicalTextOptions['detailLevel']; } = {}): AlmanacCanonicalJSON {
+export const renderAlmanacCanonicalJSON = withRulesJSON(renderAlmanacCanonicalJSONBase);
+function renderAlmanacCanonicalJSONBase(result: AlmanacOutput, options: { detailLevel?: AlmanacCanonicalTextOptions['detailLevel']; } = {}): AlmanacCanonicalJSON {
   const detailLevel = normalizeDetailLevelBinary(options.detailLevel);
   const { date, dayInfo, tenGod, almanac } = result;
 
@@ -66,6 +68,7 @@ export function renderAlmanacCanonicalJSON(result: AlmanacOutput, options: { det
     if (almanac.hourlyFortune.length > 0) {
       json.时辰吉凶 = almanac.hourlyFortune.map((hour) => ({
         时辰: hour.ganZhi,
+        ...(hour.startTime && hour.endTime ? { 时间范围: `${hour.startTime}–${hour.endTime}` } : {}),
         ...(hour.tianShen ? { 天神: hour.tianShen } : {}),
         ...(hour.tianShenType ? { 天神类型: hour.tianShenType } : {}),
         ...(hour.tianShenLuck ? { 天神吉凶: hour.tianShenLuck } : {}),

@@ -11,9 +11,11 @@ export interface AlmanacInput {
   birthDay?: number;
   birthHour?: number;
   date?: string;
+  timezone?: string;
 }
 
 export interface AlmanacOutput {
+  calculationOptions?: { timezone: string; ruleVersion: string; };
   date: string;
   dayInfo: {
     stem: string;

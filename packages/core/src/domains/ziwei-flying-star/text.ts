@@ -1,3 +1,4 @@
+import { withRulesText } from '../../shared/calculation-rules.js';
 import {
   mapZiweiFlyingStarQueryType
 } from '../../shared/render-utils.js';
@@ -63,7 +64,9 @@ function formatZiweiFlyingStarResult(r: FlyingStarResult, lines: string[]): void
   }
 }
 
-export function renderZiweiFlyingStarCanonicalText(result: ZiweiFlyingStarOutput): string {
+export const renderZiweiFlyingStarCanonicalText = withRulesText(renderZiweiFlyingStarCanonicalTextBase);
+
+function renderZiweiFlyingStarCanonicalTextBase(result: ZiweiFlyingStarOutput): string {
   const lines: string[] = ['# 紫微飞星'];
 
   for (const r of result.results) {

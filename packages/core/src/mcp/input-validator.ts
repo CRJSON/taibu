@@ -1,4 +1,5 @@
 import type { ToolInputSchema, ToolSchema } from './contract.js';
+import { CoreInputError } from '../shared/validation.js';
 
 const TRANSPORT_FIELDS = new Set(['detailLevel', 'seedScope']);
 
@@ -23,6 +24,8 @@ function matchesType(value: unknown, expected: ToolSchema['type']): boolean {
       return typeof value === 'string';
     case 'number':
       return typeof value === 'number' && Number.isFinite(value);
+    case 'integer':
+      return typeof value === 'number' && Number.isSafeInteger(value);
     case 'boolean':
       return typeof value === 'boolean';
     case 'array':
@@ -70,6 +73,9 @@ function validateSchema(
   atRoot = false,
 ): void {
   if (!schema) return;
+  if (schema.not && matchesSchema(value, schema.not)) {
+    issues.push({ path, message: `${formatPath(path)} 不能同时提供互斥的参数组合` });
+  }
 
   if (schema.const !== undefined && value !== schema.const) {
     issues.push({ path, message: `${formatPath(path)} 必须为 ${String(schema.const)}` });
@@ -93,12 +99,20 @@ function validateSchema(
   }
 
   if (typeof value === 'string') {
+    if (schema.pattern && !new RegExp(schema.pattern, 'u').test(value)) {
+      issues.push({ path, message: `${formatPath(path)} 格式无效` });
+    }
     if (schema.minLength != null && value.length < schema.minLength) {
       issues.push({ path, message: `${formatPath(path)} 不能为空` });
     }
     if (schema.maxLength != null && value.length > schema.maxLength) {
       issues.push({ path, message: `${formatPath(path)} 长度不能超过 ${schema.maxLength}` });
     }
+  }
+
+  if (typeof value === 'number') {
+    if (schema.minimum != null && value < schema.minimum) issues.push({ path, message: `${formatPath(path)} 不能小于 ${schema.minimum}` });
+    if (schema.maximum != null && value > schema.maximum) issues.push({ path, message: `${formatPath(path)} 不能大于 ${schema.maximum}` });
   }
 
   if (Array.isArray(value)) {
@@ -114,6 +128,13 @@ function validateSchema(
   }
 
   if (isPlainObject(value)) {
+    if (schema.additionalProperties === false) {
+      for (const field of Object.keys(value)) {
+        if (!(field in (schema.properties ?? {})) && !(atRoot && TRANSPORT_FIELDS.has(field))) {
+          issues.push({ path: joinPath(path, field), message: `未知参数 '${joinPath(path, field)}'` });
+        }
+      }
+    }
     for (const field of schema.required || []) {
       if (atRoot && TRANSPORT_FIELDS.has(field)) continue;
       if (!(field in value) || value[field] === undefined) {
@@ -168,14 +189,17 @@ function matchesSchema(value: unknown, schema: ToolSchema): boolean {
 
 export function validateInput(args: unknown, schema: ToolInputSchema): void {
   if (!isPlainObject(args)) {
-    throw new Error('参数校验失败: 输入必须是一个对象');
+    throw new CoreInputError('', '参数校验失败: 输入必须是一个对象');
   }
 
   const issues: ValidationIssue[] = [];
+  // These fields are owned by the transport; validate their shared contract before domain validation.
+  if (args.detailLevel !== undefined) validateSchema(args.detailLevel, { type: 'string', enum: ['default', 'more', 'full'] }, 'detailLevel', issues);
+  if (args.seedScope !== undefined) validateSchema(args.seedScope, { type: 'string' }, 'seedScope', issues);
   validateSchema(args, schema, '', issues, true);
 
   if (issues.length > 0) {
     const message = issues.map((issue) => issue.message).join('；');
-    throw new Error(`参数校验失败: ${message}`);
+    throw new CoreInputError(issues[0].path, `参数校验失败: ${message}`);
   }
 }

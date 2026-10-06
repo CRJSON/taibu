@@ -1,3 +1,4 @@
+import { withRulesJSON } from '../../shared/calculation-rules.js';
 import type {
   DayunCanonicalJSON,
 } from './json-types.js';
@@ -116,12 +117,16 @@ function buildDayunItemJSON(item: {
   };
 }
 
-export function renderDayunCanonicalJSON(result: DayunOutput, options: { detailLevel?: DayunCanonicalTextOptions['detailLevel']; } = {}): DayunCanonicalJSON {
+export const renderDayunCanonicalJSON = withRulesJSON(renderDayunCanonicalJSONBase);
+
+function renderDayunCanonicalJSONBase(result: DayunOutput, options: { detailLevel?: DayunCanonicalTextOptions['detailLevel']; } = {}): DayunCanonicalJSON {
   const detailLevel = normalizeDetailLevelBinary(options.detailLevel);
   const json: DayunCanonicalJSON = {
     起运信息: {
       起运年龄: result.startAge,
       起运详情: result.startAgeDetail,
+      ...(result.startSolar ? { 起运时刻: result.startSolar, 时区: result.calculationOptions?.startSolarTimezone ?? 'Asia/Shanghai' } : {}),
+      ...(result.direction ? { 顺逆: result.direction === 'forward' ? '顺行' : '逆行' } : {}),
     },
     大运列表: result.list.map((item) => buildDayunItemJSON({
       startYear: item.startYear,

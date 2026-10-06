@@ -28,6 +28,25 @@ test('toSavedBaziChart should rebuild core output from stored bazi base fields',
   assert.equal(chart.name, '测试命盘');
 });
 
+test('chart lists preserve time options before rebuilding saved output', async (t) => {
+  const row = { id: 'dst', name: 'DST', gender: 'male', birth_date: '2024-03-10', birth_time: '02:30', calendar_type: 'solar', timezone: 'America/New_York', disambiguation: 'later', longitude: -74, created_at: '2026-10-05T00:00:00Z' };
+  const originalFetch = global.fetch;
+  global.fetch = (async () => new Response(JSON.stringify({ baziCharts: [row], ziweiCharts: [row] }), { status: 200, headers: { 'Content-Type': 'application/json' } })) as typeof global.fetch;
+  t.after(() => { global.fetch = originalFetch; });
+  const { getUserCharts, toSavedBaziChart } = await import('../lib/user/charts-client');
+  const bundle = await getUserCharts();
+  for (const item of [...bundle.baziCharts, ...bundle.ziweiCharts]) {
+    assert.equal(item.timezone, row.timezone);
+    assert.equal(item.disambiguation, 'later');
+  }
+  const raw = toSavedBaziChart(row);
+  const projected = toSavedBaziChart(bundle.baziCharts[0]);
+  assert.ok(raw);
+  assert.deepEqual(projected, raw);
+  assert.equal(raw.output.trueSolarTimeInfo?.timezone, 'America/New_York');
+  assert.equal(toSavedBaziChart({ ...row, disambiguation: 'reject' }), null);
+});
+
 test('getUserCharts should throw when chart bundle request fails', async (t) => {
   const originalFetch = global.fetch;
   const modulePath = require.resolve('../lib/user/charts-client');

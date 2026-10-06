@@ -493,8 +493,8 @@ export async function buildHistoryRestorePayload(
     }
 
     const { analyzeCompatibility } = await import('@/lib/divination/hepan');
-    const birth1 = row.person1_birth as { year: number; month: number; day: number; hour: number };
-    const birth2 = row.person2_birth as { year: number; month: number; day: number; hour: number };
+    const birth1 = row.person1_birth as Omit<import('@/lib/divination/hepan').BirthInfo, 'name'>;
+    const birth2 = row.person2_birth as Omit<import('@/lib/divination/hepan').BirthInfo, 'name'>;
     const result = analyzeCompatibility(
       { name: String(row.person1_name || ''), ...birth1 },
       { name: String(row.person2_name || ''), ...birth2 },

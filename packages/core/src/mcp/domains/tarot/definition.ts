@@ -1,4 +1,5 @@
 import type { ToolDefinition } from '../../contract.js';
+import { birthDateTogetherRule } from '../../rule-input-schemas.js';
 
 export const tarotDefinition: ToolDefinition = {
   name: 'tarot',
@@ -8,7 +9,7 @@ export const tarotDefinition: ToolDefinition = {
     properties: {
       spreadType: {
         type: 'string',
-        enum: ['single', 'three-card', 'love', 'celtic-cross', 'horseshoe', 'decision', 'mind-body-spirit', 'situation', 'yes-no'],
+        enum: ['single', 'three-card', 'love', 'celtic-cross', 'horseshoe', 'decision', 'mind-body-spirit', 'situation', 'yes-no', 'custom'],
         description: '牌阵类型（single=单牌，three-card=三牌，love=爱情，celtic-cross=凯尔特十字，horseshoe=马蹄，decision=抉择，mind-body-spirit=身心灵，situation=处境，yes-no=是否）',
         default: 'single',
       },
@@ -25,16 +26,21 @@ export const tarotDefinition: ToolDefinition = {
         type: 'string',
         description: '随机种子',
       },
+      seedScope: { type: 'string', description: '种子隔离范围' },
+      deck: { type: 'string', enum: ['all', 'major', 'minor'], default: 'all', description: '完整牌库、大阿卡纳或小阿卡纳' },
+      reversedProbability: { type: 'number', minimum: 0, maximum: 1, description: '逆位概率，默认允许逆位时为 0.5，禁用时为 0' },
+      referenceYear: { type: 'integer', minimum: 1, maximum: 9999, description: '年度牌基准年，默认当前 UTC 年份' },
+      customPositions: { type: 'array', minItems: 1, maxItems: 78, items: { type: 'string', minLength: 1 }, description: '自定义牌阵各位置名称' },
       birthYear: {
-        type: 'number',
+        type: 'integer', minimum: 1, maximum: 9999,
         description: '出生年，用于人格牌/灵魂牌/年度牌',
       },
       birthMonth: {
-        type: 'number',
+        type: 'integer', minimum: 1, maximum: 12,
         description: '出生月 (1-12)，用于人格牌/灵魂牌/年度牌',
       },
       birthDay: {
-        type: 'number',
+        type: 'integer', minimum: 1, maximum: 31,
         description: '出生日 (1-31)，用于人格牌/灵魂牌/年度牌',
       },
       detailLevel: {
@@ -45,6 +51,7 @@ export const tarotDefinition: ToolDefinition = {
       },
     },
     required: [],
+    allOf: [birthDateTogetherRule, { if: { properties: { spreadType: { const: 'custom' } }, required: ['spreadType'] }, then: { required: ['customPositions'] } }],
     examples: [
       { spreadType: 'three-card', question: '本月运势如何？' },
       { spreadType: 'love', question: '我和他的未来发展？', allowReversed: true },

@@ -1,3 +1,4 @@
+import { withRulesJSON } from '../../shared/calculation-rules.js';
 import type {
   ZiweiFlyingStarResultJSON
 } from '../shared/json-types.js';
@@ -15,7 +16,9 @@ import type {
   ZiweiFlyingStarOutput
 } from './types.js';
 
-export function renderZiweiFlyingStarCanonicalJSON(
+export const renderZiweiFlyingStarCanonicalJSON = withRulesJSON(renderZiweiFlyingStarCanonicalJSONBase);
+
+function renderZiweiFlyingStarCanonicalJSONBase(
   result: ZiweiFlyingStarOutput,
 ): ZiweiFlyingStarCanonicalJSON {
   const formatPalace = (name: string | null | undefined) => {

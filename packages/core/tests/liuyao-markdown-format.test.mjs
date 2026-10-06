@@ -66,8 +66,9 @@ const DEFAULT_SAMPLE = {
   ],
 };
 
-test('liuyao tool markdown defaults to the compact board text', () => {
-  const markdown = renderToolResult('liuyao', DEFAULT_SAMPLE, { detailLevel: 'default' }).content[0].text;
+test('liuyao tool markdown defaults to the compact board text', async () => {
+  const result = await calculateLiuyao({ method: 'select', question: DEFAULT_SAMPLE.question, hexagramName: DEFAULT_SAMPLE.hexagramName, changedHexagramName: DEFAULT_SAMPLE.changedHexagramName, yongShenTargets: ['官鬼'], date: '2024-02-10T15:00' });
+  const markdown = renderToolResult('liuyao', result, { detailLevel: 'default' }).content[0].text;
 
   assert.match(markdown, /# 六爻盘面/u);
   assert.match(markdown, /## 卦盘总览/u);

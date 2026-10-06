@@ -1,5 +1,6 @@
-import { calculateBazi, type BaziOutput as CoreBaziOutput } from 'taibu-core/bazi';
+import { calculateBazi, type BaziInput, type BaziOutput as CoreBaziOutput } from 'taibu-core/bazi';
 import { parseLongitude } from '@/lib/divination/place-resolution';
+import { parseBirthTimeString, resolveBirthTimeOptions } from '@/lib/divination/birth-time';
 
 type StoredBaziBase = {
     gender?: string | null;
@@ -9,39 +10,41 @@ type StoredBaziBase = {
     longitude?: number | string | null;
     calendar_type?: string | null;
     is_leap_month?: boolean | null;
+    timezone?: unknown;
+    disambiguation?: unknown;
 };
 
-export function calculateBaziOutputFromStoredFields(row: StoredBaziBase): CoreBaziOutput | null {
-    if (typeof row.birth_date !== 'string' || row.birth_date.trim() === '') {
-        return null;
+/** Shared birth-input reconstruction; callers decide whether a calculation error is fatal. */
+export function buildBaziInputFromStoredFields(row: StoredBaziBase): BaziInput {
+    if (typeof row.birth_date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(row.birth_date)) {
+        throw new Error('出生日期格式无效');
     }
-
     const [birthYear, birthMonth, birthDay] = row.birth_date.split('-').map(Number);
-    if (!Number.isFinite(birthYear) || !Number.isFinite(birthMonth) || !Number.isFinite(birthDay)) {
-        return null;
-    }
+    const birthTime = row.birth_time == null || row.birth_time === '' ? '12:00' : row.birth_time;
+    const time = parseBirthTimeString(birthTime);
+    if (!time) throw new Error('出生时辰格式无效');
+    if (row.gender != null && row.gender !== 'male' && row.gender !== 'female') throw new Error('性别无效');
+    if (row.calendar_type != null && row.calendar_type !== 'lunar' && row.calendar_type !== 'solar') throw new Error('历法无效');
+    const longitude = parseLongitude(row.longitude);
+    if (row.longitude != null && longitude === undefined) throw new Error('经度无效');
+    return {
+        gender: row.gender === 'female' ? 'female' : 'male',
+        birthYear,
+        birthMonth,
+        birthDay,
+        birthHour: time.hour,
+        birthMinute: time.minute,
+        birthPlace: row.birth_place || undefined,
+        longitude,
+        calendarType: row.calendar_type === 'lunar' ? 'lunar' : 'solar',
+        isLeapMonth: row.is_leap_month ?? false,
+        ...resolveBirthTimeOptions(row),
+    };
+}
 
-    const birthTime = typeof row.birth_time === 'string' && row.birth_time.trim() !== ''
-        ? row.birth_time
-        : '12:00';
-    const [birthHour, birthMinute] = birthTime.split(':').map(Number);
-    if (!Number.isFinite(birthHour) || !Number.isFinite(birthMinute)) {
-        return null;
-    }
-
+export function calculateBaziOutputFromStoredFields(row: StoredBaziBase): CoreBaziOutput | null {
     try {
-        return calculateBazi({
-            gender: row.gender === 'female' ? 'female' : 'male',
-            birthYear,
-            birthMonth,
-            birthDay,
-            birthHour,
-            birthMinute,
-            birthPlace: row.birth_place || undefined,
-            longitude: parseLongitude(row.longitude),
-            calendarType: row.calendar_type === 'lunar' ? 'lunar' : 'solar',
-            isLeapMonth: row.is_leap_month ?? false,
-        });
+        return calculateBazi(buildBaziInputFromStoredFields(row));
     } catch {
         return null;
     }

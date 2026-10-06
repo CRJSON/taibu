@@ -13,6 +13,8 @@ import type {
   XiaoliurenStatus,
   XiaoliurenStatusInfo,
 } from './types.js';
+import { Solar } from 'lunar-javascript';
+import { CoreInputError, assertInteger, parseCivilDate, resolveEnum } from '../../shared/validation.js';
 
 export type { XiaoliurenInput, XiaoliurenOutput, XiaoliurenStatus, XiaoliurenStatusInfo } from './types.js';
 
@@ -80,21 +82,31 @@ function hourToShichen(hour: number): number {
  * 小六壬排盘主函数
  */
 export function calculateXiaoliurenData(input: XiaoliurenInput): XiaoliurenOutput {
-  const { lunarMonth, lunarDay, question } = input;
-  let { hour } = input;
-
-  // 如果传入的是 24 小时制（0 或 13-23），转为时辰序号（1-12）
-  // 1-12 视为时辰序号直接使用
-  if (hour === 0 || hour > 12) {
-    hour = hourToShichen(hour);
+  const { question } = input;
+  let { lunarMonth, lunarDay } = input;
+  let isLeapMonth = input.isLeapMonth ?? false;
+  if (typeof isLeapMonth !== 'boolean') throw new CoreInputError('isLeapMonth', '必须为布尔值');
+  if (input.date !== undefined) {
+    if (lunarMonth !== undefined || lunarDay !== undefined || input.isLeapMonth !== undefined) {
+      throw new CoreInputError('date', '公历日期与手工农历输入不能同时提供');
+    }
+    const civil = parseCivilDate(input.date);
+    const lunar = Solar.fromYmd(civil.year, civil.month, civil.day).getLunar();
+    lunarMonth = Math.abs(lunar.getMonth());
+    lunarDay = lunar.getDay();
+    isLeapMonth = lunar.getMonth() < 0;
   }
-  // 确保时辰在 1-12 范围
-  if (hour < 1 || hour > 12) {
-    hour = ((hour - 1) % 12 + 12) % 12 + 1;
-  }
+  assertInteger(lunarMonth, 'lunarMonth', 1, 12);
+  assertInteger(lunarDay, 'lunarDay', 1, 30);
+  const hourType = resolveEnum(input.hourType, ['clock', 'shichen', 'legacy'], input.date === undefined ? 'legacy' : 'clock', 'hourType');
+  assertInteger(input.hour, 'hour', hourType === 'shichen' ? 1 : 0, hourType === 'shichen' ? 12 : 23);
+  const useClock = hourType === 'clock' || (hourType === 'legacy' && (input.hour === 0 || input.hour > 12));
+  const hour = useClock ? hourToShichen(input.hour) : input.hour;
+  const leapMonthStrategy = resolveEnum(input.leapMonthStrategy, ['repeat', 'advance'], 'repeat', 'leapMonthStrategy');
+  const countedMonth = lunarMonth + (isLeapMonth && leapMonthStrategy === 'advance' ? 1 : 0);
 
   // 1. 月上起大安：从大安开始数到第 lunarMonth 个位置
-  const monthIdx = (lunarMonth - 1) % 6;
+  const monthIdx = (countedMonth - 1) % 6;
   const monthStatus = STATUS_ORDER[monthIdx];
 
   // 2. 从月上落位起，顺数到农历日
@@ -114,6 +126,7 @@ export function calculateXiaoliurenData(input: XiaoliurenInput): XiaoliurenOutpu
 
   return {
     monthStatus,
+    calculationOptions: { hourType, leapMonthStrategy, ruleVersion: 'xiaoliuren-2026.10' },
     dayStatus,
     hourStatus,
     result,
@@ -122,6 +135,11 @@ export function calculateXiaoliurenData(input: XiaoliurenInput): XiaoliurenOutpu
       lunarDay,
       hour,
       shichen: `${shichen}时`,
+      date: input.date,
+      isLeapMonth,
+      leapMonthStrategy,
+      hourType,
+      ...(useClock ? { clockHour: input.hour } : {}),
     },
     question,
   };

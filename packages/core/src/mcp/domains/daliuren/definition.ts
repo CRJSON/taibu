@@ -7,12 +7,16 @@ export const daliurenDefinition: ToolDefinition = {
     type: 'object',
     properties: {
       date: { type: 'string', description: '公历日期 (YYYY-MM-DD)' },
-      hour: { type: 'number', description: '小时 (0-23)' },
-      minute: { type: 'number', description: '分钟 (0-59)', default: 0 },
+      hour: { type: 'integer', minimum: 0, maximum: 23, description: '小时 (0-23)' },
+      minute: { type: 'integer', minimum: 0, maximum: 59, description: '分钟 (0-59)', default: 0 },
       timezone: { type: 'string', description: 'IANA 时区', default: 'Asia/Shanghai' },
       question: { type: 'string', description: '占事' },
-      birthYear: { type: 'number', description: '出生年，用于本命/行年' },
+      birthYear: { type: 'integer', minimum: 1, maximum: 9999, description: '出生年，用于本命/行年' },
       gender: { type: 'string', enum: ['male', 'female'], description: '性别，用于行年' },
+      monthGeneral: { type: 'string', enum: Array.from('子丑寅卯辰巳午未申酉戌亥'), description: '手工月将；省略时按中气交接的实际时刻' },
+      dayNight: { type: 'string', enum: ['shichen', 'day', 'night', 'sunrise'], default: 'shichen', description: '卯至申为昼，或强制昼夜，或按太阳高度选择贵人盘' },
+      latitude: { type: 'number', minimum: -90, maximum: 90 },
+      longitude: { type: 'number', minimum: -180, maximum: 180 },
       detailLevel: {
         type: 'string',
         enum: ['default', 'full'],
@@ -21,6 +25,11 @@ export const daliurenDefinition: ToolDefinition = {
       },
     },
     required: ['date', 'hour'],
+    allOf: [
+      { if: { required: ['birthYear'] }, then: { required: ['gender'] } },
+      { if: { required: ['gender'] }, then: { required: ['birthYear'] } },
+      { if: { properties: { dayNight: { const: 'sunrise' } }, required: ['dayNight'] }, then: { required: ['latitude', 'longitude'] } },
+    ],
     examples: [
       { date: '2026-03-15', hour: 16, minute: 53, timezone: 'Asia/Shanghai', question: '今日运势如何' },
       { date: '2026-03-15', hour: 16, timezone: 'Asia/Shanghai', birthYear: 1990, gender: 'male' },

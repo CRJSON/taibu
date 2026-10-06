@@ -23,6 +23,10 @@ node --test scripts/tests/selfhost-schema.test.mjs
 
 启动器必须用 manifest、SQL、后续 migration 内容的组合指纹校验复用卷，指纹不一致时拒绝启动，不能重放初始化。`public` schema comment 为 `taibu-selfhost-v1:<manifest.sourceFingerprint>`，只作基线标识；它不能替代启动器的全阶段状态与内容指纹。旧数据升级/回填不在本方案范围内。
 
+## 命盘时间规则迁移
+
+`20261005_110000_chart_time_resolution.sql` 为既有八字／紫微表增加 `timezone` 与 `disambiguation`，保存 IANA 时区和 DST 解析规则。旧行保持默认 `Asia/Shanghai`／`reject`，不重算历史结果。已有数据库须先应用增量迁移，再部署新 Web/API；禁止重放空库基线。
+
 ## 来源与本地安全差异
 
 - `tabel_export_from_supabase.sql` 只作为列/类型/主键/外键清单。生成器显式将 `ARRAY` 占位改为 `text[]`、`USER-DEFINED` 改为 `extensions.vector`，将 inline `NOT VALID` CHECK 改为在空表上有效的 CHECK；先建表，再添加外键。
