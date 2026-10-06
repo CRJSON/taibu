@@ -9,6 +9,7 @@ import type {
   ZiweiCanonicalTextOptions
 } from '../shared/text-options.js';
 
+// 宫名统一为对外的「交友」：iztro 原名为「仆役」，进入本包输出前已由 normalizePalaceName 归一
 const ZIWEI_PALACE_TEXT_ORDER = ['命宫', '兄弟', '夫妻', '子女', '财帛', '疾厄', '迁移', '交友', '官禄', '田宅', '福德', '父母'];
 
 function formatStarLabel(star: { name: string; brightness?: string; mutagen?: string; selfMutagen?: string; oppositeMutagen?: string; }): string {

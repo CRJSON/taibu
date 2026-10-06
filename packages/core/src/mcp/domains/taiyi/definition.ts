@@ -9,25 +9,25 @@ export const taiyiDefinition: ToolDefinition = {
       mode: {
         type: 'string',
         enum: ['year', 'month', 'day', 'hour', 'minute'],
-        description: '观测尺度（year=年，month=月，day=日，hour=时，minute=分钟）',
+        description: '观测尺度（year=年盘，month=月盘，day=日盘，hour=时盘，minute=在时盘基础上按 10 分钟细化）',
       },
       date: {
         type: 'string',
-        description: '观测日期 (YYYY-MM-DD)',
+        description: '观测日期（公历 YYYY-MM-DD）',
       },
       hour: {
         type: 'number',
-        description: '小时 (0-23)',
+        description: '小时（0-23；mode 为 hour 或 minute 时必填）',
         default: 12,
       },
       minute: {
         type: 'number',
-        description: '分钟 (0-59)',
+        description: '分钟（0-59；mode=minute 时必填）',
         default: 0,
       },
       timezone: {
         type: 'string',
-        description: 'IANA 时区',
+        description: 'IANA 时区名（如 Asia/Shanghai）',
         default: 'Asia/Shanghai',
       },
       question: {
@@ -37,7 +37,7 @@ export const taiyiDefinition: ToolDefinition = {
       detailLevel: {
         type: 'string',
         enum: ['default', 'full'],
-        description: '输出细节级别。',
+        description: '输出详略（本工具各档输出相同）',
         default: 'default',
       },
     },

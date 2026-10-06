@@ -8,12 +8,12 @@ export const xiaoliurenDefinition: ToolDefinition = {
     properties: {
       lunarMonth: { type: 'number', description: '农历月（1-12）' },
       lunarDay: { type: 'number', description: '农历日（1-30）' },
-      hour: { type: 'number', description: '时辰序号（子=1, 丑=2, ..., 亥=12）或0-23的小时数' },
+      hour: { type: 'number', description: '时辰：1-12 为时辰序号（子=1，丑=2…亥=12）；0 或 13-23 按 24 小时制钟点折算' },
       question: { type: 'string', description: '占问事项' },
       detailLevel: {
         type: 'string',
         enum: ['default', 'full'],
-        description: '输出细节级别。',
+        description: '输出详略（default=起课结果；full=追加释义与诗诀）',
         default: 'default',
       },
     },

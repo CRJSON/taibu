@@ -9,27 +9,27 @@ export const almanacDefinition: ToolDefinition = {
       dayMaster: {
         type: 'string',
         enum: ['甲', '乙', '丙', '丁', '戊', '己', '庚', '辛', '壬', '癸'],
-        description: '日主天干',
+        description: '日主天干（用于计算当日日干对日主的十神；优先于出生信息）',
       },
       birthYear: {
         type: 'number',
-        description: '出生年，用于推导日主',
+        description: '出生年（未提供 dayMaster 时，由出生年月日推算日主）',
       },
       birthMonth: {
         type: 'number',
-        description: '出生月，用于推导日主',
+        description: '出生月（1-12；用于推算日主）',
       },
       birthDay: {
         type: 'number',
-        description: '出生日，用于推导日主',
+        description: '出生日（1-31；用于推算日主）',
       },
       birthHour: {
         type: 'number',
-        description: '出生时，用于推导日主',
+        description: '出生时（0-23；用于推算日主，省略时按 12 时计）',
       },
       date: {
         type: 'string',
-        description: '目标日期 (YYYY-MM-DD，省略时取当前日期)',
+        description: '查询日期（公历 YYYY-MM-DD；省略时取当前日期）',
       },
     },
     required: [],

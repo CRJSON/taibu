@@ -4,7 +4,7 @@
 
 import type { HoroscopePeriodInfo, TransitStarEntry, YearlyDecStarInfo, ZiweiHoroscopeInput, ZiweiHoroscopeOutput } from './types.js';
 import type { DiZhi } from '../shared/types.js';
-import { createAstrolabeWithTrueSolar, DI_ZHI, LUCUN_TABLE } from '../ziwei/shared.js';
+import { createAstrolabeWithTrueSolar, DI_ZHI, LUCUN_TABLE, normalizePalaceName } from '../ziwei/shared.js';
 
 export type { ZiweiHoroscopeInput, ZiweiHoroscopeOutput } from './types.js';
 
@@ -142,10 +142,10 @@ function mapPeriod(item: {
 }): HoroscopePeriodInfo {
   return {
     index: item.index ?? 0,
-    name: item.name ?? '',
+    name: normalizePalaceName(item.name ?? ''),
     heavenlyStem: item.heavenlyStem ?? '',
     earthlyBranch: item.earthlyBranch ?? '',
-    palaceNames: item.palaceNames ?? [],
+    palaceNames: (item.palaceNames ?? []).map(normalizePalaceName),
     mutagen: item.mutagen ?? [],
     ...(typeof item.startAge === 'number' ? { startAge: item.startAge } : {}),
     ...(typeof item.endAge === 'number' ? { endAge: item.endAge } : {}),
@@ -174,7 +174,7 @@ export function calculateZiweiHoroscopeDataWithAstrolabe(
   const flowYearStem = horoscope.yearly?.heavenlyStem ?? '';
   const flowYearBranch = horoscope.yearly?.earthlyBranch ?? '';
   const palaceList = astrolabe.palaces.map(p => ({
-    name: p.name,
+    name: normalizePalaceName(p.name),
     earthlyBranch: p.earthlyBranch,
   }));
   const transitStars = (flowYearStem && flowYearBranch)

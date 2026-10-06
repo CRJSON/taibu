@@ -4,7 +4,7 @@
 
 import type { MutagenSummaryItem, ZiweiInput, ZiweiOutput } from './types.js';
 import type { DecadalInfo, DiZhi, PalaceInfo, ScholarStarEntry, SmallLimitEntry, StarInfo } from '../shared/types.js';
-import { computeDouJun, computeLiuNianAges, createAstrolabeWithTrueSolar, DI_ZHI, hourToTimeIndex, LUCUN_TABLE, mapStar, MUTAGEN_NAMES, STEM_MUTAGEN_TABLE, type MutagenName } from '../ziwei/shared.js';
+import { computeDouJun, computeLiuNianAges, createAstrolabeWithTrueSolar, DI_ZHI, hourToTimeIndex, LUCUN_TABLE, mapStar, MUTAGEN_NAMES, normalizePalaceName, STEM_MUTAGEN_TABLE, type MutagenName } from '../ziwei/shared.js';
 export { calculateZiweiHoroscopeData, calculateZiweiHoroscopeDataWithAstrolabe } from '../ziwei-horoscope/calculate.js';
 export { createAstrolabeWithTrueSolar } from '../ziwei/shared.js';
 export type { ZiweiInput, ZiweiOutput } from './types.js';
@@ -144,7 +144,7 @@ export function calculateZiweiDecadalListWithAstrolabe(
       heavenlyStem: decadal?.heavenlyStem ?? rawPalace.heavenlyStem,
       palace: {
         earthlyBranch: decadal?.earthlyBranch ?? rawPalace.earthlyBranch,
-        name: rawPalace.name,
+        name: normalizePalaceName(rawPalace.name),
       },
     };
   }).sort((a: DecadalInfo, b: DecadalInfo) => a.startAge - b.startAge);
@@ -165,13 +165,13 @@ function buildZiweiOutput(
         mutagenSummary.push({
           mutagen: star.mutagen as MutagenName,
           starName: star.name,
-          palaceName: palace.name,
+          palaceName: normalizePalaceName(palace.name),
         });
       }
     }
 
     return {
-      name: palace.name,
+      name: normalizePalaceName(palace.name),
       heavenlyStem: palace.heavenlyStem,
       earthlyBranch: palace.earthlyBranch,
       isBodyPalace: palace.isBodyPalace,
