@@ -9,13 +9,14 @@
  *   const { run } = await import('file:///absolute/repo/scripts/tests/p5-browser-fixture.mjs');
  *   return run(page, '/tmp/taibu-p5-browser/fixture.js');
  *
- * Actual components: SettingsCenterHost/GeneralSettingsPanel, AIModelPanel and its
- * controlled views, AnnouncementManagementPanel, ConversationListProvider,
- * Query and ChatStreamManager.
- * Actual root ClientProviders handles focus/session events against synthetic auth I/O.
+ * Actual components: SettingsCenterHost/GeneralSettingsPanel/ChartsPanel, AIModelPanel,
+ * AnnouncementManagementPanel, ConversationListProvider, ChartPickerModal,
+ * useSelectedBaziChart, useComposerState, HistoryDrawer/HistoryPageTemplate and RecordsPage.
+ * Actual root ClientProviders owns the shared Query client and handles synthetic auth I/O.
  * Fixture-only boundaries: auth I/O/profile/feature flags, unrelated lazy panels,
- * navigation shell, model runner and HTTP responses. No Next router, Supabase,
- * Auth, PostgREST, paid model or CSS/layout acceptance is claimed.
+ * framework navigation, viewport notifications, held fetch/JSON completion and HTTP responses.
+ * Unused Node-only random-calculation crypto fails closed; real Bazi projections are bundled.
+ * No Next router, Supabase, Auth, PostgREST, paid model or CSS/layout acceptance is claimed.
  * No .env loading, listening socket, server process or unhandled network access.
  */
 import assert from 'node:assert/strict';
@@ -39,6 +40,60 @@ import { AIModelPanel } from '@/components/admin/AIModelPanel';
 import { AnnouncementManagementPanel } from '@/components/admin/AnnouncementManagementPanel';
 import { ConversationListProvider, useConversationList } from '@/lib/chat/ConversationListContext';
 import { ChatStreamManager } from '@/lib/chat/chat-stream-manager';
+import { ChartPickerModal } from '@/components/common/ChartPickerModal';
+import { useComposerState } from '@/components/chat/composer/useComposerState';
+import { HistoryDrawer } from '@/components/layout/HistoryDrawer';
+import { HistoryPageTemplate } from '@/components/history/HistoryPageTemplate';
+import RecordsPage from '@/app/records/page';
+import * as chartClient from '@/lib/user/charts-client';
+import { useSelectedBaziChart } from '@/lib/hooks/useUserCharts';
+import { TimeInputModal } from '@/components/bazi/form/TimeInputModal';
+import { calculateZiweiChartBundle, getHoroscope } from '@/lib/divination/ziwei';
+function BirthRulesProbe() {
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState({ name: 'Birth rules', gender: 'male', calendarType: 'solar', birthYear: 2024, birthMonth: 3, birthDay: 10, birthHour: 2, birthMinute: 30, timezone: 'Asia/Shanghai', disambiguation: 'reject' });
+  const [result, setResult] = useState(null);
+  window.fixture.birthForm = form;
+  window.fixture.birthResult = result;
+  return <section data-testid="birth-rules">
+    <button onClick={() => setOpen(true)}>Open birth time rules</button>
+    <button onClick={() => {
+      try {
+        const { output, astrolabe } = calculateZiweiChartBundle(form);
+        setResult({ options: output.calculationOptions, day: getHoroscope(output, astrolabe, new Date('2024-06-01T02:00:00Z'))?.daily.period });
+      } catch (error) { setResult({ error: error.message }); }
+    }}>Calculate actual Ziwei</button>
+    <TimeInputModal isOpen={open} onClose={() => setOpen(false)} formData={form} unknownTime={false} allowUnknownTime={false}
+      onToggleUnknownTime={() => {}} onUpdate={(field, value) => setForm(previous => ({ ...previous, [field]: value }))} />
+  </section>;
+}
+import { queryKeys } from '@/lib/query/keys';
+import { deleteHistorySummary } from '@/lib/history/client';
+import { removeKnowledgeBaseArchive } from '@/lib/knowledge-base/browser-client';
+const sourceTypes = ['bazi_chart'];
+const empty = [];
+function ComposerProbe() {
+  const { user } = useSessionSafe();
+  const state = useComposerState({ userId: user?.id, isLoading: true, membershipType: 'pro',
+    enabledDataSourceTypes: sourceTypes, mentions: empty, contextMessages: empty, promptKnowledgeBases: empty });
+  window.fixture.composer = state;
+  return <section data-testid="composer">
+    <output data-testid="composer-loading">{String(state.mentionLoading)}</output>
+    <ul data-testid="composer-sources">{state.mentionDataSources.map(item => <li key={item.id}>{item.name}</li>)}</ul>
+    <ul data-testid="composer-knowledge">{state.mentionKnowledgeBases.map(item => <li key={item.id}>{item.name}</li>)}</ul>
+    <output data-testid="composer-error">{state.mentionLoadError}</output>
+  </section>;
+}
+function SelectedChartProbe() {
+  const { user } = useSessionSafe();
+  const selected = useSelectedBaziChart(user?.id);
+  window.fixture.selectedChart = selected;
+  return <output data-testid="selected-chart">{selected.chart?.name ?? ''}</output>;
+}
+const historyConfig = { sourceType: 'tarot', title: 'Fixture actual history',
+  renderCard: (item, actions) => <article data-history-id={item.id}>
+    <span>{item.title}</span><button onClick={actions.onDelete}>Delete history {item.id}</button>
+  </article> };
 let client;
 const manager = new ChatStreamManager();
 const invalidations = [];
@@ -59,6 +114,18 @@ function Shell() {
   const [route, setRoute] = useState('/chat');
   const [stream, setStream] = useState(null);
   const [operation, setOperation] = useState('');
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [composerMounted, setComposerMounted] = useState(false);
+  const [historyMounted, setHistoryMounted] = useState(false);
+  const [drawerMounted, setDrawerMounted] = useState(false);
+  const [recordsMounted, setRecordsMounted] = useState(false);
+  const [selectedMounted, setSelectedMounted] = useState(false);
+  window.fixture.mount = { composer: setComposerMounted, history: setHistoryMounted, drawer: setDrawerMounted,
+    records: setRecordsMounted, picker: setPickerOpen, selected: setSelectedMounted };
+  window.fixture.chartKey = queryKeys.userCharts;
+  window.fixture.chartClient = chartClient;
+  window.fixture.deleteHistory = deleteHistorySummary;
+  window.fixture.archiveChanged = () => removeKnowledgeBaseArchive('fixture-archive');
   window.fixture.list = () => list.conversationsRef.current;
   window.fixture.context = list;
   useEffect(() => manager.subscribe(event => {
@@ -110,6 +177,14 @@ function Shell() {
     <output data-testid="stream">{stream ? stream.status + ':' + stream.content : 'idle'}</output>
     {route === '/models' && <section data-testid="models"><AIModelPanel /></section>}
     {route === '/announcements' && <section data-testid="announcements"><AnnouncementManagementPanel /></section>}
+    {composerMounted && <ComposerProbe />}
+    {selectedMounted && <SelectedChartProbe />}
+    {historyMounted && <section data-testid="history-page"><HistoryPageTemplate {...historyConfig} /></section>}
+    {drawerMounted && <section data-testid="history-drawer"><HistoryDrawer type="tarot" /></section>}
+    {recordsMounted && <section data-testid="records"><RecordsPage /></section>}
+    <section data-testid="chart-picker"><ChartPickerModal isOpen={pickerOpen} userId={user?.id ?? ''}
+      onClose={() => setPickerOpen(false)} onSelect={chart => { window.fixture.pickedChart = chart; }} /></section>
+    <BirthRulesProbe />
     <SettingsCenterHost />
   </>;
 }
@@ -132,10 +207,28 @@ export async function build(outputDirectory) {
       plugin.onResolve({ filter: /^@\/lib\/auth$/ }, args => ({ path: args.path, namespace: 'fixture' }));
       plugin.onResolve({ filter: /^@\/components\/providers\/(ChatTaskToastBridge|AnnouncementPopupHost)$/ }, args => ({ path: args.path, namespace: 'fixture' }));
       plugin.onResolve({ filter: /^@\/lib\/hooks\/(useFeatureToggles|useCurrentUserProfile)$/ }, args => ({ path: args.path, namespace: 'fixture' }));
-      plugin.onResolve({ filter: /^@\/components\/settings\/panels\// }, args => /\/(GeneralSettingsPanel|AISettingsPanel)$/.test(args.path) ? null : ({ path: args.path, namespace: 'fixture' }));
+      plugin.onResolve({ filter: /^@\/components\/settings\/panels\// }, args => /\/(GeneralSettingsPanel|AISettingsPanel|ChartsPanel)$/.test(args.path) ? null : ({ path: args.path, namespace: 'fixture' }));
+      plugin.onResolve({ filter: /^(?:node:)?crypto$/ }, args => ({ path: args.path, namespace: 'fixture' }));
+      plugin.onResolve({ filter: /^next\/(navigation|link)$/ }, args => ({ path: args.path, namespace: 'fixture' }));
       plugin.onResolve({ filter: /^@\/components\/settings\/AccountAdminPanels$/ }, args => ({ path: args.path, namespace: 'fixture' }));
       plugin.onLoad({ filter: /.*/, namespace: 'fixture' }, args => {
         let contents = 'export default function UnexercisedPanel() { return null; }';
+        // Core's unrelated tarot/liuyao random calculators import Node crypto via barrels.
+        // Fail closed if acceptance accidentally exercises them; do not fake calculations.
+        if (/^(?:node:)?crypto$/.test(args.path)) contents = `export default { createHash() { throw new Error('Node crypto is outside browser fixture scope'); } };`;
+        if (args.path === 'next/navigation') contents = `
+          const navigate = url => { history.pushState(null, '', url); window.dispatchEvent(new PopStateEvent('popstate')); };
+          const router = { push: navigate, replace: url => history.replaceState(null, '', url), back: () => history.back(), prefetch() {} };
+          export const useRouter = () => router;
+          export const usePathname = () => location.pathname;
+          export const useSearchParams = () => new URLSearchParams(location.search);
+        `;
+        if (args.path === 'next/link') contents = `
+          import React from 'react';
+          export default function Link({ href, children, prefetch, replace, scroll, ...props }) {
+            return <a {...props} href={typeof href === 'string' ? href : href.pathname}>{children}</a>;
+          }
+        `;
         if (args.path === '@/lib/auth') contents = `
           const listeners = new Set();
           const session = () => window.fixtureAuth.cookieUser ? { user: { id: window.fixtureAuth.cookieUser, email: window.fixtureAuth.cookieUser + '@fixture.invalid' } } : null;
@@ -183,6 +276,50 @@ export async function run(existingPage, bundlePath) {
   const page = await context.newPage();
   // Route fulfillment remains available offline; any missed route cannot reach a socket.
   await context.setOffline(true);
+  await context.addInitScript(() => {
+    // Keep actual fetch/Response behavior; only hold JSON completion when a test asks.
+    const nativeFetch = window.fetch.bind(window);
+    window.fixtureNetwork = { next: 0, requests: {}, jsonGate: null };
+    window.fetch = async (input, init) => {
+      const network = window.fixtureNetwork;
+      const id = String(++network.next);
+      const headers = new Headers(init?.headers || (input instanceof Request ? input.headers : undefined));
+      headers.set('x-fixture-request-id', id);
+      const state = network.requests[id] = { phase: 'fetch', url: String(input) };
+      try {
+        const response = await nativeFetch(input, { ...init, headers });
+        state.phase = 'headers';
+        const json = response.json.bind(response);
+        response.json = async () => {
+          try {
+            const value = await json();
+            const gate = network.jsonGate;
+            if (gate && new URL(response.url).pathname === gate.pathname && !gate.intercepted) {
+              gate.intercepted = true;
+              await new Promise(done => { gate.release = done; });
+            }
+            state.phase = 'done';
+            return value;
+          } catch (error) { state.phase = 'failed'; throw error; }
+        };
+        return response;
+      } catch (error) { state.phase = 'failed'; throw error; }
+    };
+    // Explicit viewport notifications drive the real pagination observer callbacks.
+    const observers = new Set();
+    window.IntersectionObserver = class {
+      constructor(callback) { this.callback = callback; this.targets = new Set(); observers.add(this); }
+      observe(target) { this.targets.add(target); }
+      unobserve(target) { this.targets.delete(target); }
+      disconnect() { this.targets.clear(); observers.delete(this); }
+      takeRecords() { return []; }
+    };
+    window.fixtureIntersect = selector => {
+      for (const observer of observers) for (const target of observer.targets) {
+        if (target.closest(selector)) observer.callback([{ target, isIntersecting: true }], observer);
+      }
+    };
+  });
   const bundle = await readFile(bundlePath, 'utf8');
   const requests = [];
   const blocked = [];
@@ -191,6 +328,7 @@ export async function run(existingPage, bundlePath) {
   const checks = [];
   const controls = [];
   let holdSettingsReads = false;
+  const holdReads = new Set();
   const holdNext = (pathname, method, fail = false) => {
     const control = { pathname, method, fail, release: null, intercepted: false };
     controls.push(control);
@@ -220,6 +358,20 @@ export async function run(existingPage, bundlePath) {
   });
   const settings = { notificationsEnabled: true, language: 'zh', expressionStyle: 'direct', customInstructions: '', chartPromptDetailLevel: 'default', userProfile: null, promptKbIds: [], notifyEmail: true, notifySite: true, defaultBaziChartId: null, defaultZiweiChartId: null };
   const settingsByUser = { alice: { ...settings }, bob: { ...settings, customInstructions: 'Bob preferences', notificationsEnabled: false } };
+  const chart = (id, name) => ({ id, name, gender: 'male', birth_date: '1990-01-01', birth_time: '12:00',
+    birth_place: 'Beijing', longitude: 116.4, calendar_type: 'solar', is_leap_month: false, created_at: '2026-01-01T00:00:00Z' });
+  const charts = { alice: { baziCharts: [chart('chart-alice', 'Alice confirmed chart')], ziweiCharts: [], defaultChartIds: { bazi: 'chart-alice', ziwei: null } },
+    bob: { baziCharts: [chart('chart-bob', 'Bob only chart')], ziweiCharts: [], defaultChartIds: { bazi: 'chart-bob', ziwei: null } } };
+  const source = (id, name) => ({ id, name, type: 'bazi_chart', createdAt: '2026-01-01T00:00:00Z', preview: name });
+  const sources = { alice: [source('source-a', 'Alice source A')], bob: [source('source-bob', 'Bob only source')] };
+  const staleSources = structuredClone(sources);
+  const knowledge = { alice: [{ id: 'kb-alice', name: 'Alice knowledge', description: '' }], bob: [{ id: 'kb-bob', name: 'Bob knowledge', description: '' }] };
+  const histories = Object.fromEntries(['alice', 'bob'].map(user => [user, Array.from({ length: user === 'alice' ? 14 : 2 }, (_, index) => ({
+    id: user + '-history-' + (index + 1), title: user + ' history ' + (index + 1), type: 'tarot', createdAt: '2026-01-01T00:00:00Z',
+  }))]));
+  const record = (id, title, category) => ({ id, title, category, user_id: 'alice', content: title, tags: [], event_date: null,
+    related_chart_type: null, related_chart_id: null, is_pinned: false, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' });
+  const records = [record('record-general', 'General saved record', 'general'), record('record-event', 'Event saved record', 'event')];
   await context.route('**/*', async route => {
     const request = route.request();
     const url = new URL(request.url());
@@ -231,10 +383,13 @@ export async function run(existingPage, bundlePath) {
     const body = request.postDataJSON();
     requests.push({ method, pathname: url.pathname, search: url.search, body, expectedUserId: request.headers()['x-expected-user-id'] });
     if (holdSettingsReads && url.pathname === '/api/user/settings' && method === 'GET') holdNext(url.pathname, method);
+    if (holdReads.has(url.pathname) && method === 'GET' && !controls.some(item => !item.intercepted && item.pathname === url.pathname && item.method === method)) holdNext(url.pathname, method);
     const control = controls.find(item => !item.intercepted && item.pathname === url.pathname && item.method === method);
+    if (control) control.requestId = request.headers()['x-fixture-request-id'];
     const wait = control ? new Promise(done => { control.release = done; control.intercepted = true; }) : Promise.resolve();
-    const ok = async data => {
-      const payload = JSON.stringify({ data: control?.snapshot ?? data, error: null });
+    const ok = async (data, raw = false) => {
+      const value = control?.snapshot ?? data;
+      const payload = JSON.stringify(raw ? value : { data: value, error: null });
       await wait;
       if (control?.fail) return denied();
       return route.fulfill({ status: 200, contentType: 'application/json', body: payload }).catch(() => {});
@@ -253,6 +408,64 @@ export async function run(existingPage, bundlePath) {
       }
     }
     if (url.pathname === '/api/reminders') return ok({ subscriptions: ['solar_term', 'fortune', 'key_date'].map(reminderType => ({ reminderType, enabled: false, notifySite: true, notifyEmail: false })) });
+    if (url.pathname === '/api/user/charts' || /^\/api\/(bazi|ziwei)\/charts(?:\/update)?$/.test(url.pathname)) {
+      const user = await page.evaluate(() => window.fixtureAuth.cookieUser);
+      const owned = charts[user];
+      if (!owned) return route.fulfill({ status: 401, json: { error: { message: 'Login required' } } });
+      if (request.headers()['x-expected-user-id'] && request.headers()['x-expected-user-id'] !== user) {
+        return route.fulfill({ status: 409, json: { error: { message: 'Account changed' } } });
+      }
+      const type = url.pathname.includes('/ziwei/') ? 'ziwei' : body?.type || url.searchParams.get('type') || 'bazi';
+      const listKey = type + 'Charts';
+      if (method === 'GET') return ok(url.pathname === '/api/user/charts' ? owned : { chart: owned[listKey].find(item => item.id === url.searchParams.get('id')) ?? null }, true);
+      if (method === 'PATCH') {
+        if (!control?.fail) owned.defaultChartIds[type] = body.id;
+        return ok({ defaultChartIds: owned.defaultChartIds }, true);
+      }
+      if (method === 'DELETE') {
+        const id = url.searchParams.get('id');
+        if (!control?.fail) {
+          owned[listKey] = owned[listKey].filter(item => item.id !== id);
+          if (owned.defaultChartIds[type] === id) owned.defaultChartIds[type] = null;
+        }
+        return ok({ success: true, defaultChartIds: owned.defaultChartIds }, true);
+      }
+      if (url.pathname.endsWith('/update')) {
+        if (!control?.fail) Object.assign(owned[listKey].find(item => item.id === body.chartId), body.payload);
+        return ok({ success: true }, true);
+      }
+      const id = body.payload.id;
+      if (!control?.fail) owned[listKey].push({ ...chart(id, body.payload.name), ...body.payload });
+      return ok({ id }, true);
+    }
+    if (url.pathname === '/api/data-sources') {
+      const user = await page.evaluate(() => window.fixtureAuth.cookieUser);
+      // Model the real 15-second server index cache without waiting for its TTL.
+      return ok({ items: (url.searchParams.get('fresh') === '1' ? sources : staleSources)[user] ?? [], errors: [] }, true);
+    }
+    if (url.pathname === '/api/knowledge-base') {
+      const user = await page.evaluate(() => window.fixtureAuth.cookieUser);
+      return ok({ knowledgeBases: knowledge[user] ?? [] }, true);
+    }
+    if (url.pathname === '/api/knowledge-base/archive/fixture-archive' && method === 'DELETE') return ok({ success: true, sourceType: 'ming_record' }, true);
+    if (url.pathname === '/api/history-summaries') {
+      const user = await page.evaluate(() => window.fixtureAuth.cookieUser);
+      if (method === 'DELETE') {
+        const id = url.searchParams.get('id');
+        if (!control?.fail) histories[user] = histories[user].filter(item => item.id !== id);
+        return ok({ success: true, type: url.searchParams.get('type'), id }, true);
+      }
+      const offset = Number(url.searchParams.get('offset'));
+      const limit = Number(url.searchParams.get('limit'));
+      const all = histories[user] ?? [];
+      return ok({ items: all.slice(offset, offset + limit), pagination: { hasMore: offset + limit < all.length, nextOffset: offset + limit < all.length ? offset + limit : null } }, true);
+    }
+    if (url.pathname === '/api/notes') return ok({ notes: [] }, true);
+    if (url.pathname === '/api/records') {
+      const category = url.searchParams.get('category');
+      const filtered = records.filter(item => !category || item.category === category);
+      return ok({ records: filtered, total: filtered.length }, true);
+    }
     if (url.pathname === '/api/conversations' && method === 'GET') {
       const user = await page.evaluate(() => window.fixture.user);
       const offset = Number(url.searchParams.get('offset'));
@@ -309,9 +522,41 @@ export async function run(existingPage, bundlePath) {
   });
   const check = (name, condition) => { assert.ok(condition, name); checks.push(name); };
   const until = async (predicate, argument) => page.waitForFunction(predicate, argument, { timeout: 10000 });
+  const renderBarrier = () => page.evaluate(() => new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done))));
+  const release = async control => {
+    control.release();
+    await until(id => ['done', 'failed'].includes(window.fixtureNetwork.requests[id]?.phase), control.requestId);
+    await renderBarrier();
+  };
+  const releaseReads = async (pathname, from) => {
+    holdReads.delete(pathname);
+    for (const control of controls.slice(from).filter(item => item.pathname === pathname && item.intercepted)) await release(control);
+  };
   try {
     await page.goto(origin + '/chat');
     await until(() => window.fixture?.list?.().length === 7);
+    const birthProbe = page.getByTestId('birth-rules');
+    await birthProbe.getByRole('button', { name: 'Open birth time rules' }).click();
+    await birthProbe.getByLabel('出生地时区（IANA）').fill('America/New_York');
+    await birthProbe.getByLabel('夏令时重复／缺失时间').selectOption('later');
+    await birthProbe.locator('input[type=time]').fill('03:15');
+    await birthProbe.getByRole('button', { name: '取消', exact: true }).click();
+    check('Cancelling birth-time draft preserves all original fields', await page.evaluate(() => window.fixture.birthForm.timezone === 'Asia/Shanghai' && window.fixture.birthForm.disambiguation === 'reject' && window.fixture.birthForm.birthHour === 2 && window.fixture.birthForm.birthMinute === 30));
+    await birthProbe.getByRole('button', { name: 'Open birth time rules' }).click();
+    await birthProbe.getByLabel('出生地时区（IANA）').fill('invalid/timezone');
+    await birthProbe.getByRole('button', { name: '确定', exact: true }).click();
+    check('Invalid IANA zone keeps the time editor open and does not commit', await birthProbe.getByLabel('出生地时区（IANA）').isVisible() && await page.evaluate(() => window.fixture.birthForm.timezone === 'Asia/Shanghai'));
+    await birthProbe.getByLabel('出生地时区（IANA）').fill('America/New_York');
+    await birthProbe.getByRole('button', { name: '确定', exact: true }).click();
+    await birthProbe.getByRole('button', { name: 'Calculate actual Ziwei' }).click();
+    await until(() => Boolean(window.fixture.birthResult?.error));
+    checks.push('Actual browser Ziwei rejects nonexistent birth time without explicit resolution');
+    await birthProbe.getByRole('button', { name: 'Open birth time rules' }).click();
+    await birthProbe.getByLabel('夏令时重复／缺失时间').selectOption('later');
+    await birthProbe.getByRole('button', { name: '确定', exact: true }).click();
+    await birthProbe.getByRole('button', { name: 'Calculate actual Ziwei' }).click();
+    await until(() => window.fixture.birthResult?.options?.disambiguation === 'later');
+    check('Actual browser Ziwei preserves birth timezone into lazy flow calculation', await page.evaluate(() => window.fixture.birthResult.options.timezone === 'America/New_York' && window.fixture.birthResult.day === '2024-05-31'));
     await page.getByRole('button', { name: 'Load more actual list', exact: true }).click();
     await until(() => window.fixture.list().length === 9);
     check('Query pagination retains API order and 7+2 rows', (await page.locator('[data-testid="conversation-list"] li').allTextContents()).join('|') === rows.alice.map(row => row.title).join('|'));
@@ -606,6 +851,281 @@ export async function run(existingPage, bundlePath) {
     staleRefresh.release();
     await page.waitForTimeout(40);
     check('Refresh snapshot captured before successful delete cannot resurrect deleted row', await page.locator('[data-id="race-3"]').count() === 0);
+
+    // No-reload regressions use real hooks/components with held API/body completions.
+    const sourceStart = controls.length;
+    holdReads.add('/api/data-sources');
+    const initialSource = holdNext('/api/data-sources', 'GET');
+    await page.evaluate(() => window.fixture.mount.composer(true));
+    await intercepted(initialSource);
+    sources.alice = [source('source-b', 'Alice source B')];
+    holdReads.delete('/api/data-sources');
+    await page.evaluate(() => window.fixture.archiveChanged());
+    await page.getByTestId('composer-sources').getByText('Alice source B', { exact: true }).waitFor();
+    await releaseReads('/api/data-sources', sourceStart);
+    check('Composer mutation refresh B survives older initial A in UI and localStorage',
+      await page.getByTestId('composer-sources').innerText() === 'Alice source B' &&
+      await page.evaluate(() => JSON.parse(localStorage.getItem('taibu.data_sources.alice.v1')).value.items[0].name) === 'Alice source B');
+
+    await page.evaluate(() => window.fixture.mount.composer(false));
+    await page.getByTestId('composer').waitFor({ state: 'detached' });
+    const remountStart = requests.length;
+    const remountedSource = holdNext('/api/data-sources', 'GET');
+    await page.evaluate(() => window.fixture.mount.composer(true));
+    await intercepted(remountedSource);
+    check('Composer remount immediately requests fresh=1 without waiting for server index TTL',
+      requests.slice(remountStart).filter(item => item.pathname === '/api/data-sources').every(item => new URLSearchParams(item.search).get('fresh') === '1'));
+    await release(remountedSource);
+    await until(() => !window.fixture.composer.mentionLoading);
+    check('Cached composer remount cannot regress to nonfresh server snapshot', await page.getByTestId('composer-sources').innerText() === 'Alice source B');
+
+    await page.evaluate(() => { window.fixtureNetwork.jsonGate = { pathname: '/api/data-sources', intercepted: false }; void window.fixture.composer.refreshMentionData(true); });
+    await until(() => window.fixtureNetwork.jsonGate.intercepted);
+    sources.alice = [source('source-c', 'Alice source C')];
+    await page.evaluate(() => window.fixture.archiveChanged());
+    await page.getByTestId('composer-sources').getByText('Alice source C', { exact: true }).waitFor();
+    await page.evaluate(() => { window.fixtureNetwork.jsonGate.release(); window.fixtureNetwork.jsonGate = null; });
+    await renderBarrier();
+    check('Composer checks generation after pending JSON, not only after fetch headers',
+      await page.getByTestId('composer-sources').innerText() === 'Alice source C' &&
+      await page.evaluate(() => JSON.parse(localStorage.getItem('taibu.data_sources.alice.v1')).value.items[0].name) === 'Alice source C');
+
+    const oldSource = holdNext('/api/data-sources', 'GET');
+    await page.evaluate(() => { void window.fixture.composer.refreshMentionData(true); });
+    await intercepted(oldSource);
+    const newAccountSource = holdNext('/api/data-sources', 'GET');
+    await page.getByRole('button', { name: 'Fixture Bob', exact: true }).click();
+    await intercepted(newAccountSource);
+    check('Composer clears Alice sources immediately while Bob request remains pending',
+      await page.getByTestId('composer-sources').innerText() === '');
+    await release(newAccountSource);
+    await page.getByTestId('composer-sources').getByText('Bob only source', { exact: true }).waitFor();
+    await release(oldSource);
+    check('Composer old-account completion cannot overwrite Bob data or restore Alice cache',
+      await page.getByTestId('composer-sources').innerText() === 'Bob only source' &&
+      await page.evaluate(() => localStorage.getItem('taibu.data_sources.alice.v1') === null));
+    const logoutSource = holdNext('/api/data-sources', 'GET');
+    await page.evaluate(() => { void window.fixture.composer.refreshMentionData(true); });
+    await intercepted(logoutSource);
+    await page.getByRole('button', { name: 'Fixture Logout', exact: true }).click();
+    await until(() => window.fixture.user === null);
+    await release(logoutSource);
+    check('Composer logout clears visible sources, knowledge bases and account cache while mounted',
+      await page.getByTestId('composer-sources').innerText() === '' && await page.getByTestId('composer-knowledge').innerText() === '' &&
+      await page.evaluate(() => localStorage.getItem('taibu.data_sources.bob.v1') === null));
+    await page.evaluate(() => window.fixture.mount.composer(false));
+    await page.getByRole('button', { name: 'Fixture Alice', exact: true }).click();
+    await until(() => window.fixture.user === 'alice');
+
+    const openCharts = async () => {
+      await page.evaluate(() => { history.replaceState(null, '', '#settings/charts'); window.dispatchEvent(new HashChangeEvent('hashchange')); });
+    };
+    const chartRow = id => page.locator('a[href="/bazi/result?chart=' + id + '"]');
+    const createChart = (id, name) => page.evaluate(({ id, name }) =>
+      window.fixture.chartClient.createSavedChart('bazi', { id, name, gender: 'male', birth_date: '1990-01-01', birth_time: '12:00',
+        fixtureRaw: 'retained raw field' }, { expectedUserId: window.fixture.user }), { id, name });
+    await openCharts();
+    await chartRow('chart-alice').waitFor();
+    await chartRow('chart-alice').evaluate(node => { node.dataset.fixtureIdentity = 'preserved-chart-node'; });
+    await page.getByRole('button', { name: '关闭设置中心', exact: true }).click();
+    await createChart('chart-created', 'Created without reload');
+    await openCharts();
+    await chartRow('chart-created').waitFor();
+    check('Hidden actual ChartsPanel receives real createSavedChart and reopens on the same DOM',
+      await chartRow('chart-alice').getAttribute('data-fixture-identity') === 'preserved-chart-node');
+    await page.evaluate(() => { window.fixture.mount.selected(true); window.fixture.mount.picker(true); });
+    const picker = page.getByTestId('chart-picker');
+    await picker.getByText('Created without reload', { exact: true }).waitFor();
+    await page.getByTestId('selected-chart').getByText('Alice confirmed chart', { exact: true }).waitFor();
+    const rawChart = await page.evaluate(() => window.fixture.chartClient.loadSavedChart('bazi', 'chart-created', { expectedUserId: 'alice' }));
+    check('Raw saved-chart facade retains non-summary edit fields', rawChart?.fixtureRaw === 'retained raw field');
+    await page.evaluate(() => window.fixture.chartClient.updateSavedChart('bazi', 'chart-created', { name: 'Edited without reload' }, { expectedUserId: 'alice' }));
+    await chartRow('chart-created').getByText('Edited without reload', { exact: true }).waitFor();
+    await picker.getByText('Edited without reload', { exact: true }).waitFor();
+    check('Actual chart edit facade synchronizes mounted panel and open picker',
+      requests.some(item => item.pathname === '/api/bazi/charts/update' && item.body?.chartId === 'chart-created' && item.body.payload?.name === 'Edited without reload'));
+
+    const defaultFailure = holdNext('/api/user/charts', 'PATCH', true);
+    await chartRow('chart-created').getByTitle('设为默认', { exact: true }).click();
+    await intercepted(defaultFailure);
+    check('Pending default mutation keeps the confirmed default marker', await chartRow('chart-alice').getByText('默认', { exact: true }).count() === 1);
+    await release(defaultFailure);
+    await page.getByText('设置默认命盘失败', { exact: true }).last().waitFor();
+    check('Failed default mutation preserves confirmed marker and selected-chart helper',
+      await chartRow('chart-alice').getByText('默认', { exact: true }).count() === 1 && await page.getByTestId('selected-chart').innerText() === 'Alice confirmed chart');
+    await chartRow('chart-created').getByTitle('设为默认', { exact: true }).click();
+    await chartRow('chart-created').getByText('默认', { exact: true }).waitFor();
+    await page.getByTestId('selected-chart').getByText('Edited without reload', { exact: true }).waitFor();
+    check('Confirmed default change propagates without reopening picker or selected-chart consumer',
+      await picker.getByText('Edited without reload', { exact: true }).isVisible());
+    await page.evaluate(() => window.fixture.selectedChart.selectChart('chart-alice'));
+    await page.getByTestId('selected-chart').getByText('Alice confirmed chart', { exact: true }).waitFor();
+    for (const id of ['chart-alice', 'chart-created']) {
+      await page.evaluate(id => window.fixture.chartClient.setDefaultUserChart('bazi', id, { expectedUserId: 'alice' }), id);
+      await chartRow(id).getByText('默认', { exact: true }).waitFor();
+    }
+    check('Explicit chart selection survives changes to the account default',
+      await page.getByTestId('selected-chart').innerText() === 'Alice confirmed chart');
+    await page.evaluate(() => window.fixture.chartClient.updateSavedChart('bazi', 'chart-alice', { name: 'Selected chart edited' }, { expectedUserId: 'alice' }));
+    await page.getByTestId('selected-chart').getByText('Selected chart edited', { exact: true }).waitFor();
+    check('Explicit selected ID resolves refreshed fields rather than retaining a copied chart',
+      await chartRow('chart-alice').getByRole('heading', { name: 'Selected chart edited', exact: true }).isVisible());
+    await page.evaluate(() => window.fixture.chartClient.updateSavedChart('bazi', 'chart-alice', { name: 'Alice confirmed chart' }, { expectedUserId: 'alice' }));
+    await page.getByTestId('selected-chart').getByText('Alice confirmed chart', { exact: true }).waitFor();
+    await chartRow('chart-created').getByTitle('删除命盘', { exact: true }).click();
+    await page.getByRole('button', { name: '确认删除', exact: true }).click();
+    await chartRow('chart-created').waitFor({ state: 'detached' });
+    await picker.getByText('Edited without reload', { exact: true }).waitFor({ state: 'detached' });
+    await page.getByTestId('selected-chart').getByText('Alice confirmed chart', { exact: true }).waitFor();
+    check('Delete removes the chart from panel, open picker and selected-chart helper',
+      !await page.evaluate(() => window.fixture.selectedChart.data?.baziCharts.some(item => item.id === 'chart-created')));
+
+    await page.getByRole('button', { name: 'Fixture Bob', exact: true }).click();
+    await chartRow('chart-bob').waitFor();
+    charts.alice = { baziCharts: [], ziweiCharts: [], defaultChartIds: { bazi: null, ziwei: null } };
+    const emptyChartStart = controls.length;
+    holdReads.add('/api/user/charts');
+    const emptyChartLoad = holdNext('/api/user/charts', 'GET');
+    await page.getByRole('button', { name: 'Fixture Alice', exact: true }).click();
+    await intercepted(emptyChartLoad);
+    holdReads.delete('/api/user/charts');
+    await createChart('chart-first', 'First chart after empty load');
+    await chartRow('chart-first').waitFor();
+    await releaseReads('/api/user/charts', emptyChartStart);
+    check('Creation cancels an initial empty Query read so its old response cannot erase fresh data',
+      await chartRow('chart-first').isVisible() && await picker.getByText('First chart after empty load', { exact: true }).isVisible());
+    const previousChartLoad = holdNext('/api/user/charts', 'GET');
+    await page.evaluate(() => { void window.fixture.client.invalidateQueries({ queryKey: window.fixture.chartKey('alice') }); });
+    await intercepted(previousChartLoad);
+    await createChart('chart-second', 'Second chart after prior snapshot');
+    await chartRow('chart-second').waitFor();
+    await release(previousChartLoad);
+    check('Creation also preempts a stale refetch when Query already has previous chart data',
+      await chartRow('chart-first').isVisible() && await chartRow('chart-second').isVisible());
+
+    const aliceChartLoad = holdNext('/api/user/charts', 'GET');
+    await page.evaluate(() => { void window.fixture.client.invalidateQueries({ queryKey: window.fixture.chartKey('alice') }); });
+    await intercepted(aliceChartLoad);
+    const aliceChartMutation = holdNext('/api/user/charts', 'PATCH');
+    await chartRow('chart-second').getByTitle('设为默认', { exact: true }).click();
+    await intercepted(aliceChartMutation);
+    const bobChartLoad = holdNext('/api/user/charts', 'GET');
+    await page.getByRole('button', { name: 'Fixture Bob', exact: true }).click();
+    await intercepted(bobChartLoad);
+    // Bob was visited above; his own cached chart may remain visible during revalidation.
+    // Only Alice's rows/selection are forbidden, not a valid same-account cache hit.
+    const pendingSelection = await page.getByTestId('selected-chart').innerText();
+    check('Chart consumers hide Alice immediately while the new-account Query is pending',
+      await chartRow('chart-first').count() === 0 && await chartRow('chart-second').count() === 0 &&
+      !(await picker.innerText()).includes('Second chart after prior snapshot') &&
+      (pendingSelection === '' || pendingSelection === 'Bob only chart'));
+    await release(bobChartLoad);
+    await chartRow('chart-bob').waitFor();
+    await picker.getByText('Bob only chart', { exact: true }).waitFor();
+    await page.getByTestId('selected-chart').getByText('Bob only chart', { exact: true }).waitFor();
+    await page.evaluate(() => { window.fixture.invalidations.length = 0; });
+    await release(aliceChartLoad);
+    await release(aliceChartMutation);
+    check('Old-account chart reads and successful mutation completions cannot expose Alice after Bob',
+      await chartRow('chart-first').count() === 0 && await chartRow('chart-second').count() === 0 &&
+      await picker.getByText('Second chart after prior snapshot', { exact: true }).count() === 0 &&
+      await page.getByTestId('selected-chart').innerText() === 'Bob only chart');
+    check('Old chart Query state is removed and aborted default completion emits no invalidation',
+      await page.evaluate(() => window.fixture.client.getQueryData(window.fixture.chartKey('alice')) === undefined && window.fixture.invalidations.length === 0));
+    check('Chart reads and writes carry expected-user fences through real facades',
+      requests.filter(item => item.pathname === '/api/user/charts' || /^\/api\/bazi\/charts/.test(item.pathname))
+        .every(item => item.expectedUserId === 'alice' || item.expectedUserId === 'bob'));
+    await page.getByRole('button', { name: '关闭设置中心', exact: true }).click();
+    await page.evaluate(() => { window.fixture.mount.picker(false); window.fixture.mount.selected(false); });
+    await page.getByRole('button', { name: 'Fixture Alice', exact: true }).click();
+    await until(() => window.fixture.user === 'alice');
+
+    const historyPage = page.getByTestId('history-page');
+    const initialHistory = holdNext('/api/history-summaries', 'GET');
+    await page.evaluate(() => window.fixture.mount.history(true));
+    await intercepted(initialHistory);
+    histories.alice = histories.alice.filter(item => item.id !== 'alice-history-1');
+    await page.evaluate(() => window.fixture.archiveChanged());
+    await historyPage.locator('[data-history-id="alice-history-2"]').waitFor();
+    await release(initialHistory);
+    check('HistoryPageTemplate refresh supersedes its held initial response without resurrecting old rows',
+      await historyPage.locator('[data-history-id="alice-history-1"]').count() === 0 &&
+      await historyPage.locator('[data-history-id]').count() === 12);
+    await historyPage.getByText('继续下滑加载更多', { exact: true }).waitFor();
+    await renderBarrier();
+    const historyAppend = holdNext('/api/history-summaries', 'GET');
+    await page.evaluate(() => window.fixtureIntersect('[data-testid="history-page"]'));
+    await intercepted(historyAppend);
+    histories.alice = histories.alice.filter(item => item.id !== 'alice-history-14');
+    await page.evaluate(() => window.fixture.archiveChanged());
+    await historyPage.locator('[data-history-id="alice-history-2"]').waitFor();
+    await release(historyAppend);
+    check('History refresh preempts append and cannot append the old deleted tail',
+      await historyPage.locator('[data-history-id="alice-history-14"]').count() === 0 &&
+      await historyPage.locator('[data-history-id]').count() === 12 &&
+      await historyPage.getByText('继续下滑加载更多', { exact: true }).count() === 0);
+    const historyBeforeDelete = holdNext('/api/history-summaries', 'GET');
+    await page.evaluate(() => window.fixture.archiveChanged());
+    await intercepted(historyBeforeDelete);
+    await page.evaluate(() => window.fixture.deleteHistory('tarot', 'alice-history-3'));
+    await release(historyBeforeDelete);
+    check('History deletion event fences an already captured initial refresh snapshot',
+      await historyPage.locator('[data-history-id="alice-history-3"]').count() === 0);
+    await historyPage.getByRole('button', { name: 'Delete history alice-history-2', exact: true }).click();
+    await page.getByRole('button', { name: '确认删除', exact: true }).click();
+    await historyPage.locator('[data-history-id="alice-history-2"]').waitFor({ state: 'detached' });
+    check('Real history card action and confirmation still delete through the production facade',
+      requests.some(item => item.pathname === '/api/history-summaries' && item.method === 'DELETE' && new URLSearchParams(item.search).get('id') === 'alice-history-2'));
+    await page.evaluate(() => window.fixture.mount.history(false));
+    await historyPage.waitFor({ state: 'detached' });
+
+    const drawer = page.getByTestId('history-drawer');
+    await page.evaluate(() => window.fixture.mount.drawer(true));
+    await drawer.getByTitle('历史记录', { exact: true }).evaluate(button => button.click());
+    await drawer.getByText('alice history 4', { exact: true }).waitFor();
+    const bobDrawer = holdNext('/api/history-summaries', 'GET');
+    await page.getByRole('button', { name: 'Fixture Bob', exact: true }).click();
+    await intercepted(bobDrawer);
+    check('Open HistoryDrawer clears rendered Alice rows before Bob response arrives',
+      !(await drawer.innerText()).includes('alice history'));
+    await release(bobDrawer);
+    await drawer.getByText('bob history 1', { exact: true }).waitFor();
+    const lateDrawer = holdNext('/api/history-summaries', 'GET');
+    await page.getByRole('button', { name: 'Fixture Alice', exact: true }).click();
+    await intercepted(lateDrawer);
+    await page.getByRole('button', { name: 'Fixture Bob', exact: true }).click();
+    await drawer.getByText('bob history 1', { exact: true }).waitFor();
+    await release(lateDrawer);
+    check('Open HistoryDrawer rejects old-account response after switching back to Bob',
+      !(await drawer.innerText()).includes('alice history') && await drawer.getByText('bob history 2', { exact: true }).isVisible());
+    await page.evaluate(() => window.fixture.mount.drawer(false));
+    await page.getByRole('button', { name: 'Fixture Alice', exact: true }).click();
+    await until(() => window.fixture.user === 'alice');
+
+    const recordPanel = page.getByTestId('records');
+    await page.evaluate(() => window.fixture.mount.records(true));
+    await recordPanel.getByRole('heading', { name: 'General saved record', exact: true }).waitFor();
+    const oldRecordFilter = holdNext('/api/records', 'GET');
+    await recordPanel.locator('select').selectOption('general');
+    await intercepted(oldRecordFilter);
+    await recordPanel.locator('select').selectOption('event');
+    await recordPanel.getByRole('heading', { name: 'Event saved record', exact: true }).waitFor();
+    await release(oldRecordFilter);
+    check('Rapid actual record filters cannot render older response under the new filter',
+      await recordPanel.locator('select').inputValue() === 'event' &&
+      await recordPanel.getByRole('heading', { name: 'Event saved record', exact: true }).isVisible() &&
+      await recordPanel.getByRole('heading', { name: 'General saved record', exact: true }).count() === 0);
+    const oldRecordRefresh = holdNext('/api/records', 'GET');
+    await page.evaluate(() => window.fixture.archiveChanged());
+    await intercepted(oldRecordRefresh);
+    records[1].title = 'Event refreshed record';
+    await page.evaluate(() => window.fixture.archiveChanged());
+    await recordPanel.getByRole('heading', { name: 'Event refreshed record', exact: true }).waitFor();
+    await release(oldRecordRefresh);
+    check('Records archive refresh B survives older refresh A without reloading the page',
+      await recordPanel.getByRole('heading', { name: 'Event refreshed record', exact: true }).isVisible() &&
+      await recordPanel.getByRole('heading', { name: 'Event saved record', exact: true }).count() === 0);
+    await page.evaluate(() => window.fixture.mount.records(false));
 
     check('No unhandled network requests escaped fixtures', blocked.length === 0);
     check('No browser runtime exceptions', browserErrors.length === 0);

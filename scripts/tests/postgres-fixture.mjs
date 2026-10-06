@@ -28,6 +28,7 @@ export const SQL_SOURCE_MANIFEST = {
   history: 'supabase/migrations/20260723_100000_create_meihua_xiaoliuren_web.sql',
   searchCorrection: 'supabase/migrations/20261002_100000_fix_knowledge_search_contracts.sql',
   ledgerCorrection: 'supabase/migrations/20261002_101000_restrict_credit_ledger_rpc.sql',
+  rateAdmission: 'supabase/migrations/20261003_100000_fix_rate_limit_admission.sql',
   accountProtection: 'supabase/migrations/20261002_102000_protect_account_and_ledger_writes.sql',
 };
 
@@ -99,8 +100,6 @@ export const AUTH_SQL_SOURCE_MANIFEST = {
   appSettings: 'supabase/migrations/20260113_add_app_settings.sql',
   modelPolicies: 'supabase/migrations/20260128_create_ai_model_tables.sql',
   gatewayPolicies: 'supabase/migrations/20260318_unify_ai_gateway_sources.sql',
-  rateRpc: 'supabase/migrations/20260409_000100_remaining_atomicity_rpcs.sql',
-  rateAcl: 'supabase/migrations/20260411_111500_restrict_admin_session_rpc_acl.sql',
 };
 
 export async function buildPostgresFixture(repoRoot, { authMode = 'synthetic' } = {}) {
@@ -185,12 +184,11 @@ $$;`}`,
       policies(sources.modelPolicies, 'ai_models'),
       policies(sources.gatewayPolicies, 'ai_gateways'),
       policies(sources.gatewayPolicies, 'ai_model_gateway_bindings'),
-      // Snapshot omits sequences/indexes. This harness-only prerequisite lets
-      // the real ON CONFLICT RPC execute; it is NOT deployed-schema evidence.
-      'CREATE SEQUENCE public.rate_limits_id_seq;',
-      snapshotTable(sources.snapshot, 'rate_limits'),
-      'CREATE UNIQUE INDEX ON public.rate_limits (identifier, endpoint);',
     ] : []),
+    // Harness-only sequence/index prerequisites, not deployed-schema evidence.
+    'CREATE SEQUENCE public.rate_limits_id_seq;',
+    snapshotTable(sources.snapshot, 'rate_limits'),
+    'CREATE UNIQUE INDEX ON public.rate_limits (identifier, endpoint);',
     // Keep real vector type, original uniqueness/indexes/RLS, then actual TEXT
     // source-id amendment. The snapshot's USER-DEFINED placeholder is not used.
     sources.knowledge,
@@ -200,9 +198,8 @@ $$;`}`,
     // Preserve chronology: the February admin-policy block predates the March
     // messages table and July history tables; do not grant them invented policies.
     adminPolicies,
+    sources.rateAdmission,
     ...(realAuth ? [
-      functionDefinition(sources.rateRpc, 'consume_rate_limit_slot_as_admin'),
-      grants(sources.rateAcl, ['consume_rate_limit_slot_as_admin']),
       // Explicit harness-only grants, constrained by the source RLS policies.
       'GRANT SELECT ON public.app_settings, public.ai_models, public.ai_gateways, public.ai_model_gateway_bindings, public.user_settings TO authenticated;',
     ] : []),

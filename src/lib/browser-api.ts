@@ -81,6 +81,7 @@ function resolveCacheScopesByPath(pathname: string): LocalCacheScope[] {
   ) {
     return ['data_sources'];
   }
+  if (pathname.startsWith('/api/user/charts')) return ['data_sources', 'default_bazi_chart'];
   if (pathname.startsWith('/api/user/settings')) return ['default_bazi_chart'];
   return [];
 }
@@ -144,6 +145,7 @@ export function dispatchApiWriteEvents(
     pathname.startsWith('/api/knowledge-base')
     || pathname.startsWith('/api/data-sources')
     || pathname.startsWith('/api/records')
+    || pathname.startsWith('/api/user/charts')
     || pathname.startsWith('/api/community')
     || pathname.startsWith('/api/bazi')
     || pathname.startsWith('/api/hepan')
@@ -231,7 +233,7 @@ export async function fetchBrowserJson<T>(input: RequestInfo, init?: BrowserRequ
       ).toUpperCase();
       const rawUrl = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
       const url = new URL(rawUrl, window.location.origin);
-      if (response.ok && (!mutationEffects || !resolvedError)) {
+      if (response.ok && !resolvedError) {
         dispatchApiWriteEvents(url.pathname, method, {
           mutationEffects,
           requestBody,

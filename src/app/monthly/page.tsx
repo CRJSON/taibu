@@ -5,7 +5,7 @@
  */
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import {
     CalendarRange as CalendarIcon,
     ChevronLeft,
@@ -17,14 +17,13 @@ import {
 import Link from 'next/link';
 import { SettingsCenterLink } from '@/components/settings/SettingsCenterLink';
 import { FeatureGate } from '@/components/layout/FeatureGate';
-import { useToast } from '@/components/ui/Toast';
 
 import { ChartPickerModal, type ChartItem } from '@/components/common/ChartPickerModal';
 import { FortuneTrendChart, type FortuneTrendDataPoint } from '@/components/fortune/FortuneTrendChart';
 import { calculateMonthlyFortune, calculateDailyFortune, calculateGenericDailyFortune, calculateMonthlyTrend, isLevelFavorable, compareLevels, type MonthlyFortune } from '@/lib/divination/fortune';
 import { getBranchElement, getElementColor, getStemElement } from '@/lib/divination/display-helpers';
 import type { FortuneLevel } from '@/types';
-import { loadPrimarySavedBaziChart, loadSavedBaziChart, type SavedBaziChart } from '@/lib/user/charts-client';
+import { useSelectedBaziChart } from '@/lib/hooks/useUserCharts';
 import { useFeatureToggles } from '@/lib/hooks/useFeatureToggles';
 import { useSessionSafe } from '@/components/providers/ClientProviders';
 
@@ -37,53 +36,12 @@ function MonthlyPageContent() {
     const today = new Date();
     const [year, setYear] = useState(today.getFullYear());
     const [month, setMonth] = useState(today.getMonth() + 1);
-    const [baziChart, setBaziChart] = useState<SavedBaziChart | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [chartLoadError, setChartLoadError] = useState<string | null>(null);
+    const chartsQuery = useSelectedBaziChart(user?.id, { enabled: !sessionLoading && baziFeatureEnabled });
+    const baziChart = chartsQuery.chart;
+    const loading = sessionLoading || chartsQuery.isLoading;
+    const chartLoadError = chartsQuery.error?.message ?? null;
     const [showChartSelector, setShowChartSelector] = useState(false);
     const [showTrendChart, setShowTrendChart] = useState(true);
-    const [reloadToken, setReloadToken] = useState(0);
-    const { showToast } = useToast();
-
-    // 初始化
-    useEffect(() => {
-        let cancelled = false;
-
-        const init = async () => {
-            if (sessionLoading) return;
-            if (!user || !baziFeatureEnabled) {
-                if (!cancelled) {
-                    setBaziChart(null);
-                    setChartLoadError(null);
-                    setLoading(false);
-                }
-                return;
-            }
-
-            setLoading(true);
-            setChartLoadError(null);
-            try {
-                const nextChart = await loadPrimarySavedBaziChart();
-                if (!cancelled) {
-                    setBaziChart(nextChart);
-                }
-            } catch (err) {
-                if (!cancelled) {
-                    setBaziChart(null);
-                    setChartLoadError(err instanceof Error ? err.message : '加载命盘失败');
-                }
-            } finally {
-                if (!cancelled) {
-                    setLoading(false);
-                }
-            }
-        };
-
-        void init();
-        return () => {
-            cancelled = true;
-        };
-    }, [baziFeatureEnabled, reloadToken, sessionLoading, user]);
 
     // 计算月度运势
     const fortune = useMemo((): MonthlyFortune | null => {
@@ -165,19 +123,8 @@ function MonthlyPageContent() {
         return 'bg-red-500';
     };
 
-    const handleSelectChart = async (chart: ChartItem) => {
-        try {
-            const fullChart = await loadSavedBaziChart(chart.id);
-            if (!fullChart) {
-                throw new Error('未找到所选命盘');
-            }
-            setBaziChart(fullChart);
-            setChartLoadError(null);
-        } catch (error) {
-            const message = error instanceof Error ? error.message : '加载命盘失败';
-            setChartLoadError(message);
-            showToast('error', message);
-        }
+    const handleSelectChart = (chart: ChartItem) => {
+        chartsQuery.selectChart(chart.id);
         setShowChartSelector(false);
     };
 
@@ -266,7 +213,7 @@ function MonthlyPageContent() {
                             <div className="flex items-center gap-2">
                                 <button
                                     type="button"
-                                    onClick={() => setReloadToken((value) => value + 1)}
+                                    onClick={() => { void chartsQuery.refetch(); }}
                                     className="rounded-md border border-[#f0d5dd] bg-white px-3 py-2 text-sm font-medium text-[#7a271a] transition-colors hover:bg-[#fff1f3]"
                                 >
                                     重试

@@ -5,7 +5,7 @@
  */
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useLayoutEffect, useRef } from 'react';
 import { Plus, Download } from 'lucide-react';
 import { MING_RECORD_SOURCE_TYPE } from '@/lib/data-sources/types';
 import {
@@ -34,6 +34,12 @@ import {
 } from '@/lib/browser-api';
 
 const PAGE_SIZE = 10;
+
+type ReadScope = {
+    identity: string;
+    controller: AbortController;
+    request: AbortController | null;
+};
 
 function SectionError({
     message,
@@ -76,6 +82,12 @@ export default function RecordsPage() {
     const [deleteRecordId, setDeleteRecordId] = useState<string | null>(null);
     const { showToast } = useToast();
     const { user, loading: sessionLoading } = useSessionSafe();
+    const userId = user?.id;
+    const accountIdentity = JSON.stringify([userId ?? null, sessionLoading]);
+    const recordsIdentity = JSON.stringify([accountIdentity, search, category, page]);
+    const recordsLifecycle = useRef<ReadScope | null>(null);
+    const notesLifecycle = useRef<ReadScope | null>(null);
+    const reloadRecordsRef = useRef<(() => Promise<void>) | null>(null);
 
     const openAddToKb = useCallback((record: MingRecord) => {
         setKbTargetRecord(record);
@@ -85,13 +97,19 @@ export default function RecordsPage() {
         setKbTargetRecord(null);
     }, []);
 
-    // 加载记录
+    // A refresh supersedes every earlier request for this account/filter/page.
     const loadRecords = useCallback(async () => {
-        if (!user) {
-            const message = '请先登录后查看命理记录';
+        const scope = recordsLifecycle.current;
+        if (!scope || scope.identity !== recordsIdentity || scope.controller.signal.aborted || sessionLoading) return;
+        scope.request?.abort();
+        const request = new AbortController();
+        scope.request = request;
+        const isCurrent = () => recordsLifecycle.current === scope && !scope.controller.signal.aborted
+            && scope.request === request && !request.signal.aborted;
+        if (!userId) {
             setRecords([]);
             setTotal(0);
-            setRecordsError(message);
+            setRecordsError('请先登录后查看命理记录');
             setLoading(false);
             return;
         }
@@ -99,32 +117,42 @@ export default function RecordsPage() {
         setRecordsError(null);
         try {
             const { records: nextRecords, total: nextTotal } = await getRecords(
-                {
-                    search: search || undefined,
-                    category: category || undefined,
-                },
+                { search: search || undefined, category: category || undefined },
                 page,
                 PAGE_SIZE,
+                { signal: request.signal },
             );
+            if (!isCurrent()) return;
+            const lastPage = Math.max(1, Math.ceil(nextTotal / PAGE_SIZE));
+            if (page > lastPage) {
+                setPage(lastPage);
+                return;
+            }
             setRecords(nextRecords);
             setTotal(nextTotal);
         } catch (error) {
+            if (!isCurrent()) return;
             const message = error instanceof Error ? error.message : '获取记录失败';
             setRecords([]);
             setTotal(0);
             setRecordsError(message);
             showToast('error', message);
         } finally {
-            setLoading(false);
+            if (isCurrent()) setLoading(false);
         }
-    }, [category, page, search, showToast, user]);
+    }, [category, page, recordsIdentity, search, sessionLoading, showToast, userId]);
 
-    // 加载今日小记
     const loadNotes = useCallback(async () => {
-        if (!user) {
-            const message = '请先登录后查看今日小记';
+        const scope = notesLifecycle.current;
+        if (!scope || scope.identity !== accountIdentity || scope.controller.signal.aborted || sessionLoading) return;
+        scope.request?.abort();
+        const request = new AbortController();
+        scope.request = request;
+        const isCurrent = () => notesLifecycle.current === scope && !scope.controller.signal.aborted
+            && scope.request === request && !request.signal.aborted;
+        if (!userId) {
             setNotes([]);
-            setNotesError(message);
+            setNotesError('请先登录后查看今日小记');
             setNotesLoading(false);
             return;
         }
@@ -132,22 +160,26 @@ export default function RecordsPage() {
         setNotesError(null);
         const today = new Date().toISOString().split('T')[0];
         try {
-            const nextNotes = await getNotesByDate(today);
+            const nextNotes = await getNotesByDate(today, { signal: request.signal });
+            if (!isCurrent()) return;
             setNotes(nextNotes);
         } catch (error) {
+            if (!isCurrent()) return;
             const message = error instanceof Error ? error.message : '获取小记失败';
             setNotes([]);
             setNotesError(message);
             showToast('error', message);
         } finally {
-            setNotesLoading(false);
+            if (isCurrent()) setNotesLoading(false);
         }
-    }, [showToast, user]);
+    }, [accountIdentity, sessionLoading, showToast, userId]);
 
     const handleKnowledgeBaseSuccess = useCallback((payload: {
         sourceId: string;
         kbId: string;
     }) => {
+        const scope = notesLifecycle.current;
+        if (!scope || scope.identity !== accountIdentity || scope.controller.signal.aborted) return;
         setRecords((prev) => prev.map((record) => {
             if (record.id !== payload.sourceId) {
                 return record;
@@ -163,15 +195,41 @@ export default function RecordsPage() {
             };
         }));
         closeKbModal();
-    }, [closeKbModal]);
+    }, [accountIdentity, closeKbModal]);
 
-    useEffect(() => {
-        if (sessionLoading) {
-            return;
-        }
+    useLayoutEffect(() => {
+        const scope: ReadScope = { identity: recordsIdentity, controller: new AbortController(), request: null };
+        recordsLifecycle.current = scope;
+        reloadRecordsRef.current = loadRecords;
+        setRecords([]);
+        setTotal(0);
+        setRecordsError(null);
+        setLoading(true);
         void loadRecords();
+        return () => {
+            scope.controller.abort();
+            scope.request?.abort();
+        };
+    }, [loadRecords, recordsIdentity]);
+
+    // Notes are independent of search/category/page changes in the records list.
+    useLayoutEffect(() => {
+        const scope: ReadScope = { identity: accountIdentity, controller: new AbortController(), request: null };
+        notesLifecycle.current = scope;
+        setNotes([]);
+        setNotesError(null);
+        setNotesLoading(true);
+        setShowRecordForm(false);
+        setEditingRecord(null);
+        setShowImportExport(false);
+        setKbTargetRecord(null);
+        setDeleteRecordId(null);
         void loadNotes();
-    }, [sessionLoading, user, loadRecords, loadNotes]);
+        return () => {
+            scope.controller.abort();
+            scope.request?.abort();
+        };
+    }, [accountIdentity, loadNotes]);
 
     useEffect(() => {
         if (typeof window === 'undefined') {
@@ -200,29 +258,46 @@ export default function RecordsPage() {
     }, [loadRecords]);
 
     const handleDelete = async (id: string) => {
+        const scope = notesLifecycle.current;
+        if (!scope || scope.identity !== accountIdentity || scope.controller.signal.aborted || !userId) return;
+        const isCurrent = () => notesLifecycle.current === scope && !scope.controller.signal.aborted;
         try {
-            await deleteRecord(id);
+            await deleteRecord(id, { signal: scope.controller.signal });
+            if (!isCurrent()) return;
             setDeleteRecordId(null);
-            const nextTotal = Math.max(total - 1, 0);
-            const nextPage = Math.min(page, Math.max(1, Math.ceil(nextTotal / PAGE_SIZE)));
-            setTotal(nextTotal);
-            if (nextPage !== page) {
-                setPage(nextPage);
-                return;
-            }
-            await loadRecords();
+            // Refresh the current filters, even if they changed while the mutation was pending.
+            // The returned total, not a captured total-minus-one, determines the last page.
+            await reloadRecordsRef.current?.();
         } catch (error) {
-            showToast('error', error instanceof Error ? error.message : '删除记录失败');
+            if (isCurrent()) showToast('error', error instanceof Error ? error.message : '删除记录失败');
         }
     };
 
     const handleTogglePin = async (id: string) => {
+        const scope = notesLifecycle.current;
+        if (!scope || scope.identity !== accountIdentity || scope.controller.signal.aborted || !userId) return;
+        const isCurrent = () => notesLifecycle.current === scope && !scope.controller.signal.aborted;
         try {
-            await toggleRecordPin(id);
-            await loadRecords();
+            await toggleRecordPin(id, { signal: scope.controller.signal });
+            if (isCurrent()) await reloadRecordsRef.current?.();
         } catch (error) {
-            showToast('error', error instanceof Error ? error.message : '更新记录失败');
+            if (isCurrent()) showToast('error', error instanceof Error ? error.message : '更新记录失败');
         }
+    };
+
+    const handleRecordSaved = () => {
+        const scope = notesLifecycle.current;
+        if (!scope || scope.identity !== accountIdentity || scope.controller.signal.aborted) return;
+        setShowRecordForm(false);
+        setEditingRecord(null);
+        void reloadRecordsRef.current?.();
+    };
+
+    const handleImported = () => {
+        const scope = notesLifecycle.current;
+        if (!scope || scope.identity !== accountIdentity || scope.controller.signal.aborted) return;
+        void reloadRecordsRef.current?.();
+        void loadNotes();
     };
 
     const totalPages = Math.ceil(total / PAGE_SIZE);
@@ -310,7 +385,7 @@ export default function RecordsPage() {
                         userId={user?.id ?? null}
                         record={editingRecord}
                         onClose={() => { setShowRecordForm(false); setEditingRecord(null); }}
-                        onSave={() => { setShowRecordForm(false); setEditingRecord(null); void loadRecords(); }}
+                        onSave={handleRecordSaved}
                     />
                 )}
 
@@ -318,7 +393,7 @@ export default function RecordsPage() {
                     <ImportExportModal
                         userId={user?.id ?? null}
                         onClose={() => setShowImportExport(false)}
-                        onImport={() => { void loadRecords(); void loadNotes(); }}
+                        onImport={handleImported}
                     />
                 )}
 

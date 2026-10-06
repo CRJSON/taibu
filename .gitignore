@@ -27,6 +27,10 @@ yarn-error.log*
 # local env files
 .env*.local
 .env
+# Generated self-hosting credentials, state and backups (never committed).
+.taibu-local/
+.codex-deploy/
+.playwright-mcp/
 
 # vercel
 .vercel
@@ -89,6 +93,7 @@ supabase/migrations/*
 !supabase/migrations/20261002_100000_fix_knowledge_search_contracts.sql
 !supabase/migrations/20261002_101000_restrict_credit_ledger_rpc.sql
 !supabase/migrations/20261002_102000_protect_account_and_ledger_writes.sql
+!supabase/migrations/20261003_100000_fix_rate_limit_admission.sql
 # Additional explicit inputs for isolated Auth/PostgREST acceptance only.
 !supabase/migrations/20260110_add_user_settings_and_fix_notifications_rls.sql
 !supabase/migrations/20260113_add_app_settings.sql
@@ -105,6 +110,7 @@ docs/*
 docs/manual/*
 !docs/manual/Architecture.md
 !docs/manual/Refactor-Acceptance.md
+!docs/manual/Self-Hosting.md
 
 # AI
 .claude

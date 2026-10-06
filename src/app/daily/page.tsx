@@ -5,7 +5,7 @@
  */
 'use client';
 
-import { useState, useMemo, useEffect, Suspense } from 'react';
+import { useState, useMemo, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { FeatureGate } from '@/components/layout/FeatureGate';
 
@@ -33,8 +33,7 @@ import { getCalendarAlmanac } from '@/lib/divination/calendar';
 
 import type { FortuneLevel } from '@/types';
 import { AuthModal } from '@/components/auth/AuthModal';
-import { useToast } from '@/components/ui/Toast';
-import { loadPrimarySavedBaziChart, loadSavedBaziChart, type SavedBaziChart } from '@/lib/user/charts-client';
+import { useSelectedBaziChart } from '@/lib/hooks/useUserCharts';
 import { useFeatureToggles } from '@/lib/hooks/useFeatureToggles';
 import { useSessionSafe } from '@/components/providers/ClientProviders';
 
@@ -68,67 +67,19 @@ function DailyPageContent() {
     const { isFeatureEnabled, isLoading: featureToggleLoading } = useFeatureToggles();
     const { user, loading: sessionLoading } = useSessionSafe();
     const baziFeatureEnabled = !featureToggleLoading && isFeatureEnabled('bazi');
-    const [selectedDate, setSelectedDate] = useState(() => parseDateParam(searchParams.get('date')));
-    const [baziChart, setBaziChart] = useState<SavedBaziChart | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [chartLoadError, setChartLoadError] = useState<string | null>(null);
+    const dateParam = searchParams.get('date');
+    const [dateSelection, setDateSelection] = useState(() => ({ param: dateParam, date: parseDateParam(dateParam) }));
+    if (dateSelection.param !== dateParam) setDateSelection({ param: dateParam, date: parseDateParam(dateParam) });
+    const selectedDate = dateSelection.date;
+    const chartsQuery = useSelectedBaziChart(user?.id, { enabled: !sessionLoading && baziFeatureEnabled });
+    const baziChart = chartsQuery.chart;
+    const loading = sessionLoading || chartsQuery.isLoading;
+    const chartLoadError = chartsQuery.error?.message ?? null;
     const [showChartSelector, setShowChartSelector] = useState(false);
     const [showShareCard, setShowShareCard] = useState(false);
     const [interpretationMode, setInterpretationMode] = useState<InterpretationMode>('colloquial');
-    const [reloadToken, setReloadToken] = useState(0);
 
     const [showAuthModal, setShowAuthModal] = useState(false);
-    const { showToast } = useToast();
-
-    // 初始化
-    useEffect(() => {
-        let cancelled = false;
-
-        const init = async () => {
-            if (sessionLoading) return;
-            if (!user || !baziFeatureEnabled) {
-                if (!cancelled) {
-                    setBaziChart(null);
-                    setChartLoadError(null);
-                    setLoading(false);
-                }
-                return;
-            }
-
-            setLoading(true);
-            setChartLoadError(null);
-            try {
-                const nextChart = await loadPrimarySavedBaziChart();
-                if (!cancelled) {
-                    setBaziChart(nextChart);
-                }
-            } catch (err) {
-                if (!cancelled) {
-                    setBaziChart(null);
-                    setChartLoadError(err instanceof Error ? err.message : '加载命盘失败');
-                }
-            } finally {
-                if (!cancelled) {
-                    setLoading(false);
-                }
-            }
-        };
-
-        void init();
-        return () => {
-            cancelled = true;
-        };
-    }, [baziFeatureEnabled, reloadToken, sessionLoading, user]);
-
-    // 当 URL 参数变化时同步日期
-    useEffect(() => {
-        const dateParam = searchParams.get('date');
-        if (dateParam) {
-            setSelectedDate(parseDateParam(dateParam));
-        } else {
-            setSelectedDate(new Date());
-        }
-    }, [searchParams]);
 
     // 计算运势
     const fortune = useMemo(() => {
@@ -150,26 +101,15 @@ function DailyPageContent() {
     const changeDate = (days: number) => {
         const newDate = new Date(selectedDate);
         newDate.setDate(newDate.getDate() + days);
-        setSelectedDate(newDate);
+        setDateSelection({ param: dateParam, date: newDate });
     };
 
     const goToToday = () => {
-        setSelectedDate(new Date());
+        setDateSelection({ param: dateParam, date: new Date() });
     };
 
-    const handleSelectChart = async (chart: ChartItem) => {
-        try {
-            const fullChart = await loadSavedBaziChart(chart.id);
-            if (!fullChart) {
-                throw new Error('未找到所选命盘');
-            }
-            setBaziChart(fullChart);
-            setChartLoadError(null);
-        } catch (error) {
-            const message = error instanceof Error ? error.message : '加载命盘失败';
-            setChartLoadError(message);
-            showToast('error', message);
-        }
+    const handleSelectChart = (chart: ChartItem) => {
+        chartsQuery.selectChart(chart.id);
         setShowChartSelector(false);
     };
 
@@ -260,7 +200,7 @@ function DailyPageContent() {
                             <div className="flex items-center gap-2">
                                 <button
                                     type="button"
-                                    onClick={() => setReloadToken((value) => value + 1)}
+                                    onClick={() => { void chartsQuery.refetch(); }}
                                     className="rounded-md border border-[#f0d5dd] bg-white px-3 py-2 text-sm font-medium text-[#7a271a] transition-colors hover:bg-[#fff1f3]"
                                 >
                                     重试

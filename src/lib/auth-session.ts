@@ -5,6 +5,7 @@
  */
 import { NextResponse } from 'next/server';
 import type { Session, User } from '@supabase/supabase-js';
+import { shouldSecureAuthCookies } from '@/lib/runtime-env';
 
 export const ACCESS_COOKIE = 'sb-access-token';
 export const REFRESH_COOKIE = 'sb-refresh-token';
@@ -22,6 +23,7 @@ type SessionCookieWriter = {
     sameSite: 'lax';
     path: string;
     maxAge: number;
+    expires?: Date;
   }) => unknown;
   delete: (name: string) => unknown;
 };
@@ -153,27 +155,29 @@ export async function resolveSessionFromTokens(
   return { session: null, refreshed: false, error: resolutionError };
 }
 
+export function authCookieOptions() {
+  return { httpOnly: true, secure: shouldSecureAuthCookies(), sameSite: 'lax' as const, path: '/' };
+}
+
+export function clearAuthCookie(writer: SessionCookieWriter, name: string) {
+  writer.set(name, '', { ...authCookieOptions(), maxAge: 0, expires: new Date(0) });
+}
+
 function applySessionCookies(writer: SessionCookieWriter, session: Session | null) {
-  const secure = process.env.NODE_ENV === 'production';
+  const options = authCookieOptions();
 
   if (!session) {
-    writer.delete(ACCESS_COOKIE);
-    writer.delete(REFRESH_COOKIE);
+    clearAuthCookie(writer, ACCESS_COOKIE);
+    clearAuthCookie(writer, REFRESH_COOKIE);
     return;
   }
 
   writer.set(ACCESS_COOKIE, session.access_token, {
-    httpOnly: true,
-    secure,
-    sameSite: 'lax',
-    path: '/',
+    ...options,
     maxAge: Math.max(60, session.expires_in ?? 3600),
   });
   writer.set(REFRESH_COOKIE, session.refresh_token, {
-    httpOnly: true,
-    secure,
-    sameSite: 'lax',
-    path: '/',
+    ...options,
     maxAge: 60 * 60 * 24 * 30,
   });
 }

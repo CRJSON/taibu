@@ -33,10 +33,10 @@ type KnowledgeBaseArchivePayload = {
   };
 };
 
-export async function listKnowledgeBases(): Promise<KnowledgeBaseSummary[]> {
+export async function listKnowledgeBases(options: { signal?: AbortSignal } = {}): Promise<KnowledgeBaseSummary[]> {
   const data = await requestBrowserData<{ knowledgeBases?: KnowledgeBaseSummary[] }>(
     '/api/knowledge-base',
-    { method: 'GET' },
+    { method: 'GET', signal: options.signal },
     { fallbackMessage: '获取知识库失败' },
   );
 

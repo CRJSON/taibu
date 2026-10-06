@@ -5,6 +5,7 @@ export const queryKeys = {
   notificationsPrefix: () => ['notifications'] as const,
   latestAnnouncement: () => ['announcements', 'latest'] as const,
   announcementsPrefix: () => ['announcements'] as const,
+  userCharts: (userId?: string | null) => ['user', 'charts', userId ?? 'visitor'] as const,
   conversationList: (userId?: string | null) => ['chat', 'conversations', userId ?? 'visitor'] as const,
   chatBootstrap: (userId?: string | null) => ['chat', 'bootstrap', userId ?? 'visitor'] as const,
   chatBootstrapPrefix: () => ['chat', 'bootstrap'] as const,

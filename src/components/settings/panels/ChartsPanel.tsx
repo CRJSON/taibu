@@ -7,7 +7,7 @@
  */
 'use client';
 
-import { useCallback, useEffect, useState, type MouseEvent } from 'react';
+import { useCallback, useEffect, useMemo, useState, type MouseEvent } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Calendar, ChevronRight, MapPin, Star, Trash2 } from 'lucide-react';
@@ -16,10 +16,10 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { useToast } from '@/components/ui/Toast';
 import { SettingsLoginRequired } from '@/components/settings/SettingsLoginRequired';
-import { removeLocalCache, writeLocalCache } from '@/lib/cache/local-storage';
+import { useChartMutation, useUserCharts } from '@/lib/hooks/useUserCharts';
 import { getNavItemById } from '@/lib/navigation/registry';
 import { closeSettingsCenter, getSettingsCenterCloseMode } from '@/lib/settings-center';
-import { deleteUserChart, getUserCharts, setDefaultUserChart } from '@/lib/user/charts-client';
+import { deleteUserChart, setDefaultUserChart, type UserChartRecord } from '@/lib/user/charts-client';
 
 type ChartType = 'bazi' | 'ziwei';
 
@@ -33,6 +33,16 @@ interface ChartItem {
   city: string | null;
   created_at: string;
   is_default: boolean;
+}
+
+function formatCharts(rows: UserChartRecord[], type: ChartType, defaultId: string | null): ChartItem[] {
+  return rows.map((chart): ChartItem => ({
+    ...chart,
+    type,
+    gender: chart.gender ?? 'unknown',
+    city: chart.birth_place,
+    is_default: chart.id === defaultId,
+  })).sort((a, b) => Number(b.is_default) - Number(a.is_default) || new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 }
 
 function getGenderLabel(gender: ChartItem['gender']) {
@@ -69,10 +79,12 @@ function ChartRow({
   onDelete,
   onSetDefault,
   onNavigate,
+  pending,
 }: {
   chart: ChartItem;
   onDelete: (id: string, type: ChartType, event: MouseEvent<HTMLButtonElement>) => void;
   onSetDefault: (id: string, type: ChartType, event: MouseEvent<HTMLButtonElement>) => void;
+  pending: boolean;
   onNavigate?: (event: MouseEvent<HTMLAnchorElement>, href: string) => void;
 }) {
   const href = chart.type === 'bazi' ? `/bazi/result?chart=${chart.id}` : `/ziwei/result?chart=${chart.id}`;
@@ -119,6 +131,7 @@ function ChartRow({
         {!chart.is_default ? (
           <button
             type="button"
+            disabled={pending}
             onClick={(event) => onSetDefault(chart.id, chart.type, event)}
             className="rounded-md p-2 text-foreground/50 transition-colors duration-150 hover:bg-background-secondary hover:text-[#dfab01]"
             title="设为默认"
@@ -128,6 +141,7 @@ function ChartRow({
         ) : null}
         <button
           type="button"
+          disabled={pending}
           onClick={(event) => onDelete(chart.id, chart.type, event)}
           className="rounded-md p-2 text-foreground/50 transition-colors duration-150 hover:bg-background-secondary hover:text-[#eb5757]"
           title="删除命盘"
@@ -147,12 +161,14 @@ function ChartSection({
   onDelete,
   onSetDefault,
   onNavigate,
+  pending,
 }: {
   title: string;
   list: ChartItem[];
   type: ChartType;
   onDelete: (id: string, type: ChartType, event: MouseEvent<HTMLButtonElement>) => void;
   onSetDefault: (id: string, type: ChartType, event: MouseEvent<HTMLButtonElement>) => void;
+  pending: boolean;
   onNavigate?: (event: MouseEvent<HTMLAnchorElement>, href: string) => void;
 }) {
   return (
@@ -168,6 +184,7 @@ function ChartSection({
               onDelete={onDelete}
               onSetDefault={onSetDefault}
               onNavigate={onNavigate}
+              pending={pending}
             />
           ))}
         </div>
@@ -184,67 +201,17 @@ export default function ChartsPanel() {
   const router = useRouter();
   const { user, loading: sessionLoading } = useSessionSafe();
   const { showToast } = useToast();
-  const [baziCharts, setBaziCharts] = useState<ChartItem[]>([]);
-  const [ziweiCharts, setZiweiCharts] = useState<ChartItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [pendingDelete, setPendingDelete] = useState<{ id: string; type: ChartType } | null>(null);
+  const userId = user?.id;
+  const chartsQuery = useUserCharts(userId, { enabled: !sessionLoading });
+  const { pending, run } = useChartMutation(userId);
+  const baziCharts = useMemo(() => formatCharts(chartsQuery.data?.baziCharts ?? [], 'bazi', chartsQuery.data?.defaultChartIds.bazi ?? null), [chartsQuery.data]);
+  const ziweiCharts = useMemo(() => formatCharts(chartsQuery.data?.ziweiCharts ?? [], 'ziwei', chartsQuery.data?.defaultChartIds.ziwei ?? null), [chartsQuery.data]);
+  const [pendingDelete, setPendingDelete] = useState<{ userId: string; id: string; type: ChartType } | null>(null);
+  const currentDelete = pendingDelete?.userId === userId ? pendingDelete : null;
 
   useEffect(() => {
-    const fetchCharts = async () => {
-      if (sessionLoading) return;
-      if (!user) {
-        setLoading(false);
-        return;
-      }
-
-      try {
-        const { baziCharts: baziData, ziweiCharts: ziweiData, defaultChartIds } = await getUserCharts();
-
-        const formatChart = (
-          chart: {
-            id: string;
-            name: string;
-            gender: 'male' | 'female' | null;
-            birth_date: string;
-            birth_time: string | null;
-            birth_place: string | null;
-            created_at: string;
-          },
-          type: ChartType,
-          defaultId: string | null,
-        ): ChartItem => ({
-          id: chart.id,
-          type,
-          name: chart.name,
-          gender: chart.gender === 'male' || chart.gender === 'female' ? chart.gender : 'unknown',
-          birth_date: chart.birth_date,
-          birth_time: chart.birth_time,
-          city: chart.birth_place,
-          created_at: chart.created_at,
-          is_default: chart.id === defaultId,
-        });
-
-        setBaziCharts(
-          (baziData || [])
-            .map((chart) => formatChart(chart, 'bazi', defaultChartIds.bazi))
-            .sort((a, b) => (a.is_default ? -1 : b.is_default ? 1 : new Date(b.created_at).getTime() - new Date(a.created_at).getTime())),
-        );
-
-        setZiweiCharts(
-          (ziweiData || [])
-            .map((chart) => formatChart(chart, 'ziwei', defaultChartIds.ziwei))
-            .sort((a, b) => (a.is_default ? -1 : b.is_default ? 1 : new Date(b.created_at).getTime() - new Date(a.created_at).getTime())),
-        );
-      } catch (error) {
-        console.error('加载命盘失败:', error);
-        showToast('error', '加载命盘失败');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    void fetchCharts();
-  }, [sessionLoading, showToast, user]);
+    if (chartsQuery.error) showToast('error', '加载命盘失败');
+  }, [chartsQuery.error, showToast]);
 
   const handleNavigate = useCallback((event: MouseEvent<HTMLAnchorElement>, href: string) => {
     if (event.defaultPrevented || event.button !== 0 || isModifiedEvent(event)) return;
@@ -270,47 +237,26 @@ export default function ChartsPanel() {
     closeSettingsCenter();
   }, [router]);
 
-  const handleDelete = async (id: string, type: ChartType) => {
-    try {
-      await deleteUserChart(type, id);
+  const handleDelete = (id: string, type: ChartType) => run(
+    scope => deleteUserChart(type, id, scope),
+    () => {
       setPendingDelete(null);
-
-      if (type === 'bazi') {
-        setBaziCharts((prev) => prev.filter((chart) => chart.id !== id));
-      } else {
-        setZiweiCharts((prev) => prev.filter((chart) => chart.id !== id));
-      }
       showToast('success', '命盘已删除');
-    } catch (error) {
-      console.error('删除命盘失败:', error);
-      showToast('error', '删除命盘失败');
-    }
-  };
+    },
+    () => showToast('error', '删除命盘失败'),
+  );
 
-  const handleSetDefault = async (id: string, type: ChartType, event: MouseEvent<HTMLButtonElement>) => {
+  const handleSetDefault = (id: string, type: ChartType, event: MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
     event.stopPropagation();
-
-    if (type === 'bazi') {
-      setBaziCharts((prev) => prev.map((chart) => ({ ...chart, is_default: chart.id === id })));
-    } else {
-      setZiweiCharts((prev) => prev.map((chart) => ({ ...chart, is_default: chart.id === id })));
-    }
-
-    try {
-      await setDefaultUserChart(type, id);
-      if (type === 'bazi') {
-        writeLocalCache('taibu.pref.defaultBaziChartId', id);
-        removeLocalCache('mingai.pref.defaultBaziChartId');
-      }
-      showToast('success', '默认命盘已更新');
-    } catch (error) {
-      console.error('设置默认命盘失败:', error);
-      showToast('error', '设置默认命盘失败');
-    }
+    void run(
+      scope => setDefaultUserChart(type, id, scope),
+      () => showToast('success', '默认命盘已更新'),
+      () => showToast('error', '设置默认命盘失败'),
+    );
   };
 
-  if (loading || sessionLoading) {
+  if (chartsQuery.isLoading || sessionLoading) {
     return (
       <div className="flex min-h-[240px] items-center justify-center rounded-lg border border-border bg-background">
         <SoundWaveLoader variant="inline" />
@@ -324,6 +270,12 @@ export default function ChartsPanel() {
 
   return (
     <div className="space-y-8">
+      {chartsQuery.error ? (
+        <div role="alert" className="text-sm text-foreground-secondary">
+          加载命盘失败，已显示的命盘未改变。
+          <button type="button" className="ml-2 text-accent" onClick={() => { void chartsQuery.refetch(); }}>重试</button>
+        </div>
+      ) : null}
 
       <ChartSection
         title="八字命盘"
@@ -332,10 +284,11 @@ export default function ChartsPanel() {
         onDelete={(id, type, event) => {
           event.preventDefault();
           event.stopPropagation();
-          setPendingDelete({ id, type });
+          if (!pending) setPendingDelete({ userId: user.id, id, type });
         }}
         onSetDefault={handleSetDefault}
         onNavigate={handleNavigate}
+        pending={pending}
       />
 
       <ChartSection
@@ -345,16 +298,18 @@ export default function ChartsPanel() {
         onDelete={(id, type, event) => {
           event.preventDefault();
           event.stopPropagation();
-          setPendingDelete({ id, type });
+          if (!pending) setPendingDelete({ userId: user.id, id, type });
         }}
         onSetDefault={handleSetDefault}
         onNavigate={handleNavigate}
+        pending={pending}
       />
 
       <ConfirmDialog
-        isOpen={!!pendingDelete}
+        isOpen={!!currentDelete}
+        loading={pending}
         onClose={() => setPendingDelete(null)}
-        onConfirm={() => pendingDelete ? handleDelete(pendingDelete.id, pendingDelete.type) : undefined}
+        onConfirm={() => currentDelete ? handleDelete(currentDelete.id, currentDelete.type) : undefined}
         title="确认删除"
         description="确定要删除这个命盘吗？此操作无法撤销。"
         confirmText="确认删除"

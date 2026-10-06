@@ -15,7 +15,7 @@ const HISTORY_PAGE_SIZE = 100;
 
 export async function loadHistorySummariesPage(
   type: HistoryType,
-  options: { limit?: number; offset?: number } = {},
+  options: { limit?: number; offset?: number; signal?: AbortSignal } = {},
 ): Promise<{ items: HistorySummaryItem[]; pagination: HistoryPagination }> {
   const limit = options.limit ?? HISTORY_PAGE_SIZE;
   const offset = options.offset ?? 0;
@@ -27,7 +27,7 @@ export async function loadHistorySummariesPage(
 
   const data = await requestBrowserData<{ items?: HistorySummaryItem[]; pagination?: HistoryPagination }>(
     `/api/history-summaries?${params.toString()}`,
-    { method: 'GET' },
+    { method: 'GET', signal: options.signal },
     { fallbackMessage: '加载历史记录失败' },
   );
 
@@ -41,6 +41,7 @@ export async function loadHistoryRestore(
   type: HistoryType,
   id: string,
   timezone?: string,
+  options: { signal?: AbortSignal } = {},
 ): Promise<HistoryRestorePayload | null> {
   const query = new URLSearchParams({
     type,
@@ -52,14 +53,14 @@ export async function loadHistoryRestore(
 
   const data = await requestBrowserData<{ item?: HistoryRestorePayload | null }>(
     `/api/history-summaries?${query.toString()}`,
-    { method: 'GET' },
+    { method: 'GET', signal: options.signal },
     { fallbackMessage: '加载历史记录失败' },
   );
 
   return data.item ?? null;
 }
 
-export async function deleteHistorySummary(type: HistoryType, id: string): Promise<void> {
+export async function deleteHistorySummary(type: HistoryType, id: string, options: { signal?: AbortSignal } = {}): Promise<void> {
   const query = new URLSearchParams({
     type,
     id,
@@ -67,7 +68,7 @@ export async function deleteHistorySummary(type: HistoryType, id: string): Promi
 
   const data = await requestBrowserData<{ success?: boolean }>(
     `/api/history-summaries?${query.toString()}`,
-    { method: 'DELETE' },
+    { method: 'DELETE', signal: options.signal },
     { fallbackMessage: '删除历史记录失败' },
   );
   if (data.success !== true) {

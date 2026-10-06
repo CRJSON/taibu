@@ -8,7 +8,7 @@
  */
 'use client';
 
-import { useState, useEffect, useCallback, useRef, type ReactNode } from 'react';
+import { useState, useEffect, useCallback, useLayoutEffect, useRef, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Calendar, Trash2, Search, BookOpenText, MessageSquare } from 'lucide-react';
@@ -28,8 +28,8 @@ import {
     applyHistoryRestorePayload,
     deleteHistorySummary,
     loadHistoryRestore,
-    loadHistorySummariesPage,
 } from '@/lib/history/client';
+import { useHistoryList } from '@/components/history/useHistoryList';
 import type { HistorySummaryItem, HistoryType } from '@/lib/history/registry';
 
 /* ---------- 公共 formatDate ---------- */
@@ -98,18 +98,6 @@ export interface CardActions {
 }
 
 const HISTORY_PAGE_BATCH_SIZE = 12;
-
-function mergeHistoryItems(current: HistorySummaryItem[], incoming: HistorySummaryItem[]) {
-    if (incoming.length === 0) {
-        return current;
-    }
-
-    const merged = new Map(current.map((item) => [item.id, item] as const));
-    for (const item of incoming) {
-        merged.set(item.id, item);
-    }
-    return Array.from(merged.values());
-}
 
 const HISTORY_THEME_STYLES: Record<string, {
     cardBorder: string;
@@ -302,95 +290,30 @@ export function HistoryPageTemplate(config: HistoryPageConfig) {
     const { showToast } = useToast();
     const { user, loading: sessionLoading } = useSessionSafe();
     const { knowledgeBaseEnabled } = useKnowledgeBaseFeatureEnabled();
-    const [items, setItems] = useState<HistorySummaryItem[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [loadingMore, setLoadingMore] = useState(false);
-    const [hasMore, setHasMore] = useState(false);
-    const [nextOffset, setNextOffset] = useState<number | null>(null);
-    const [appendError, setAppendError] = useState<string | null>(null);
+    const reportLoadError = useCallback((message: string) => showToast('error', message), [showToast]);
+    const {
+        items, loading, loadingMore, hasMore, nextOffset, appendError, errorMessage,
+        loadItems, removeHistoryItem, setErrorMessage, captureScope,
+    } = useHistoryList({ type: sourceType, userId: user?.id, enabled: !sessionLoading, batchSize: HISTORY_PAGE_BATCH_SIZE, onError: reportLoadError });
     const [searchQuery, setSearchQuery] = useState('');
     const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
     const [kbModalOpen, setKbModalOpen] = useState(false);
     const [kbTarget, setKbTarget] = useState<HistorySummaryItem | null>(null);
-    const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
-    const appendRequestKeyRef = useRef<string | null>(null);
+    const restoreRequestId = useRef(0);
     const basePath = `/${sourceType}`;
     const resolvedKbSourceType = kbSourceType || `${sourceType}_reading`;
 
-    const removeHistoryItem = useCallback((id: string) => {
-        let removed = false;
-        setItems((prev) => {
-            const next = prev.filter((item) => item.id !== id);
-            removed = next.length !== prev.length;
-            return removed ? next : prev;
-        });
-        if (removed) {
-            setNextOffset((prev) => prev == null ? null : Math.max(prev - 1, 0));
-        }
-        return removed;
-    }, []);
-
-    const loadItems = useCallback(async (options?: { append?: boolean; offset?: number }) => {
-        if (!user?.id) {
-            router.push(basePath);
-            return;
-        }
-
-        const append = options?.append === true;
-        const targetOffset = options?.offset ?? 0;
-        const requestKey = append ? `append:${targetOffset}` : 'initial:0';
-        if (append && appendRequestKeyRef.current === requestKey) {
-            return;
-        }
-        if (append) {
-            appendRequestKeyRef.current = requestKey;
-            setLoadingMore(true);
-            setAppendError(null);
-        } else {
-            setLoading(true);
-        }
-
-        try {
-            const page = await loadHistorySummariesPage(sourceType, {
-                limit: HISTORY_PAGE_BATCH_SIZE,
-                offset: targetOffset,
-            });
-
-            setErrorMessage(null);
-            setAppendError(null);
-            setItems((prev) => append ? mergeHistoryItems(prev, page.items) : page.items);
-            setHasMore(page.pagination.hasMore);
-            setNextOffset(page.pagination.nextOffset);
-        } catch (error) {
-            const message = error instanceof Error ? error.message : '加载历史记录失败';
-            if (append) {
-                setAppendError(message);
-            } else {
-                setErrorMessage(message);
-                setHasMore(false);
-                setNextOffset(null);
-                setItems([]);
-            }
-            showToast('error', message);
-        } finally {
-            if (append) {
-                appendRequestKeyRef.current = null;
-                setLoadingMore(false);
-            } else {
-                setLoading(false);
-            }
-        }
-    }, [basePath, router, showToast, sourceType, user?.id]);
+    useLayoutEffect(() => {
+        setDeleteConfirmId(null);
+        setKbModalOpen(false);
+        setKbTarget(null);
+        setSearchQuery('');
+    }, [sourceType, user?.id]);
 
     useEffect(() => {
-        if (sessionLoading) {
-            return;
-        }
-
-        const timer = setTimeout(() => { void loadItems(); }, 0);
-        return () => clearTimeout(timer);
-    }, [loadItems, sessionLoading]);
+        if (!sessionLoading && !user?.id) router.push(basePath);
+    }, [basePath, router, sessionLoading, user?.id]);
 
     useEffect(() => {
         if (
@@ -417,32 +340,41 @@ export function HistoryPageTemplate(config: HistoryPageConfig) {
     }, [appendError, hasMore, loadItems, loading, loadingMore, nextOffset]);
 
     const handleDelete = async (id: string) => {
+        const scope = captureScope();
+        if (!scope) return;
         try {
-            await deleteHistorySummary(sourceType, id);
+            await deleteHistorySummary(sourceType, id, { signal: scope.signal });
+            if (!scope.isCurrent()) return;
             setErrorMessage(null);
-            setAppendError(null);
             removeHistoryItem(id);
             if (invalidateTypes?.length) {
                 window.dispatchEvent(new CustomEvent(DATA_INDEX_INVALIDATED_EVENT, { detail: { types: invalidateTypes } }));
             }
         } catch (error) {
+            if (!scope.isCurrent()) return;
             const message = error instanceof Error ? error.message : '删除历史记录失败';
             setErrorMessage(message);
             showToast('error', message);
         } finally {
-            setDeleteConfirmId(null);
+            if (scope.isCurrent()) setDeleteConfirmId(null);
         }
     };
 
     const handleView = async (item: HistorySummaryItem) => {
+        const scope = captureScope(item.id);
+        if (!scope) return;
+        const requestId = ++restoreRequestId.current;
+        const isCurrent = () => scope.isCurrent() && restoreRequestId.current === requestId;
         try {
-            const payload = await loadHistoryRestore(sourceType, item.id, restoreTimezone);
+            const payload = await loadHistoryRestore(sourceType, item.id, restoreTimezone, { signal: scope.signal });
+            if (!isCurrent()) return;
             if (!payload) {
                 throw new Error('未找到历史记录');
             }
             setErrorMessage(null);
             router.push(applyHistoryRestorePayload(payload));
         } catch (error) {
+            if (!isCurrent()) return;
             const message = error instanceof Error ? error.message : '加载历史记录失败';
             setErrorMessage(message);
             showToast('error', message);

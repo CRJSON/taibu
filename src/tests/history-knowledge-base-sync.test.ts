@@ -3,11 +3,37 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
+test('knowledge-base reads reject a cancelled JSON completion', async (t) => {
+  const originalFetch = global.fetch;
+  t.after(() => { global.fetch = originalFetch; });
+  const { listKnowledgeBases } = require('../lib/knowledge-base/browser-client') as typeof import('../lib/knowledge-base/browser-client');
+  const controller = new AbortController();
+  let finish!: (payload: unknown) => void;
+  let start!: () => void;
+  const started = new Promise<void>((resolve) => { start = resolve; });
+  let receivedSignal: AbortSignal | null | undefined;
+  global.fetch = async (_input, init) => {
+    receivedSignal = init?.signal;
+    const response = new Response('{}');
+    response.json = () => {
+      start();
+      return new Promise((resolve) => { finish = resolve; });
+    };
+    return response;
+  };
+  const pending = listKnowledgeBases({ signal: controller.signal });
+  await started;
+  controller.abort();
+  finish({ knowledgeBases: [{ id: 'stale-kb', name: 'stale', description: null }] });
+  await assert.rejects(pending, { name: 'AbortError' });
+  assert.equal(receivedSignal, controller.signal);
+});
+
 test('history page template should keep append retry state and listen to shared sync events', () => {
   const source = readFileSync(resolve(process.cwd(), 'src/components/history/HistoryPageTemplate.tsx'), 'utf8');
 
-  assert.match(source, /const \[appendError, setAppendError\] = useState<string \| null>\(null\);/u);
-  assert.match(source, /const appendRequestKeyRef = useRef<string \| null>\(null\);/u);
+  assert.match(source, /useHistoryList\(/u);
+  assert.match(source, /appendError/u);
   assert.match(source, /window\.addEventListener\(HISTORY_SUMMARY_DELETED_EVENT, handleHistorySummaryDeleted as EventListener\)/u);
   assert.match(source, /window\.addEventListener\(KNOWLEDGE_BASE_SYNC_EVENT, handleArchiveChanged as EventListener\)/u);
   assert.match(source, /重试加载更多/u);
@@ -16,10 +42,10 @@ test('history page template should keep append retry state and listen to shared 
 test('history drawer should dedupe append pages and expose retry-on-append-failure', () => {
   const source = readFileSync(resolve(process.cwd(), 'src/components/layout/HistoryDrawer.tsx'), 'utf8');
 
-  assert.match(source, /function mergeHistoryItemsById\(current: HistorySummaryItem\[\], incoming: HistorySummaryItem\[\]\)/u);
-  assert.match(source, /const \[appendError, setAppendError\] = useState<string \| null>\(null\);/u);
-  assert.match(source, /const inFlightRequestKeyRef = useRef<string \| null>\(null\);/u);
-  assert.match(source, /setItems\(\(prev\) => append \? mergeHistoryItemsById\(prev, result\.items\) : result\.items\);/u);
+  assert.match(source, /useHistoryList\(/u);
+  assert.match(source, /appendError/u);
+  assert.match(source, /enabled: isOpen && !sessionLoading/u);
+  assert.match(source, /window\.addEventListener\(HISTORY_SUMMARY_DELETED_EVENT, handleHistorySummaryDeleted as EventListener\)/u);
   assert.match(source, /重试加载更多/u);
 });
 
@@ -44,6 +70,6 @@ test('records page should rely on knowledge-base sync events instead of forcing 
   assert.match(source, /window\.addEventListener\(KNOWLEDGE_BASE_SYNC_EVENT, handleArchiveChanged as EventListener\)/u);
   assert.match(
     source,
-    /const handleKnowledgeBaseSuccess = useCallback\(\(payload:[\s\S]*closeKbModal\(\);\s*\}, \[closeKbModal\]\);/u,
+    /const handleKnowledgeBaseSuccess = useCallback\(\(payload:[\s\S]*closeKbModal\(\);\s*\}, \[accountIdentity, closeKbModal\]\);/u,
   );
 });

@@ -5,7 +5,7 @@
  */
 'use client';
 
-import { ReactNode, useEffect, useState } from 'react';
+import { ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { SessionContext, type SessionState } from '@/lib/hooks/session-context';
 import { ToastProvider, useToast } from '@/components/ui/Toast';
@@ -15,6 +15,7 @@ import { authSessionCacheConstants, supabase } from '@/lib/auth';
 import { getLinuxDoAuthErrorMessage } from '@/lib/auth-feedback';
 import { createAppQueryClient, registerBrowserQueryClient } from '@/lib/query/client';
 import { invalidateQueriesForPath } from '@/lib/query/invalidation';
+import { queryKeys } from '@/lib/query/keys';
 
 interface ClientProvidersProps {
     children: ReactNode;
@@ -52,6 +53,19 @@ export function ClientProviders({ children }: ClientProvidersProps) {
         user: null,
         loading: true,
     });
+
+    const chartOwner = useRef<string | null>(null);
+    useLayoutEffect(() => {
+        const previous = chartOwner.current;
+        chartOwner.current = state.user?.id ?? null;
+        if (previous && previous !== chartOwner.current) {
+            const filter = { queryKey: queryKeys.userCharts(previous), exact: true };
+            // One owner handles account eviction; ordinary consumer unmounts keep shared data.
+            // Cancel/remove synchronously so a later account transition cannot evict a new read.
+            void queryClient.cancelQueries(filter);
+            queryClient.removeQueries(filter);
+        }
+    }, [queryClient, state.user?.id]);
 
     useEffect(() => {
         registerBrowserQueryClient(queryClient);

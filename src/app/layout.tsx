@@ -20,6 +20,7 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import { MobileNav } from "@/components/layout/MobileNav";
 import { ClientProviders } from "@/components/providers/ClientProviders";
+import { isSelfHosted } from "@/lib/runtime-env";
 import { Analytics } from "@vercel/analytics/react";
 import { SettingsCenterHost } from "@/components/settings/SettingsCenterHost";
 
@@ -173,7 +174,7 @@ export default function RootLayout({
           </ConversationListProvider>
           </ClientProviders>
         </ThemeProvider>
-        {process.env.NODE_ENV === "production" ? <Analytics /> : null}
+        {process.env.NODE_ENV === "production" && !isSelfHosted() ? <Analytics /> : null}
       </body>
     </html>
   );

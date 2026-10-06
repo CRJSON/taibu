@@ -6,7 +6,7 @@
 
 Web 继续使用 Next.js/React；计算内核、stdio MCP 和 HTTP MCP 保持现有包边界。浏览器通过受控 HTTP 接口访问应用服务；应用用例接收已授权身份、普通数据和窄操作；Supabase、SQL RPC、模型 SDK 等细节由服务端适配层持有。
 
-本轮不引入微服务、全局事件总线、依赖注入容器、通用仓储基类或第二套认证系统，也不合并占术表。已有 Docker 配置不等于完成生产容器化，更不等于已经退出 Vercel 或 Supabase。
+本轮不引入微服务、全局事件总线、依赖注入容器、通用仓储基类或第二套认证系统，也不合并占术表。后续自托管阶段已新增可选的本地 PostgreSQL/Redis 与 Auth/PostgREST/Storage 兼容栈，见 [自托管说明](Self-Hosting.md)。这解除本地运行的托管平台依赖，但不等于移除全部 Supabase 软件依赖或完成生产迁移；原外部后端部署方式继续保留。
 
 | 职责 | 当前主要入口 | 边界 |
 | --- | --- | --- |
@@ -98,6 +98,8 @@ AI 请求入口生成可信的请求 ID，并向纯观测器注入时钟及日�
 | --- | --- | --- |
 | 当前会话快照 | `hooks/session-context.tsx`；Provider 负责装配和订阅 | 基础 hooks 不反向依赖 `ClientProviders` 组件 |
 | 会话列表服务器数据 | Query cache，按用户键隔离 | Context 不再另存一份可写列表 |
+| 已保存命盘及默认 ID | `hooks/useUserCharts.ts`，按用户键共享 Query bundle | 设置面板、选择器与运势页面不各自保存可写列表副本 |
+| 运势页面主动选择的命盘 | 页面保留所选 ID，内容从命盘 Query 派生 | 默认切换不覆盖主动选择；确认删除后才回退 |
 | 列表窗口及请求协调 | `ConversationListContext` | 保留旧消费者 API，但 ref 访问的是同一 Query 数据 |
 | 当前选中会话 | `chat/use-chat-state.ts` 的页面状态 | 不把选择状态当作服务器列表缓存 |
 | 设置 mutation 副作用 | `query/invalidation.ts` 中显式 effects | 已迁移操作不同时再走 URL 推断，避免重复失效 |
@@ -113,7 +115,11 @@ AI 请求入口生成可信的请求 ID，并向纯观测器注入时钟及日�
 
 会话乐观操作由同一 Query 缓存中的按 ID 操作记录协调：同 ID 请求不交错，不同 ID 可并发；失败只回滚目标字段或条目，刷新合并待确认操作。刷新/分页接管时替换整个加载模式，过期响应不得写回或复活已删除条目。模型面板同样保留脏字段，旧重叠读取不能覆盖新结果。
 
-依据：[会话上下文](../../src/lib/hooks/session-context.tsx)、[列表缓存](../../src/lib/query/conversation-list-cache.ts)、[失效策略](../../src/lib/query/invalidation.ts)、[管理面板装配](../../src/components/settings/AccountAdminPanels.tsx)；对应[列表缓存测试](../../src/tests/conversation-list-cache.test.ts)、[mutation 测试](../../src/tests/query-mutation-effects.test.ts)、[聊天任务测试](../../src/tests/chat-stream-manager.test.ts)。
+命盘新增、编辑、默认切换与删除统一经过 `user/charts-client.ts`，成功后取消对应用户的旧命盘读取，再刷新共享查询，并保留数据源失效通知；普通消费者卸载不删除其他消费者仍在使用的共享查询。HTTP/业务失败和取消请求不广播成功副作用。列表刷新失败不等于持久化失败，不能因此重新创建命盘。命盘请求同样检查可选的 `X-Expected-User-Id`，不替代真实会话鉴权。
+
+聊天提及索引仍使用既有局部状态与本地缓存，首次挂载及写入后的权威读取显式绕过 15 秒服务端进程缓存；本地缓存只作为加载期间的预览。最新请求校验覆盖响应解析、状态写入、本地缓存和 loading/error 收尾。历史列表与命理记录保留局部分页模型，但刷新/删除/账号切换必须淘汰旧请求，不能由迟到的分页响应复活已删除记录。以上是当前浏览器内的写后同步，不承诺跨设备实时更新。
+
+依据：[会话上下文](../../src/lib/hooks/session-context.tsx)、[列表缓存](../../src/lib/query/conversation-list-cache.ts)、[命盘查询](../../src/lib/hooks/useUserCharts.ts)、[失效策略](../../src/lib/query/invalidation.ts)、[管理面板装配](../../src/components/settings/AccountAdminPanels.tsx)；对应[列表缓存测试](../../src/tests/conversation-list-cache.test.ts)、[mutation 测试](../../src/tests/query-mutation-effects.test.ts)、[浏览器同步回归](../../scripts/tests/p5-browser-fixture.mjs)、[聊天任务测试](../../src/tests/chat-stream-manager.test.ts)。
 
 ## 5. AI 生命周期矩阵
 
@@ -124,6 +130,8 @@ AI 请求入口生成可信的请求 ID，并向纯观测器注入时钟及日�
 公共托管入口的准入规范是会员 → 积分校验/扣减 → 限流。实际扣款后遇到限流拒绝或**传播到用例的异常**，会补偿该笔扣款且不调用模型；退款失败返回 `CREDIT_REFUND_FAILED`。默认按用户 ID + 端点路径限制为 20 次/60 秒；八字、紫微保留原 IP + 固定端点的 10 次/60 秒覆盖策略，不重复限流。BYOK prepare 校验账号后限流，不要求平台模型权限或正积分余额；persist/save 不重复执行准入。
 
 **保留的例外：** 底层 `rate-limit.ts` 仍将自身捕获的 RPC/连接失败转为 `allowed: true`（fail-open）。这类错误不会传播到用例，因此不会触发上述异常补偿，而是继续执行。当前改造没有把限流改成 fail-closed；不可将异常注入测试解释为所有限流数据库故障都会拒绝请求。
+
+自托管可显式选择 Redis，默认托管仍使用 PostgreSQL；共享 `checkRateLimit()` 返回契约和准入顺序。Redis 原子消费固定窗口、拒绝不延长窗口，连接/命令有界且不重放；故障仍 fail-open，不切换到独立内存计数器。原本地 SQL 的上限误放行缺口由新增 `20261003_100000_fix_rate_limit_admission.sql` 修正，已纳入隔离测试/本地基线，未因此执行线上 migration。
 
 `createManagedAnalysisCompletion()` 为单个已扣款请求的正常完成路径保存一个终态 Promise，避免竞争回调重复保存/退款。它不是跨请求、跨进程或所有适配器异常的 exactly-once 保证，也没有新增持久任务表或全局幂等键。
 

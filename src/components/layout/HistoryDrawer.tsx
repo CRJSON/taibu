@@ -15,10 +15,10 @@ import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { useSessionSafe } from '@/components/providers/ClientProviders';
 import { useToast } from '@/components/ui/Toast';
 import { HISTORY_SUMMARY_DELETED_EVENT } from '@/lib/browser-api';
-import { applyHistoryRestorePayload, loadHistoryRestore, loadHistorySummariesPage } from '@/lib/history/client';
+import { applyHistoryRestorePayload, loadHistoryRestore } from '@/lib/history/client';
+import { useHistoryList } from '@/components/history/useHistoryList';
 import {
     HISTORY_CONFIG,
-    type HistorySummaryItem,
     type HistoryType,
 } from '@/lib/history/registry';
 
@@ -35,107 +35,29 @@ interface HistoryDrawerProps {
 
 const HISTORY_DRAWER_BATCH_SIZE = 10;
 
-function mergeHistoryItemsById(current: HistorySummaryItem[], incoming: HistorySummaryItem[]) {
-    if (incoming.length === 0) {
-        return current;
-    }
-
-    const merged = new Map(current.map((item) => [item.id, item] as const));
-    for (const item of incoming) {
-        merged.set(item.id, item);
-    }
-    return Array.from(merged.values());
-}
-
 export function HistoryDrawer({ type, className = '' }: HistoryDrawerProps) {
     const router = useRouter();
     const { showToast } = useToast();
     const { user, loading: sessionLoading } = useSessionSafe();
     const [isOpen, setIsOpen] = useState(false);
-    const [loading, setLoading] = useState(false);
-    const [loadingMore, setLoadingMore] = useState(false);
-    const [hasMore, setHasMore] = useState(false);
-    const [nextOffset, setNextOffset] = useState<number | null>(null);
-    const [appendError, setAppendError] = useState<string | null>(null);
+    const reportLoadError = useCallback((message: string) => showToast('error', message), [showToast]);
+    const {
+        items, loading, loadingMore, hasMore, nextOffset, appendError, errorMessage,
+        loadItems: loadHistory, removeHistoryItem, setErrorMessage, captureScope,
+    } = useHistoryList({ type, userId: user?.id, enabled: isOpen && !sessionLoading, batchSize: HISTORY_DRAWER_BATCH_SIZE, onError: reportLoadError });
     const [navigating, setNavigating] = useState<string | null>(null);
-    const [items, setItems] = useState<HistorySummaryItem[]>([]);
-    const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const scrollContainerRef = useRef<HTMLDivElement | null>(null);
     const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
-    const inFlightRequestKeyRef = useRef<string | null>(null);
+    const restoreRequestId = useRef(0);
     const defaultTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Shanghai';
 
     const config = HISTORY_CONFIG[type];
 
-    const removeHistoryItem = useCallback((id: string) => {
-        let removed = false;
-        setItems((prev) => {
-            const next = prev.filter((item) => item.id !== id);
-            removed = next.length !== prev.length;
-            return removed ? next : prev;
-        });
-        if (removed) {
-            setNextOffset((prev) => prev == null ? null : Math.max(prev - 1, 0));
-        }
-        return removed;
-    }, []);
+    const handleToggle = useCallback(() => setIsOpen(open => !open), []);
 
-    const loadHistory = useCallback(async (options?: { append?: boolean; offset?: number }) => {
-        if (!user?.id) return;
-
-        const append = options?.append === true;
-        const offset = options?.offset ?? 0;
-        const requestKey = append ? `append:${offset}` : 'initial:0';
-        if (append && inFlightRequestKeyRef.current === requestKey) {
-            return;
-        }
-        if (append) {
-            inFlightRequestKeyRef.current = requestKey;
-            setLoadingMore(true);
-            setAppendError(null);
-        } else {
-            setLoading(true);
-        }
-
-        try {
-            const result = await loadHistorySummariesPage(type, {
-                limit: HISTORY_DRAWER_BATCH_SIZE,
-                offset,
-            });
-            setErrorMessage(null);
-            setAppendError(null);
-            setItems((prev) => append ? mergeHistoryItemsById(prev, result.items) : result.items);
-            setHasMore(result.pagination.hasMore);
-            setNextOffset(result.pagination.nextOffset);
-        } catch (error) {
-            const message = error instanceof Error ? error.message : '加载历史记录失败';
-            if (append) {
-                setAppendError(message);
-            } else {
-                setErrorMessage(message);
-                setHasMore(false);
-                setNextOffset(null);
-            }
-            showToast('error', message);
-            if (!append) {
-                setItems([]);
-            }
-        } finally {
-            if (append) {
-                inFlightRequestKeyRef.current = null;
-                setLoadingMore(false);
-            } else {
-                setLoading(false);
-            }
-        }
-    }, [showToast, type, user?.id]);
-
-    const handleToggle = useCallback(() => {
-        if (!isOpen) {
-            loadHistory();
-        }
-        setIsOpen(!isOpen);
-    }, [isOpen, loadHistory]);
+    useEffect(() => {
+        setNavigating(null);
+    }, [isOpen, type, user?.id]);
 
     useEffect(() => {
         if (
@@ -185,10 +107,15 @@ export function HistoryDrawer({ type, className = '' }: HistoryDrawerProps) {
 
     // 点击查看历史记录详情
     const handleViewItem = useCallback(async (itemId: string) => {
+        const scope = captureScope(itemId);
+        if (!scope) return;
+        const requestId = ++restoreRequestId.current;
+        const isCurrent = () => scope.isCurrent() && restoreRequestId.current === requestId;
         setNavigating(itemId);
 
         try {
-            const payload = await loadHistoryRestore(type, itemId, defaultTimeZone);
+            const payload = await loadHistoryRestore(type, itemId, defaultTimeZone, { signal: scope.signal });
+            if (!isCurrent()) return;
             if (!payload) {
                 throw new Error('未找到历史记录');
             }
@@ -197,13 +124,14 @@ export function HistoryDrawer({ type, className = '' }: HistoryDrawerProps) {
             setIsOpen(false);
             router.push(applyHistoryRestorePayload(payload));
         } catch (err) {
+            if (!isCurrent()) return;
             const message = err instanceof Error ? err.message : '加载历史记录失败';
             setErrorMessage(message);
             showToast('error', message);
         } finally {
-            setNavigating(null);
+            if (isCurrent()) setNavigating(null);
         }
-    }, [defaultTimeZone, router, showToast, type]);
+    }, [captureScope, defaultTimeZone, router, setErrorMessage, showToast, type]);
 
     if (sessionLoading || !user?.id) return null;
 

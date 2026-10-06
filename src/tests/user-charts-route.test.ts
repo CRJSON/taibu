@@ -25,6 +25,31 @@ function mockUserContext<T extends object>(user: unknown, db: T) {
   };
 }
 
+test('chart bundle and CRUD handlers reject an expected-user mismatch before any database call', async (t) => {
+  const apiUtils = require('../lib/api-utils') as typeof import('../lib/api-utils');
+  let databaseCalls = 0;
+  t.mock.method(apiUtils, 'requireUserContext', async () => mockUserContext({ id: 'bob' }, {
+    from() { databaseCalls += 1; throw new Error('must not access the database'); },
+  }));
+  const bundle = await import('../app/api/user/charts/route');
+  const crud = await import('../lib/api/chart-crud');
+  const handlers: Array<(request: NextRequest) => Promise<Response>> = [bundle.GET, bundle.PATCH, bundle.DELETE];
+  for (const tableName of ['bazi_charts', 'ziwei_charts']) {
+    handlers.push(crud.createChartGetHandler({ tableName }));
+    handlers.push(crud.createChartPostHandler({ tableName }));
+    handlers.push(crud.createChartUpdateHandler({ tableName }));
+  }
+  for (const handler of handlers) {
+    for (const expected of ['alice', '']) {
+      const response = await handler(new NextRequest('http://localhost/api/user/charts', {
+        headers: { 'X-Expected-User-Id': expected },
+      }));
+      assert.equal(response.status, 409);
+    }
+  }
+  assert.equal(databaseCalls, 0);
+});
+
 test('user charts GET aggregates bazi and ziwei charts through a single user API', async (t) => {
   const apiUtils = require('../lib/api-utils') as {
     requireUserContext: typeof import('../lib/api-utils').requireUserContext;

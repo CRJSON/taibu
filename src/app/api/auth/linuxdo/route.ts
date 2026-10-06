@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generateState, generatePKCE, buildAuthUrl, normalizeLinuxDoReturnTo } from '@/lib/oauth/linuxdo';
 import { getAuthContext } from '@/lib/api-utils';
+import { authCookieOptions } from '@/lib/auth-session';
 
 const OAUTH_STATE_COOKIE = 'linuxdo-oauth-state';
 const CLAIM_INTENT = 'membership-claim';
@@ -37,7 +38,6 @@ export async function GET(request: NextRequest) {
   const authUrl = buildAuthUrl(state, codeChallenge, redirectUri);
 
   const response = NextResponse.redirect(authUrl);
-  const secure = process.env.NODE_ENV === 'production';
 
   // 将 state + codeVerifier 存入 httpOnly cookie，回调时校验
   response.cookies.set(OAUTH_STATE_COOKIE, JSON.stringify({
@@ -46,10 +46,7 @@ export async function GET(request: NextRequest) {
     intent: intent === CLAIM_INTENT ? CLAIM_INTENT : 'login',
     returnTo,
   }), {
-    httpOnly: true,
-    secure,
-    sameSite: 'lax',
-    path: '/',
+    ...authCookieOptions(),
     maxAge: 600, // 10 分钟
   });
 

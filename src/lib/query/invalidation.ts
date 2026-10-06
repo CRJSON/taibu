@@ -5,9 +5,17 @@ import { invalidateLocalCaches, type LocalCacheScope } from '@/lib/cache/local-s
 export type MutationEffects = {
   queryKeys: ReadonlyArray<ReturnType<(typeof queryKeys)[keyof typeof queryKeys]>>;
   storageScopes: readonly LocalCacheScope[];
+  exact?: boolean;
+  cancelPending?: boolean;
 };
 
 export const mutationEffects = {
+  userCharts: (userId: string): MutationEffects => ({
+    queryKeys: [queryKeys.userCharts(userId)],
+    storageScopes: ['data_sources', 'default_bazi_chart'],
+    exact: true,
+    cancelPending: true,
+  }),
   userSettings: (userId: string): MutationEffects => ({
     queryKeys: [queryKeys.chatBootstrap(userId)],
     storageScopes: ['default_bazi_chart'],
@@ -16,7 +24,7 @@ export const mutationEffects = {
 
 // Explicit effects replace URL inference; legacy events remain in browser-api.
 export function applyMutationEffects(effects: MutationEffects): LocalCacheScope[] {
-  invalidateQueryKeys(effects.queryKeys);
+  invalidateQueryKeys(effects.queryKeys, effects);
   const scopes = Array.from(new Set(effects.storageScopes));
   try {
     invalidateLocalCaches(scopes);
@@ -73,7 +81,10 @@ export function invalidateQueriesForPath(pathname: string) {
   invalidateQueryKeys(resolveInvalidationKeys(pathname));
 }
 
-function invalidateQueryKeys(keys: ReadonlyArray<readonly unknown[]>) {
+function invalidateQueryKeys(
+  keys: ReadonlyArray<readonly unknown[]>,
+  options: Pick<MutationEffects, 'exact' | 'cancelPending'> = {},
+) {
   if (typeof window === 'undefined') {
     return;
   }
@@ -88,6 +99,15 @@ function invalidateQueryKeys(keys: ReadonlyArray<readonly unknown[]>) {
     const identity = JSON.stringify(key);
     if (seen.has(identity)) continue;
     seen.add(identity);
-    void queryClient.invalidateQueries({ queryKey: key });
+    const filter = options.exact ? { queryKey: key, exact: true } : { queryKey: key };
+    if (options.cancelPending) {
+      // invalidateQueries alone reuses an initial in-flight read with no data.
+      // Retire that pre-write snapshot before requesting the committed state.
+      void queryClient.cancelQueries(filter)
+        .then(() => queryClient.invalidateQueries(filter))
+        .catch(() => { /* A refresh failure must not fail a committed mutation. */ });
+    } else {
+      void queryClient.invalidateQueries(filter).catch(() => {});
+    }
   }
 }

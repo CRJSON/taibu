@@ -1,0 +1,2012 @@
+{
+  "formatVersion": 1,
+  "baselineRevision": "5725dde",
+  "sourceFingerprint": "3596cd84b87ab036c3adb04dcc48b0d4801d6e3ee8ebc27366547d35bb524eb8",
+  "target": "empty local self-hosted application schema; NOT production parity or a migration replay",
+  "bootstrapOrder": [
+    "platform roles/extensions",
+    "GoTrue migrations",
+    "001-application.sql",
+    "supabase/migrations/20261003_100000_fix_rate_limit_admission.sql",
+    "Storage migrations",
+    "002-storage.sql",
+    "PostgREST reload"
+  ],
+  "requiredPostBaselineMigrations": [
+    "supabase/migrations/20261003_100000_fix_rate_limit_admission.sql"
+  ],
+  "sources": [
+    {
+      "file": "supabase/tabel_export_from_supabase.sql",
+      "sha256": "5d420944bc351747370bda6cffbe0d29d131ef64e4ee4145fcbd7554106fdf3a"
+    },
+    {
+      "file": "supabase/migrations/20260118_create_gamification_tables.sql",
+      "sha256": "6bbd793c83b999937510fbfe720756bda60a79035f7e00933773e6a004eb3094"
+    },
+    {
+      "file": "supabase/migrations/20260124_create_knowledge_base_tables.sql",
+      "sha256": "95afffda89e937a91906b223982dcbee11158da07dba89e9a1313d52c5e5f109"
+    },
+    {
+      "file": "supabase/migrations/20260313_user_oauth_providers.sql",
+      "sha256": "2b907d737bfc54df87488fb1ddad11b3886bfa6acd0a0372b467a00798f0ab9c"
+    },
+    {
+      "file": "supabase/migrations/20260318_unify_ai_gateway_sources.sql",
+      "sha256": "953ae70d1e2a230c3b8b3c760df77174f31e5ade038ea077f2efd35b5880314d"
+    },
+    {
+      "file": "supabase/migrations/20260409_140500_full_atomicity_repairs.sql",
+      "sha256": "8275231ff0fec4668f3128751ef5ca0b7b848496e3c0325f93b56f46c5aed2e4"
+    },
+    {
+      "file": "supabase/migrations/20260123_add_activation_keys_and_purchase_links.sql",
+      "sha256": "3e9d1c7ac98bf9955de25ed21c059a362c958a76e15f81fb062996ea99cc3fcc"
+    },
+    {
+      "file": "supabase/migrations/20260128_create_ai_model_tables.sql",
+      "sha256": "cf27af5d76d75dc61ed67f82bf4bb06a82948e4a0b31e41c3412fdf4d854aef3"
+    },
+    {
+      "file": "supabase/migrations/20260316_create_conversation_messages.sql",
+      "sha256": "aa480d5322dad396866fa052b76b7aaf1508d22e03cf4eb29a4514b6a7f21a17"
+    },
+    {
+      "file": "supabase/migrations/20260723_100000_create_meihua_xiaoliuren_web.sql",
+      "sha256": "b49778538a0f24f96907c19d45905f77ffac0527daa553747dfeaf5d5ad49b5e"
+    },
+    {
+      "file": "supabase/migrations/create_conversations_table.sql",
+      "sha256": "8b9c87a0ad9d35ca94c0b852f288f6074e8d088de8b87642276ec95b46e407a9"
+    },
+    {
+      "file": "supabase/migrations/20260211_remove_service_role_key_phase2.sql",
+      "sha256": "5d6168753b9af42e13375f2903404e7fa2f7dded4af3b13f51aa43c76188c929"
+    },
+    {
+      "file": "supabase/migrations/fix_login_attempts_rls.sql",
+      "sha256": "ac4dbaf678f17c29c305c944216ddabfdd3cf541afd1a9add899d3ece6c6a2bd"
+    },
+    {
+      "file": "supabase/selfhost/source-rpcs.sql",
+      "sha256": "b04fa3ee4f6d65a8cf8d4898aa95cfa3e967d55f1fdcffe6595c7f4b4d613918"
+    },
+    {
+      "file": "supabase/migrations/20260408_z_remaining_transactional_multi_write_rpcs.sql",
+      "sha256": "1a1d10e1921f06cfa6f4f7860b617bc3da9021aeb17c084775441d7fe40a297e"
+    },
+    {
+      "file": "supabase/migrations/20260409_000100_remaining_atomicity_rpcs.sql",
+      "sha256": "57ce5c3719d9d26ff08b4bf0217b9f1593b346bd141257235c8da79270b28c97"
+    },
+    {
+      "file": "supabase/migrations/20260409_021500_admin_session_rpc_alignment.sql",
+      "sha256": "a084830bc07baa8224220c50344027a9d8d8e975fd041fa64edbefc7d498418d"
+    },
+    {
+      "file": "supabase/migrations/20260409_235900_membership_credit_redesign.sql",
+      "sha256": "d243a92a2b9fcac5b17ec77f97648cf033da00bb4361618d8ce4150cd805ec72"
+    },
+    {
+      "file": "supabase/migrations/20260410_103000_fix_linuxdo_claim_concurrency.sql",
+      "sha256": "8daaf112cb932a97a136d6cc7b6fe8860a24e09b6f7b07d1a893ff694f881d94"
+    },
+    {
+      "file": "supabase/migrations/20260410_141500_checkin_overcap_drop_user_achievements.sql",
+      "sha256": "343a69c748d7114f23914f5daf2e543e72acda82f26656d4ff212082b28dbf48"
+    },
+    {
+      "file": "supabase/migrations/20260411_103500_align_admin_session_service_rpcs.sql",
+      "sha256": "4d587914aa8c90cd8690b3c3096e5055f2233a3e5293077934562bb96665b41d"
+    },
+    {
+      "file": "supabase/migrations/20260411_104200_restore_batch_update_vectors_as_service.sql",
+      "sha256": "93760cba6bbb391378f5b2274367f93aacaa16de0da9befc742dd599e044075c"
+    },
+    {
+      "file": "supabase/migrations/20260411_111500_restrict_admin_session_rpc_acl.sql",
+      "sha256": "7b7dd91dffbe1c6aec33ed7c9820b179067b5d40a51ebfdfd0f74b998b55f51a"
+    },
+    {
+      "file": "supabase/migrations/20261002_100000_fix_knowledge_search_contracts.sql",
+      "sha256": "7110d8583d7e51179c479169e01790c1f9a2ab6363fb56eaf9538a66d7726cf6"
+    },
+    {
+      "file": "supabase/migrations/20261002_101000_restrict_credit_ledger_rpc.sql",
+      "sha256": "49e13a0bfc982010d6a36bb9acc27884f9a5a3a2415df97cdef337944f35754b"
+    },
+    {
+      "file": "supabase/migrations/20261002_102000_protect_account_and_ledger_writes.sql",
+      "sha256": "cdb0ac0a501806356814d7eb08819fde0fd53d32d4e68e7eaf3086178216d56e"
+    },
+    {
+      "file": "supabase/selfhost/source-views.sql",
+      "sha256": "3ec59bffedd43530835e728dd9e9fac580ed09bbacb23e64fe460cb2775c6342"
+    },
+    {
+      "file": "src/lib/history/registry.ts",
+      "sha256": "7b80fe60fdcf75cedef3a3e9713162f3399bd5c2c6a7f3246892cd2682e9fdff"
+    },
+    {
+      "file": "src/app/api/user/charts/route.ts",
+      "sha256": "5ad51538e36334b259aef16ad34c6bf949bd7e30d37673738356c0f168ad0511"
+    },
+    {
+      "file": "supabase/selfhost/002-storage.sql",
+      "sha256": "e1beff8c548f424216b2408d1bdd8aacc81f15fb1853bd8b41f6753ec9a80e66"
+    },
+    {
+      "file": "src/lib/app-settings.ts",
+      "sha256": "a8ea39bce271a5c3e5ac530c9d44757247729f90ba0cf112b88e5a68d92d8524"
+    },
+    {
+      "file": "scripts/selfhost-schema.mjs",
+      "sha256": "a2a205f4213c662f97c8f9fdc7c5d3b6a389d58c4030673be61681398cec80d2"
+    },
+    {
+      "file": "src/app/api/supabase/storage/route.ts",
+      "sha256": "43e46f2388b101f777894971b92039a91d302ad78ea9cf5bf9c840c0f42eac28"
+    },
+    {
+      "file": "src/lib/user/profile.ts",
+      "sha256": "23357316b11b39d331597ec3eb6a37f309fcd80be39458f95401a8d2279f2d20"
+    }
+  ],
+  "normalizations": [
+    "Snapshot ARRAY placeholders -> text[] for tags/yongshen_targets",
+    "USER-DEFINED -> extensions.vector",
+    "Inline conversations NOT VALID CHECK -> valid CHECK on empty table",
+    "Foreign keys deferred until all application tables exist",
+    "Restore explicitly sourced uniqueness/indexes/vector metadata check and child CASCADE actions",
+    "New local owner/admin policies and least-privilege ACL; not inferred production metadata",
+    "Skip obsolete tables/data backfills/model seeds and credentials",
+    "Disable known incomplete RPCs rather than fabricate implementation",
+    "Local graph deletion restricts entry deletion to caller-owned knowledge bases",
+    "Local vector RPC compatibility: finite float guard uses explicit Infinity/-Infinity/NaN exclusion; decimal regex uses [.] rather than backslash escape",
+    "Auth claim accessors read verified PostgREST request.jwt.claims; do not create or emulate auth tables"
+  ],
+  "tables": [
+    {
+      "name": "activation_keys",
+      "source": "supabase/tabel_export_from_supabase.sql",
+      "security": "administrator JWT only unless explicit owner/catalog policy below",
+      "uniqueSource": null
+    },
+    {
+      "name": "ai_gateways",
+      "source": "supabase/tabel_export_from_supabase.sql",
+      "security": "public catalog SELECT (enabled/published rows where applicable); administrator JWT writes",
+      "uniqueSource": null
+    },
+    {
+      "name": "ai_model_gateway_bindings",
+      "source": "supabase/tabel_export_from_supabase.sql",
+      "security": "public catalog SELECT (enabled/published rows where applicable); administrator JWT writes",
+      "uniqueSource": "20260318_unify_ai_gateway_sources"
+    },
+    {
+      "name": "ai_models",
+      "source": "supabase/tabel_export_from_supabase.sql",
+      "security": "public catalog SELECT (enabled/published rows where applicable); administrator JWT writes",
+      "uniqueSource": null
+    },
+    {
+      "name": "announcements",
+      "source": "supabase/tabel_export_from_supabase.sql",
+      "security": "public catalog SELECT (enabled/published rows where applicable); administrator JWT writes",
+      "uniqueSource": null
+    },
+    {
+      "name": "annual_reports",
+      "source": "supabase/tabel_export_from_supabase.sql",
+      "security": "owner SELECT + administrator JWT writes",
+      "uniqueSource": "20260118_create_gamification_tables"
+    },
+    {
+      "name": "app_settings",
+      "source": "supabase/tabel_export_from_supabase.sql",
+      "security": "public catalog SELECT (enabled/published rows where applicable); administrator JWT writes",
+      "uniqueSource": null
+    },
+    {
+      "name": "archived_sources",
+      "source": "supabase/tabel_export_from_supabase.sql",
+      "security": "local owner CRUD + administrator JWT; linked resource ownership checked",
+      "uniqueSource": "20260124_create_knowledge_base_tables"
+    },
+    {
+      "name": "bazi_case_events",
+      "source": "supabase/tabel_export_from_supabase.sql",
+      "security": "owner SELECT + administrator JWT writes",
+      "uniqueSource": null
+    },
+    {
+      "name": "bazi_case_profiles",
+      "source": "supabase/tabel_export_from_supabase.sql",
+      "security": "owner SELECT + administrator JWT writes",
+      "uniqueSource": null
+    },
+    {
+      "name": "bazi_charts",
+      "source": "supabase/tabel_export_from_supabase.sql",
+      "security": "local owner CRUD + administrator JWT; linked resource ownership checked",
+      "uniqueSource": null
+    },
+    {
+      "name": "community_comments",
+      "source": "supabase/tabel_export_from_supabase.sql",
+      "security": "blocked: missing community counter/moderation semantics",
+      "uniqueSource": null
+    },
+    {
+      "name": "community_posts",
+      "source": "supabase/tabel_export_from_supabase.sql",
+      "security": "blocked: missing community counter/moderation semantics",
+      "uniqueSource": null
+    },
+    {
+      "name": "community_reports",
+      "source": "supabase/tabel_export_from_supabase.sql",
+      "security": "blocked: missing community counter/moderation semantics",
+      "uniqueSource": null
+    },
+    {
+      "name": "community_votes",
+      "source": "supabase/tabel_export_from_supabase.sql",
+      "security": "blocked: missing community counter/moderation semantics",
+      "uniqueSource": null
+    },
+    {
+      "name": "conversation_messages",
+      "source": "supabase/tabel_export_from_supabase.sql",
+      "security": "owner CRUD through conversations ownership + administrator JWT",
+      "uniqueSource": null
+    },
+    {
+      "name": "conversations",
+      "source": "supabase/tabel_export_from_supabase.sql",
+      "security": "local owner CRUD + administrator JWT; linked resource ownership checked",
+      "uniqueSource": null
+    },
+    {
+      "name": "credit_transactions",
+      "source": "supabase/tabel_export_from_supabase.sql",
+      "security": "owner SELECT + administrator JWT writes",
+      "uniqueSource": null
+    },
+    {
+      "name": "daily_checkins",
+      "source": "supabase/tabel_export_from_supabase.sql",
+      "security": "owner SELECT + administrator JWT writes",
+      "uniqueSource": "20260118_create_gamification_tables"
+    },
+    {
+      "name": "daliuren_divinations",
+      "source": "supabase/tabel_export_from_supabase.sql",
+      "security": "local owner CRUD + administrator JWT; linked resource ownership checked",
+      "uniqueSource": null
+    },
+    {
+      "name": "face_readings",
+      "source": "supabase/tabel_export_from_supabase.sql",
+      "security": "local owner CRUD + administrator JWT; linked resource ownership checked",
+      "uniqueSource": null
+    },
+    {
+      "name": "hepan_charts",
+      "source": "supabase/tabel_export_from_supabase.sql",
+      "security": "local owner CRUD + administrator JWT; linked resource ownership checked",
+      "uniqueSource": null
+    },
+    {
+      "name": "knowledge_bases",
+      "source": "supabase/tabel_export_from_supabase.sql",
+      "security": "local owner CRUD + administrator JWT; linked resource ownership checked",
+      "uniqueSource": null
+    },
+    {
+      "name": "knowledge_entries",
+      "source": "supabase/tabel_export_from_supabase.sql",
+      "security": "owner CRUD through knowledge_bases ownership + administrator JWT",
+      "uniqueSource": "20260124_create_knowledge_base_tables"
+    },
+    {
+      "name": "liuyao_divinations",
+      "source": "supabase/tabel_export_from_supabase.sql",
+      "security": "local owner CRUD + administrator JWT; linked resource ownership checked",
+      "uniqueSource": null
+    },
+    {
+      "name": "login_attempts",
+      "source": "supabase/tabel_export_from_supabase.sql",
+      "security": "administrator JWT only unless explicit owner/catalog policy below",
+      "uniqueSource": null
+    },
+    {
+      "name": "mbti_readings",
+      "source": "supabase/tabel_export_from_supabase.sql",
+      "security": "local owner CRUD + administrator JWT; linked resource ownership checked",
+      "uniqueSource": null
+    },
+    {
+      "name": "meihua_divinations",
+      "source": "supabase/tabel_export_from_supabase.sql",
+      "security": "local owner CRUD + administrator JWT; linked resource ownership checked",
+      "uniqueSource": null
+    },
+    {
+      "name": "ming_notes",
+      "source": "supabase/tabel_export_from_supabase.sql",
+      "security": "local owner CRUD + administrator JWT; linked resource ownership checked",
+      "uniqueSource": null
+    },
+    {
+      "name": "ming_records",
+      "source": "supabase/tabel_export_from_supabase.sql",
+      "security": "local owner CRUD + administrator JWT; linked resource ownership checked",
+      "uniqueSource": null
+    },
+    {
+      "name": "notifications",
+      "source": "supabase/tabel_export_from_supabase.sql",
+      "security": "owner SELECT + administrator JWT writes",
+      "uniqueSource": null
+    },
+    {
+      "name": "palm_readings",
+      "source": "supabase/tabel_export_from_supabase.sql",
+      "security": "local owner CRUD + administrator JWT; linked resource ownership checked",
+      "uniqueSource": null
+    },
+    {
+      "name": "qimen_charts",
+      "source": "supabase/tabel_export_from_supabase.sql",
+      "security": "local owner CRUD + administrator JWT; linked resource ownership checked",
+      "uniqueSource": null
+    },
+    {
+      "name": "rate_limits",
+      "source": "supabase/tabel_export_from_supabase.sql",
+      "security": "administrator JWT only unless explicit owner/catalog policy below",
+      "uniqueSource": null
+    },
+    {
+      "name": "reminder_subscriptions",
+      "source": "supabase/tabel_export_from_supabase.sql",
+      "security": "local owner CRUD + administrator JWT; linked resource ownership checked",
+      "uniqueSource": "20260118_create_gamification_tables"
+    },
+    {
+      "name": "scheduled_reminders",
+      "source": "supabase/tabel_export_from_supabase.sql",
+      "security": "owner SELECT + administrator JWT writes",
+      "uniqueSource": "20260409_140500_full_atomicity_repairs"
+    },
+    {
+      "name": "tarot_readings",
+      "source": "supabase/tabel_export_from_supabase.sql",
+      "security": "local owner CRUD + administrator JWT; linked resource ownership checked",
+      "uniqueSource": null
+    },
+    {
+      "name": "user_oauth_providers",
+      "source": "supabase/tabel_export_from_supabase.sql",
+      "security": "owner SELECT + administrator JWT writes",
+      "uniqueSource": "20260313_user_oauth_providers"
+    },
+    {
+      "name": "user_settings",
+      "source": "supabase/tabel_export_from_supabase.sql",
+      "security": "local owner CRUD + administrator JWT; linked resource ownership checked",
+      "uniqueSource": null
+    },
+    {
+      "name": "users",
+      "source": "supabase/tabel_export_from_supabase.sql",
+      "security": "owner SELECT/INSERT/UPDATE protected by entitlement trigger; administrator JWT",
+      "uniqueSource": null
+    },
+    {
+      "name": "xiaoliuren_divinations",
+      "source": "supabase/tabel_export_from_supabase.sql",
+      "security": "local owner CRUD + administrator JWT; linked resource ownership checked",
+      "uniqueSource": null
+    },
+    {
+      "name": "ziwei_charts",
+      "source": "supabase/tabel_export_from_supabase.sql",
+      "security": "local owner CRUD + administrator JWT; linked resource ownership checked",
+      "uniqueSource": null
+    }
+  ],
+  "rpcReferences": [
+    {
+      "name": "activate_key_as_service",
+      "callers": [
+        "src/lib/user/activation-keys.ts"
+      ],
+      "source": "supabase/migrations/20260409_235900_membership_credit_redesign.sql",
+      "status": "defined",
+      "reason": null
+    },
+    {
+      "name": "admin_create_ai_model_binding",
+      "callers": [
+        "src/app/api/admin/ai-models/[id]/sources/route.ts"
+      ],
+      "source": "supabase/migrations/20260409_140500_full_atomicity_repairs.sql",
+      "status": "defined",
+      "reason": null
+    },
+    {
+      "name": "admin_create_ai_model_with_binding",
+      "callers": [
+        "src/app/api/admin/ai-models/route.ts"
+      ],
+      "source": "supabase/selfhost/source-rpcs.sql",
+      "status": "defined",
+      "reason": null
+    },
+    {
+      "name": "admin_update_ai_model_and_cleanup_bindings",
+      "callers": [
+        "src/app/api/admin/ai-models/[id]/route.ts"
+      ],
+      "source": "supabase/selfhost/source-rpcs.sql",
+      "status": "defined",
+      "reason": null
+    },
+    {
+      "name": "admin_update_ai_model_binding",
+      "callers": [
+        "src/app/api/admin/ai-models/[id]/sources/[sourceId]/route.ts",
+        "src/app/api/admin/ai-models/[id]/sources/[sourceId]/route.ts"
+      ],
+      "source": "supabase/migrations/20260409_140500_full_atomicity_repairs.sql",
+      "status": "defined",
+      "reason": null
+    },
+    {
+      "name": "batch_update_vectors",
+      "callers": [
+        "src/lib/knowledge-base/ingest.ts"
+      ],
+      "source": "supabase/selfhost/source-rpcs.sql",
+      "status": "defined",
+      "reason": null
+    },
+    {
+      "name": "batch_update_vectors_as_service",
+      "callers": [
+        "src/lib/knowledge-base/ingest.ts"
+      ],
+      "source": "supabase/migrations/20260411_104200_restore_batch_update_vectors_as_service.sql",
+      "status": "defined",
+      "reason": null
+    },
+    {
+      "name": "check_login_attempts",
+      "callers": [
+        "src/app/api/auth/route.ts"
+      ],
+      "source": "supabase/migrations/fix_login_attempts_rls.sql",
+      "status": "defined",
+      "reason": null
+    },
+    {
+      "name": "check_vector_index_exists",
+      "callers": [
+        "src/lib/knowledge-base/embedding-config.ts",
+        "src/lib/knowledge-base/vector-index.ts"
+      ],
+      "source": "supabase/selfhost/source-rpcs.sql",
+      "status": "defined",
+      "reason": null
+    },
+    {
+      "name": "claim_linuxdo_membership_as_service",
+      "callers": [
+        "src/app/api/auth/linuxdo/callback/route.ts"
+      ],
+      "source": "supabase/migrations/20260410_103000_fix_linuxdo_claim_concurrency.sql",
+      "status": "defined",
+      "reason": null
+    },
+    {
+      "name": "consume_rate_limit_slot_as_admin",
+      "callers": [
+        "src/lib/rate-limit.ts"
+      ],
+      "source": "supabase/migrations/20260409_000100_remaining_atomicity_rpcs.sql",
+      "status": "blocked",
+      "reason": "Disabled until required 20261003_100000_fix_rate_limit_admission.sql is applied."
+    },
+    {
+      "name": "create_analysis_conversation_with_history_as_service",
+      "callers": [
+        "src/lib/ai/ai-analysis.ts"
+      ],
+      "source": "supabase/migrations/20260723_100000_create_meihua_xiaoliuren_web.sql",
+      "status": "defined",
+      "reason": null
+    },
+    {
+      "name": "create_conversation_with_messages",
+      "callers": [
+        "src/app/api/conversations/route.ts",
+        "src/lib/ai/ai-analysis.ts"
+      ],
+      "source": "supabase/migrations/20260409_021500_admin_session_rpc_alignment.sql",
+      "status": "defined",
+      "reason": null
+    },
+    {
+      "name": "create_knowledge_base_with_limit",
+      "callers": [
+        "src/app/api/knowledge-base/route.ts"
+      ],
+      "source": "supabase/migrations/20260409_140500_full_atomicity_repairs.sql",
+      "status": "defined",
+      "reason": null
+    },
+    {
+      "name": "decrement_ai_chat_count",
+      "callers": [
+        "src/lib/user/credits.ts"
+      ],
+      "source": "supabase/migrations/20260409_235900_membership_credit_redesign.sql",
+      "status": "defined",
+      "reason": null
+    },
+    {
+      "name": "delete_conversation_graph",
+      "callers": [
+        "src/lib/chat/conversation-delete.ts"
+      ],
+      "source": "supabase/selfhost/source-rpcs.sql",
+      "status": "defined",
+      "reason": null
+    },
+    {
+      "name": "delete_history_item_and_conversation",
+      "callers": [
+        "src/app/api/history-summaries/route.ts"
+      ],
+      "source": "supabase/migrations/20260723_100000_create_meihua_xiaoliuren_web.sql",
+      "status": "defined",
+      "reason": null
+    },
+    {
+      "name": "import_ming_records_and_notes",
+      "callers": [
+        "src/app/api/records/import/route.ts"
+      ],
+      "source": "supabase/selfhost/source-rpcs.sql",
+      "status": "defined",
+      "reason": null
+    },
+    {
+      "name": "increment_ai_chat_count",
+      "callers": [
+        "src/lib/user/credits.ts"
+      ],
+      "source": "supabase/migrations/20260409_235900_membership_credit_redesign.sql",
+      "status": "defined",
+      "reason": null
+    },
+    {
+      "name": "increment_community_post_view_count",
+      "callers": [
+        "src/app/api/community/posts/[id]/route.ts"
+      ],
+      "source": "supabase/selfhost/source-rpcs.sql",
+      "status": "blocked",
+      "reason": "Community prototype blocked pending counter/moderation contract."
+    },
+    {
+      "name": "kb_replace_source_entries",
+      "callers": [
+        "src/lib/knowledge-base/persistence.server.ts"
+      ],
+      "source": "supabase/migrations/20260408_z_remaining_transactional_multi_write_rpcs.sql",
+      "status": "defined",
+      "reason": null
+    },
+    {
+      "name": "kb_unarchive_source_as_service",
+      "callers": [
+        "src/app/api/knowledge-base/archive/[id]/route.ts",
+        "src/app/api/knowledge-base/archive/[id]/route.ts"
+      ],
+      "source": "supabase/migrations/20260408_z_remaining_transactional_multi_write_rpcs.sql",
+      "status": "defined",
+      "reason": null
+    },
+    {
+      "name": "perform_daily_checkin_as_service",
+      "callers": [
+        "src/lib/user/checkin.ts"
+      ],
+      "source": "supabase/migrations/20260410_141500_checkin_overcap_drop_user_achievements.sql",
+      "status": "defined",
+      "reason": null
+    },
+    {
+      "name": "process_scheduled_reminder_delivery_as_service",
+      "callers": [
+        "src/lib/reminders.ts"
+      ],
+      "source": "supabase/migrations/20260409_000100_remaining_atomicity_rpcs.sql",
+      "status": "defined",
+      "reason": null
+    },
+    {
+      "name": "record_login_attempt",
+      "callers": [
+        "src/app/api/auth/route.ts"
+      ],
+      "source": "supabase/migrations/fix_login_attempts_rls.sql",
+      "status": "defined",
+      "reason": null
+    },
+    {
+      "name": "replace_conversation_messages",
+      "callers": [
+        "src/lib/server/conversation-messages.ts"
+      ],
+      "source": "supabase/migrations/20260409_021500_admin_session_rpc_alignment.sql",
+      "status": "defined",
+      "reason": null
+    },
+    {
+      "name": "save_bazi_case_profile_as_service",
+      "callers": [
+        "src/lib/server/bazi-case-profile.ts"
+      ],
+      "source": "supabase/migrations/20260408_z_remaining_transactional_multi_write_rpcs.sql",
+      "status": "defined",
+      "reason": null
+    },
+    {
+      "name": "schedule_reminder_if_absent_as_service",
+      "callers": [
+        "src/lib/reminders.ts"
+      ],
+      "source": "supabase/migrations/20260409_140500_full_atomicity_repairs.sql",
+      "status": "defined",
+      "reason": null
+    },
+    {
+      "name": "search_knowledge_fts",
+      "callers": [
+        "src/lib/knowledge-base/persistence.server.ts"
+      ],
+      "source": "supabase/migrations/20261002_100000_fix_knowledge_search_contracts.sql",
+      "status": "defined",
+      "reason": null
+    },
+    {
+      "name": "search_knowledge_trigram",
+      "callers": [
+        "src/lib/knowledge-base/persistence.server.ts"
+      ],
+      "source": "supabase/migrations/20261002_100000_fix_knowledge_search_contracts.sql",
+      "status": "defined",
+      "reason": null
+    },
+    {
+      "name": "search_knowledge_vector",
+      "callers": [
+        "src/lib/knowledge-base/persistence.server.ts"
+      ],
+      "source": "supabase/migrations/20261002_100000_fix_knowledge_search_contracts.sql",
+      "status": "defined",
+      "reason": null
+    },
+    {
+      "name": "submit_community_report_and_notify",
+      "callers": [
+        "src/app/api/community/reports/route.ts"
+      ],
+      "source": "supabase/migrations/20260409_000100_remaining_atomicity_rpcs.sql",
+      "status": "blocked",
+      "reason": "Community prototype blocked pending counter/moderation contract."
+    },
+    {
+      "name": "toggle_community_vote",
+      "callers": [
+        "src/app/api/community/votes/route.ts"
+      ],
+      "source": "supabase/migrations/20260409_140500_full_atomicity_repairs.sql",
+      "status": "blocked",
+      "reason": "Missing authoritative vote counter triggers and moderation rules."
+    },
+    {
+      "name": "toggle_ming_record_pin",
+      "callers": [
+        "src/app/api/records/[id]/route.ts"
+      ],
+      "source": "supabase/migrations/20260409_140500_full_atomicity_repairs.sql",
+      "status": "defined",
+      "reason": null
+    },
+    {
+      "name": "update_conversation_with_messages",
+      "callers": [
+        "src/app/api/conversations/[id]/route.ts"
+      ],
+      "source": "supabase/migrations/20260409_021500_admin_session_rpc_alignment.sql",
+      "status": "defined",
+      "reason": null
+    }
+  ],
+  "views": [
+    {
+      "name": "conversations_with_archive_status",
+      "source": "supabase/selfhost/source-views.sql",
+      "security": "security_invoker; SELECT only for authenticated/service_role; underlying caller RLS"
+    },
+    {
+      "name": "ming_records_with_archive_status",
+      "source": "supabase/selfhost/source-views.sql",
+      "security": "security_invoker; SELECT only for authenticated/service_role; underlying caller RLS"
+    }
+  ],
+  "relationReferences": [
+    {
+      "name": "activation_keys",
+      "kind": "table",
+      "status": "defined",
+      "callers": [
+        {
+          "file": "src/lib/user/activation-keys.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/user/activation-keys.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/user/activation-keys.ts",
+          "kind": "literal-from"
+        }
+      ]
+    },
+    {
+      "name": "ai_gateways",
+      "kind": "table",
+      "status": "defined",
+      "callers": [
+        {
+          "file": "src/app/api/admin/ai-gateways/[id]/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/admin/ai-gateways/route.ts",
+          "kind": "literal-from"
+        }
+      ]
+    },
+    {
+      "name": "ai_model_gateway_bindings",
+      "kind": "table",
+      "status": "defined",
+      "callers": [
+        {
+          "file": "src/app/api/admin/ai-models/[id]/sources/[sourceId]/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/admin/ai-models/[id]/sources/[sourceId]/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/admin/ai-models/[id]/sources/route.ts",
+          "kind": "literal-from"
+        }
+      ]
+    },
+    {
+      "name": "ai_models",
+      "kind": "table",
+      "status": "defined",
+      "callers": [
+        {
+          "file": "src/app/api/admin/ai-models/[id]/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/admin/ai-models/[id]/sources/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/admin/ai-models/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/server/ai-config.ts",
+          "kind": "literal-from"
+        }
+      ]
+    },
+    {
+      "name": "announcements",
+      "kind": "table",
+      "status": "defined",
+      "callers": [
+        {
+          "file": "src/app/api/admin/announcements/[id]/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/admin/announcements/[id]/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/admin/announcements/[id]/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/admin/announcements/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/admin/announcements/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/announcements/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/announcements/route.ts",
+          "kind": "literal-from"
+        }
+      ]
+    },
+    {
+      "name": "annual_reports",
+      "kind": "table",
+      "status": "defined",
+      "callers": [
+        {
+          "file": "src/lib/annual-report.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/annual-report.ts",
+          "kind": "literal-from"
+        }
+      ]
+    },
+    {
+      "name": "app_settings",
+      "kind": "table",
+      "status": "defined",
+      "callers": [
+        {
+          "file": "src/lib/app-settings.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/app-settings.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/app-settings.ts",
+          "kind": "literal-from"
+        }
+      ]
+    },
+    {
+      "name": "archived_sources",
+      "kind": "table",
+      "status": "defined",
+      "callers": [
+        {
+          "file": "src/app/api/knowledge-base/archive/[id]/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/knowledge-base/archive/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/knowledge-base/archive/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/knowledge-base/archive/route.ts",
+          "kind": "literal-from"
+        }
+      ]
+    },
+    {
+      "name": "bazi_case_events",
+      "kind": "table",
+      "status": "defined",
+      "callers": [
+        {
+          "file": "src/lib/server/bazi-case-profile.ts",
+          "kind": "literal-from"
+        }
+      ]
+    },
+    {
+      "name": "bazi_case_profiles",
+      "kind": "table",
+      "status": "defined",
+      "callers": [
+        {
+          "file": "src/lib/chat/chat-context.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/server/bazi-case-profile.ts",
+          "kind": "literal-from"
+        }
+      ]
+    },
+    {
+      "name": "bazi_charts",
+      "kind": "table",
+      "status": "defined",
+      "callers": [
+        {
+          "file": "src/app/api/bazi/analysis/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/bazi/charts/route.ts",
+          "kind": "tableName-catalog"
+        },
+        {
+          "file": "src/app/api/bazi/charts/update/route.ts",
+          "kind": "tableName-catalog"
+        },
+        {
+          "file": "src/app/api/reminders/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/user/charts/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/user/charts/route.ts",
+          "kind": "chart-return-catalog"
+        },
+        {
+          "file": "src/lib/api/chart-crud.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/chat/chat-context.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/chat/chat-context.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/data-sources/bazi.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/data-sources/bazi.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/data-sources/fortune.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/reminders.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/server/bazi-case-profile.ts",
+          "kind": "literal-from"
+        }
+      ]
+    },
+    {
+      "name": "community_comments",
+      "kind": "table",
+      "status": "blocked",
+      "callers": [
+        {
+          "file": "src/app/api/community/comments/[id]/admin/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/community/comments/[id]/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/community/comments/[id]/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/community/comments/[id]/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/community/comments/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/community/posts/[id]/route.ts",
+          "kind": "literal-from"
+        }
+      ]
+    },
+    {
+      "name": "community_posts",
+      "kind": "table",
+      "status": "blocked",
+      "callers": [
+        {
+          "file": "src/app/api/community/posts/[id]/admin/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/community/posts/[id]/admin/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/community/posts/[id]/admin/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/community/posts/[id]/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/community/posts/[id]/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/community/posts/[id]/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/community/posts/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/community/posts/route.ts",
+          "kind": "literal-from"
+        }
+      ]
+    },
+    {
+      "name": "community_reports",
+      "kind": "table",
+      "status": "blocked",
+      "callers": [
+        {
+          "file": "src/app/api/community/reports/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/community/reports/route.ts",
+          "kind": "literal-from"
+        }
+      ]
+    },
+    {
+      "name": "community_votes",
+      "kind": "table",
+      "status": "blocked",
+      "callers": [
+        {
+          "file": "src/app/api/community/posts/[id]/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/community/votes/route.ts",
+          "kind": "literal-from"
+        }
+      ]
+    },
+    {
+      "name": "conversation_messages",
+      "kind": "table",
+      "status": "defined",
+      "callers": [
+        {
+          "file": "src/lib/knowledge-base/ingest.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/knowledge-base/ingest.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/server/conversation-messages.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/server/conversation-messages.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/server/conversation-messages.ts",
+          "kind": "literal-from"
+        }
+      ]
+    },
+    {
+      "name": "conversations",
+      "kind": "table",
+      "status": "defined",
+      "callers": [
+        {
+          "file": "src/lib/annual-report.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/annual-report.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/knowledge-base/ingest.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/knowledge-base/ingest.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/knowledge-base/ingest.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/knowledge-base/ingest.ts",
+          "kind": "literal-from"
+        }
+      ]
+    },
+    {
+      "name": "conversations_with_archive_status",
+      "kind": "view",
+      "status": "defined",
+      "callers": [
+        {
+          "file": "src/app/api/conversations/[id]/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/conversations/route.ts",
+          "kind": "literal-from"
+        }
+      ]
+    },
+    {
+      "name": "credit_transactions",
+      "kind": "table",
+      "status": "defined",
+      "callers": [
+        {
+          "file": "src/app/api/credits/transactions/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/credits/transactions/route.ts",
+          "kind": "literal-from"
+        }
+      ]
+    },
+    {
+      "name": "daily_checkins",
+      "kind": "table",
+      "status": "defined",
+      "callers": [
+        {
+          "file": "src/lib/annual-report.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/user/checkin.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/user/checkin.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/user/checkin.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/user/checkin.ts",
+          "kind": "literal-from"
+        }
+      ]
+    },
+    {
+      "name": "daliuren_divinations",
+      "kind": "table",
+      "status": "defined",
+      "callers": [
+        {
+          "file": "src/app/api/daliuren/route.ts",
+          "kind": "tableName-catalog"
+        },
+        {
+          "file": "src/lib/data-sources/daliuren.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/data-sources/daliuren.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/history/registry.ts",
+          "kind": "tableName-catalog"
+        }
+      ]
+    },
+    {
+      "name": "face_readings",
+      "kind": "table",
+      "status": "defined",
+      "callers": [
+        {
+          "file": "src/lib/data-sources/face.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/data-sources/face.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/history/registry.ts",
+          "kind": "tableName-catalog"
+        }
+      ]
+    },
+    {
+      "name": "hepan_charts",
+      "kind": "table",
+      "status": "defined",
+      "callers": [
+        {
+          "file": "src/app/api/hepan/route.ts",
+          "kind": "tableName-catalog"
+        },
+        {
+          "file": "src/lib/data-sources/hepan.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/data-sources/hepan.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/history/registry.ts",
+          "kind": "tableName-catalog"
+        }
+      ]
+    },
+    {
+      "name": "knowledge_bases",
+      "kind": "table",
+      "status": "defined",
+      "callers": [
+        {
+          "file": "src/app/api/knowledge-base/[id]/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/knowledge-base/[id]/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/knowledge-base/[id]/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/knowledge-base/archive/[id]/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/knowledge-base/archive/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/knowledge-base/archive/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/knowledge-base/ingest/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/knowledge-base/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/knowledge-base/upload/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/knowledge-base/hits.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/knowledge-base/ingest.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/knowledge-base/persistence.server.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/mentions.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/mentions.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/server/chat/bootstrap.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/server/chat/prompt-context.ts",
+          "kind": "literal-from"
+        }
+      ]
+    },
+    {
+      "name": "knowledge_entries",
+      "kind": "table",
+      "status": "defined",
+      "callers": [
+        {
+          "file": "src/app/api/knowledge-base/archive/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/knowledge-base/archive/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/knowledge-base/ingest.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/knowledge-base/ingest.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/mentions.ts",
+          "kind": "literal-from"
+        }
+      ]
+    },
+    {
+      "name": "liuyao_divinations",
+      "kind": "table",
+      "status": "defined",
+      "callers": [
+        {
+          "file": "src/app/api/liuyao/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/liuyao/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/liuyao/route.ts",
+          "kind": "tableName-catalog"
+        },
+        {
+          "file": "src/lib/data-sources/liuyao.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/data-sources/liuyao.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/history/registry.ts",
+          "kind": "tableName-catalog"
+        }
+      ]
+    },
+    {
+      "name": "mbti_readings",
+      "kind": "table",
+      "status": "defined",
+      "callers": [
+        {
+          "file": "src/app/api/mbti/route.ts",
+          "kind": "tableName-catalog"
+        },
+        {
+          "file": "src/lib/data-sources/mbti.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/data-sources/mbti.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/history/registry.ts",
+          "kind": "tableName-catalog"
+        }
+      ]
+    },
+    {
+      "name": "meihua_divinations",
+      "kind": "table",
+      "status": "defined",
+      "callers": [
+        {
+          "file": "src/app/api/meihua/route.ts",
+          "kind": "tableName-catalog"
+        },
+        {
+          "file": "src/lib/data-sources/meihua.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/data-sources/meihua.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/history/registry.ts",
+          "kind": "tableName-catalog"
+        }
+      ]
+    },
+    {
+      "name": "ming_notes",
+      "kind": "table",
+      "status": "defined",
+      "callers": [
+        {
+          "file": "src/app/api/notes/[id]/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/notes/[id]/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/notes/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/notes/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/notes/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/records/export/route.ts",
+          "kind": "literal-from"
+        }
+      ]
+    },
+    {
+      "name": "ming_records",
+      "kind": "table",
+      "status": "defined",
+      "callers": [
+        {
+          "file": "src/app/api/records/[id]/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/records/[id]/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/records/[id]/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/records/[id]/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/records/export/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/records/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/data-sources/record.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/data-sources/record.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/knowledge-base/ingest.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/knowledge-base/ingest.ts",
+          "kind": "literal-from"
+        }
+      ]
+    },
+    {
+      "name": "ming_records_with_archive_status",
+      "kind": "view",
+      "status": "defined",
+      "callers": [
+        {
+          "file": "src/app/api/records/route.ts",
+          "kind": "literal-from"
+        }
+      ]
+    },
+    {
+      "name": "notifications",
+      "kind": "table",
+      "status": "defined",
+      "callers": [
+        {
+          "file": "src/app/api/app/bootstrap/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/notifications/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/notifications/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/notifications/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/notifications/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/notifications/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/notifications/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/notification-server.ts",
+          "kind": "literal-from"
+        }
+      ]
+    },
+    {
+      "name": "palm_readings",
+      "kind": "table",
+      "status": "defined",
+      "callers": [
+        {
+          "file": "src/lib/data-sources/palm.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/data-sources/palm.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/history/registry.ts",
+          "kind": "tableName-catalog"
+        }
+      ]
+    },
+    {
+      "name": "qimen_charts",
+      "kind": "table",
+      "status": "defined",
+      "callers": [
+        {
+          "file": "src/app/api/qimen/route.ts",
+          "kind": "tableName-catalog"
+        },
+        {
+          "file": "src/lib/data-sources/qimen.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/data-sources/qimen.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/history/registry.ts",
+          "kind": "tableName-catalog"
+        }
+      ]
+    },
+    {
+      "name": "reminder_subscriptions",
+      "kind": "table",
+      "status": "defined",
+      "callers": [
+        {
+          "file": "src/lib/reminders.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/reminders.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/reminders.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/reminders.ts",
+          "kind": "literal-from"
+        }
+      ]
+    },
+    {
+      "name": "scheduled_reminders",
+      "kind": "table",
+      "status": "defined",
+      "callers": [
+        {
+          "file": "src/lib/reminders.ts",
+          "kind": "literal-from"
+        }
+      ]
+    },
+    {
+      "name": "tarot_readings",
+      "kind": "table",
+      "status": "defined",
+      "callers": [
+        {
+          "file": "src/app/api/tarot/route.ts",
+          "kind": "tableName-catalog"
+        },
+        {
+          "file": "src/app/api/tarot/route.ts",
+          "kind": "tableName-catalog"
+        },
+        {
+          "file": "src/lib/data-sources/tarot.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/data-sources/tarot.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/history/registry.ts",
+          "kind": "tableName-catalog"
+        }
+      ]
+    },
+    {
+      "name": "user_oauth_providers",
+      "kind": "table",
+      "status": "defined",
+      "callers": [
+        {
+          "file": "src/app/api/auth/linuxdo/callback/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/auth/linuxdo/callback/route.ts",
+          "kind": "literal-from"
+        }
+      ]
+    },
+    {
+      "name": "user_settings",
+      "kind": "table",
+      "status": "defined",
+      "callers": [
+        {
+          "file": "src/app/api/bazi/analysis/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/user/charts/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/user/charts/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/user/profile/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/user/settings/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/user/settings/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/ai/chart-prompt-detail.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/chat/chat-context.ts",
+          "kind": "typed-adapter-catalog"
+        },
+        {
+          "file": "src/lib/data-sources/fortune.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/reminders.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/reminders.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/server/chat/bootstrap.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/server/chat/prompt-context.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/user/settings.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/user/settings.ts",
+          "kind": "typed-adapter-catalog"
+        }
+      ]
+    },
+    {
+      "name": "users",
+      "kind": "table",
+      "status": "defined",
+      "callers": [
+        {
+          "file": "src/app/api/app/bootstrap/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/app/bootstrap/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/auth/linuxdo/callback/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/chat/preview/route.ts",
+          "kind": "typed-adapter-catalog"
+        },
+        {
+          "file": "src/app/api/user/membership/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/user/membership/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/user/profile/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/user/profile/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/api-utils.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/community-server.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/community-server.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/community-server.ts",
+          "kind": "typed-adapter-catalog"
+        },
+        {
+          "file": "src/lib/server/chat/bootstrap.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/server/chat/bootstrap.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/user/credits.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/user/credits.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/user/membership-server.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/user/membership-server.ts",
+          "kind": "typed-adapter-catalog"
+        },
+        {
+          "file": "src/lib/user/profile-record.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/user/profile-record.ts",
+          "kind": "typed-adapter-catalog"
+        }
+      ]
+    },
+    {
+      "name": "xiaoliuren_divinations",
+      "kind": "table",
+      "status": "defined",
+      "callers": [
+        {
+          "file": "src/app/api/xiaoliuren/route.ts",
+          "kind": "tableName-catalog"
+        },
+        {
+          "file": "src/lib/data-sources/xiaoliuren.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/data-sources/xiaoliuren.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/history/registry.ts",
+          "kind": "tableName-catalog"
+        }
+      ]
+    },
+    {
+      "name": "ziwei_charts",
+      "kind": "table",
+      "status": "defined",
+      "callers": [
+        {
+          "file": "src/app/api/user/charts/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/user/charts/route.ts",
+          "kind": "chart-return-catalog"
+        },
+        {
+          "file": "src/app/api/ziwei/analysis/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/ziwei/charts/route.ts",
+          "kind": "tableName-catalog"
+        },
+        {
+          "file": "src/app/api/ziwei/charts/update/route.ts",
+          "kind": "tableName-catalog"
+        },
+        {
+          "file": "src/lib/data-sources/ziwei.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/data-sources/ziwei.ts",
+          "kind": "literal-from"
+        }
+      ]
+    }
+  ],
+  "dynamicRelationSites": [
+    {
+      "file": "src/app/api/chat/preview/route.ts",
+      "expression": "table",
+      "contract": "typed from(table) adapter"
+    },
+    {
+      "file": "src/app/api/history-summaries/route.ts",
+      "expression": "config.tableName",
+      "contract": "tableName catalog"
+    },
+    {
+      "file": "src/app/api/history-summaries/route.ts",
+      "expression": "config.tableName",
+      "contract": "tableName catalog"
+    },
+    {
+      "file": "src/app/api/history-summaries/route.ts",
+      "expression": "config.tableName",
+      "contract": "tableName catalog"
+    },
+    {
+      "file": "src/app/api/user/charts/route.ts",
+      "expression": "getChartTable(body.type",
+      "contract": "getChartTable return catalog"
+    },
+    {
+      "file": "src/app/api/user/charts/route.ts",
+      "expression": "getChartTable(type",
+      "contract": "getChartTable return catalog"
+    },
+    {
+      "file": "src/lib/api/chart-crud.ts",
+      "expression": "config.tableName",
+      "contract": "tableName catalog"
+    },
+    {
+      "file": "src/lib/api/chart-crud.ts",
+      "expression": "config.tableName",
+      "contract": "tableName catalog"
+    },
+    {
+      "file": "src/lib/api/chart-crud.ts",
+      "expression": "config.tableName",
+      "contract": "tableName catalog"
+    },
+    {
+      "file": "src/lib/api/divination-pipeline.ts",
+      "expression": "tableName",
+      "contract": "tableName factory configuration"
+    },
+    {
+      "file": "src/lib/chat/chat-context.ts",
+      "expression": "table",
+      "contract": "typed from(table) adapter"
+    },
+    {
+      "file": "src/lib/user/membership-server.ts",
+      "expression": "table",
+      "contract": "typed from(table) adapter"
+    }
+  ],
+  "excludedRelationAdapters": [
+    {
+      "file": "src/app/api/supabase/storage/route.ts",
+      "reason": "Storage bucket API, not PostgREST relations"
+    }
+  ],
+  "blockedFunctions": {
+    "increment_community_post_view_count": "Community prototype blocked pending counter/moderation contract.",
+    "toggle_community_vote": "Missing authoritative vote counter triggers and moderation rules.",
+    "submit_community_report_and_notify": "Community prototype blocked pending counter/moderation contract.",
+    "consume_rate_limit_slot_as_admin": "Disabled until required 20261003_100000_fix_rate_limit_admission.sql is applied."
+  },
+  "artifacts": [
+    {
+      "file": "supabase/selfhost/001-application.sql",
+      "sha256": "9305af48896d7d9bd12b428027625cbef2488c79542759be99fdc07a446f541d"
+    },
+    {
+      "file": "supabase/selfhost/002-storage.sql",
+      "sha256": "e1beff8c548f424216b2408d1bdd8aacc81f15fb1853bd8b41f6753ec9a80e66"
+    }
+  ]
+}

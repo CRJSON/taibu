@@ -209,6 +209,36 @@ INSERT INTO public.xiaoliuren_divinations(id, user_id, solar_datetime, lunar_mon
 VALUES (${quote(ids.xiaoliuren)}, ${quote(ids.owner)}, '2026-01-01', 1, 1, '子', '大安', '{}', '{}');
 RESET ROLE;`);
 
+  await t.test('rate admission: historical max+1 red case and corrected cap/ACL/concurrency', async () => {
+    const call = (key, max = 2) => `SELECT public.consume_rate_limit_slot_as_admin(${quote(key)}, '/rate-contract', ${max}, 60000);`;
+    const historical = await readFile(path.join(repoRoot, 'supabase/migrations/20260409_000100_remaining_atomicity_rpcs.sql'), 'utf8');
+    const oldFunction = historical.match(/^CREATE OR REPLACE FUNCTION public\.consume_rate_limit_slot_as_admin\([\s\S]*?^\$\$;/m)?.[0];
+    assert.ok(oldFunction);
+    // Exercise the actual historical body only inside a rolled-back local transaction.
+    const red = await sql(`BEGIN; SET LOCAL ROLE taibu_contract_owner; ${oldFunction}
+      SET LOCAL ROLE authenticated;
+      SET LOCAL request.jwt.claims = ${quote(JSON.stringify({ role: 'authenticated', sub: ids.admin }))};
+      ${call('historical')}${call('historical')}${call('historical')} ROLLBACK;`);
+    const oldResults = red.split('\n').filter(line => line.startsWith('{')).map(line => JSON.parse(line));
+    assert.equal(oldResults.length, 3);
+    assert.throws(() => assert.equal(oldResults[2].allowed, false), { code: 'ERR_ASSERTION' }, 'historical max+1 must reproduce the bug');
+
+    const accepted = [];
+    for (let i = 0; i < 4; i++) accepted.push(JSON.parse(await asActor(ids.admin, call('corrected'))));
+    assert.deepEqual(accepted.map(result => result.allowed), [true, true, false, false]);
+    assert.deepEqual(accepted.map(result => result.remaining), [1, 0, 0, 0]);
+    assert.equal(new Set(accepted.map(result => result.reset_at)).size, 1, 'denials do not extend the window');
+    assert.equal(await asOwner("SELECT request_count FROM public.rate_limits WHERE identifier = 'corrected';"), '2');
+    const parallel = await Promise.all(Array.from({ length: 12 }, () => asActor(ids.admin, call('concurrent', 3))));
+    assert.equal(parallel.map(value => JSON.parse(value)).filter(value => value.allowed).length, 3);
+    await asOwner("UPDATE public.rate_limits SET window_start = now() - interval '2 minutes' WHERE identifier = 'corrected';");
+    assert.equal(JSON.parse(await asActor(ids.admin, call('corrected'))).remaining, 1);
+    await expectDeniedWrite(ids.owner, call('unauthorized'));
+    await expectDeniedWrite(null, call('anonymous'), 'anon');
+    await assert.rejects(asActor(ids.admin, call('invalid', 0)), /22023/);
+    assert.equal(await asOwner("SELECT pg_get_userbyid(proowner) FROM pg_proc WHERE oid = 'public.consume_rate_limit_slot_as_admin(text,text,integer,integer)'::regprocedure;"), 'taibu_contract_owner');
+  });
+
   await t.test('real vector extension, non-owner roles and administrator predicate', async () => {
     const isolation = JSON.parse(await docker(['inspect', '--format',
       '{"network":{{json .HostConfig.NetworkMode}},"ports":{{json .HostConfig.PortBindings}},"binds":{{json .HostConfig.Binds}},"mounts":{{json .Mounts}},"tmpfs":{{json .HostConfig.Tmpfs}}}',

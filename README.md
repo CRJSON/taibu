@@ -106,9 +106,24 @@ npm install taibu-core
 
 ## 快速开始
 
-### Docker 部署
+### 本地自托管原型（PostgreSQL＋Redis）
 
-支持三种方式：
+不读取真实 `.env`，不连接 Vercel 或托管 Supabase。需要本机 Docker、Node.js 和 pnpm：
+
+```bash
+pnpm selfhost init --demo
+pnpm selfhost up
+# 打开 http://127.0.0.1:3080
+# 随机账号和密码：.taibu-local/taibu-local/credentials.json（不要公开）
+pnpm selfhost status
+pnpm selfhost down # 保留数据库与头像文件卷
+```
+
+`--demo` 使用明确标注的本地确定性模型，不产生真实 AI 费用。第一阶段保留自托管 Auth/PostgREST/Storage 兼容层；不是已完成生产迁移，也不是已删除全部 Supabase SDK。社区暂不开放，其余可用范围、备份恢复和生产切换门槛见 [自托管说明](docs/manual/Self-Hosting.md)。
+
+### Docker 部署（沿用外部后端）
+
+以下三种方式保留现有外部 Supabase 配置，不包含 PostgreSQL/Redis 初始化：
 
 ```bash
 # 准备环境变量（首次）

@@ -1,0 +1,469 @@
+import { execFile } from 'node:child_process';
+import { createHash, createHmac, randomBytes } from 'node:crypto';
+import { mkdir, readFile, writeFile, lstat, rm, chmod } from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { gunzipSync } from 'node:zlib';
+import { setTimeout as delay } from 'node:timers/promises';
+import storageAttributes from './selfhost/storage-attributes.cjs';
+
+export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const STATE = path.join(ROOT, '.taibu-local');
+const COMPOSE = path.join(ROOT, 'docker-compose.local.yml');
+const MIGRATION = 'supabase/migrations/20261003_100000_fix_rate_limit_admission.sql';
+const secret = () => randomBytes(32).toString('hex');
+const quote = value => `'${String(value).replaceAll("'", "''")}'`;
+const digest = value => createHash('sha256').update(value).digest('hex');
+export function validateProject(value) {
+  if (typeof value !== 'string' || value !== value.trim() || !/^taibu-[a-z0-9][a-z0-9-]{0,39}$/.test(value)) throw new Error('项目名须以 taibu- 开头，仅限小写字母、数字和连字符');
+  return value;
+}
+export function validatePort(value) {
+  if (String(value) !== String(value).trim() || !/^\d+$/.test(String(value)) || Number(value) < 1024 || Number(value) > 65535) throw new Error('端口须为 1024–65535');
+  return String(Number(value));
+}
+export function signJWT(role, jwtSecret, now = Math.floor(Date.now() / 1000)) {
+  const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
+  const payload = Buffer.from(JSON.stringify({ role, iss: 'supabase', iat: now, exp: now + 10 * 365 * 86400 })).toString('base64url');
+  return `${header}.${payload}.${createHmac('sha256', jwtSecret).update(`${header}.${payload}`).digest('base64url')}`;
+}
+export function createConfig(project, port, demo = false) {
+  const config = { LOCAL_INSTANCE_ID: secret(), LOCAL_PROJECT: validateProject(project), APP_PORT: validatePort(port), APP_ORIGIN: `http://127.0.0.1:${validatePort(port)}`, DEMO_ENABLED: demo ? 'true' : 'false', ADMIN_EMAIL: 'admin@taibu.local', USER_EMAIL: 'user@taibu.local', USER2_EMAIL: 'user2@taibu.local' };
+  for (const key of ['DB_PASSWORD', 'AUTH_DB_PASSWORD', 'REST_DB_PASSWORD', 'STORAGE_DB_PASSWORD', 'VECTOR_DB_PASSWORD', 'REDIS_PASSWORD', 'JWT_SECRET', 'INTERNAL_API_SECRET', 'CRON_SECRET', 'ADMIN_PASSWORD', 'USER_PASSWORD', 'USER2_PASSWORD', 'DEMO_API_KEY']) config[key] = secret();
+  config.ANON_KEY = signJWT('anon', config.JWT_SECRET);
+  config.SERVICE_KEY = signJWT('service_role', config.JWT_SECRET);
+  return config;
+}
+export function validateConfig(config) {
+  const expected = Object.keys(createConfig('taibu-validation', '3080')).sort();
+  if (!config || JSON.stringify(Object.keys(config).sort()) !== JSON.stringify(expected)) throw new Error('本地配置字段无效');
+  validateProject(config.LOCAL_PROJECT); validatePort(config.APP_PORT);
+  if (config.APP_ORIGIN !== `http://127.0.0.1:${config.APP_PORT}` || !['true', 'false'].includes(config.DEMO_ENABLED)) throw new Error('本地配置地址无效');
+  for (const [key, value] of Object.entries(config)) {
+    if (typeof value !== 'string' || /[\r\n$`\\]/.test(value)) throw new Error('本地配置值无效');
+    if (key.endsWith('_PASSWORD') || ['LOCAL_INSTANCE_ID', 'JWT_SECRET', 'INTERNAL_API_SECRET', 'CRON_SECRET', 'DEMO_API_KEY'].includes(key)) {
+      if (!/^[a-f0-9]{64}$/.test(value)) throw new Error('本地密钥格式无效');
+    }
+  }
+  if (config.ADMIN_EMAIL !== 'admin@taibu.local' || config.USER_EMAIL !== 'user@taibu.local' || config.USER2_EMAIL !== 'user2@taibu.local') throw new Error('种子账号配置无效');
+  for (const [key, role] of [['ANON_KEY', 'anon'], ['SERVICE_KEY', 'service_role']]) {
+    const pieces = config[key].split('.');
+    if (pieces.length !== 3 || !/^[A-Za-z0-9_.-]+$/.test(config[key])) throw new Error('本地 JWT 无效');
+    const payload = JSON.parse(Buffer.from(pieces[1], 'base64url'));
+    if (signJWT(role, config.JWT_SECRET, payload.iat) !== config[key]) throw new Error('本地 JWT 签名无效');
+  }
+  return config;
+}
+async function privateDirectory(directory, exclusive = false) {
+  if (exclusive) await mkdir(directory, { mode: 0o700 });
+  else await mkdir(directory, { recursive: true, mode: 0o700 });
+  const stat = await lstat(directory);
+  if (!stat.isDirectory() || stat.isSymbolicLink() || stat.uid !== process.getuid?.()) throw new Error('私有目录所有权或类型不安全');
+  await chmod(directory, 0o700);
+}
+async function privateRead(file) {
+  const stat = await lstat(file);
+  if (!stat.isFile() || stat.isSymbolicLink() || (stat.mode & 0o077) || stat.uid !== process.getuid?.()) throw new Error('私有文件权限必须为 0600 且属于当前用户');
+  return readFile(file);
+}
+async function saveConfig(directory, config) {
+  await writeFile(path.join(directory, 'config.json'), `${JSON.stringify(config, null, 2)}\n`, { flag: 'wx', mode: 0o600 });
+  await writeFile(path.join(directory, 'compose.env'), Object.entries(config).map(([key, value]) => `${key}=${value}`).join('\n') + '\n', { flag: 'wx', mode: 0o600 });
+  await writeFile(path.join(directory, 'credentials.json'), JSON.stringify({ warning: '仅限本地测试；不要公开或提交', admin: { email: config.ADMIN_EMAIL, password: config.ADMIN_PASSWORD }, user: { email: config.USER_EMAIL, password: config.USER_PASSWORD }, user2: { email: config.USER2_EMAIL, password: config.USER2_PASSWORD } }, null, 2) + '\n', { flag: 'wx', mode: 0o600 });
+}
+export async function initialize(project, port, demo = false) {
+  const config = createConfig(project, port, demo);
+  await privateDirectory(STATE);
+  const directory = path.join(STATE, config.LOCAL_PROJECT);
+  await privateDirectory(directory, true); // Never silently rotate existing secrets.
+  await saveConfig(directory, config);
+  return { directory, config };
+}
+async function load(project) {
+  const rootStat = await lstat(STATE);
+  if (rootStat.isSymbolicLink() || !rootStat.isDirectory() || (rootStat.mode & 0o077)) throw new Error('私有根目录权限不安全');
+  const directory = path.join(STATE, validateProject(project));
+  const dirStat = await lstat(directory);
+  if (dirStat.isSymbolicLink() || !dirStat.isDirectory() || (dirStat.mode & 0o077)) throw new Error('项目目录权限不安全');
+  const config = validateConfig(JSON.parse(await privateRead(path.join(directory, 'config.json'))));
+  if (config.LOCAL_PROJECT !== project || config.APP_ORIGIN !== `http://127.0.0.1:${validatePort(config.APP_PORT)}`) throw new Error('本地配置不匹配');
+  const env = await privateRead(path.join(directory, 'compose.env'));
+  if (env.toString() !== Object.entries(config).map(([key, value]) => `${key}=${value}`).join('\n') + '\n') throw new Error('配置文件不一致；禁止单独编辑 compose.env');
+  return { directory, config };
+}
+// No inherited application env or automatic .env discovery. Docker context is only
+// consulted to resolve a Unix socket, then explicitly pinned for all later calls.
+function hostEnvironment() {
+  return Object.fromEntries(['PATH', 'HOME', 'DOCKER_CONFIG', 'DOCKER_CONTEXT', 'DOCKER_HOST', 'TMPDIR'].filter(key => process.env[key]).map(key => [key, process.env[key]]));
+}
+function execute(command, args, { input, env = hostEnvironment(), binary = false, timeout = 120_000, phase } = {}) {
+  return new Promise((resolve, reject) => {
+    const child = execFile(command, args, { cwd: ROOT, env, timeout, encoding: binary ? 'buffer' : 'utf8', maxBuffer: 512 * 1024 * 1024 }, (error, stdout) => {
+      // Deliberately never surface stderr, argv, SQL, HTTP body or env. Drivers can
+      // echo passwords/DSNs; a generic phase/code is safer than a redaction list.
+      if (error) reject(new Error(`本地操作失败（${phase ?? (command === 'docker' ? 'Docker' : '校验')}，代码 ${String(error.code ?? 'unknown').replace(/[^\w-]/g, '')}）`));
+      else resolve(stdout);
+    });
+    child.stdin.on('error', error => { if (error.code !== 'EPIPE') reject(new Error('本地输入失败')); });
+    child.stdin.end(input);
+  });
+}
+export function validateEndpoint(endpoint) {
+  if (!/^unix:\/\/\//.test(endpoint) || endpoint.includes('\n')) throw new Error('仅允许本机 Unix socket Docker，拒绝远程上下文');
+  return endpoint;
+}
+export async function localDocker() {
+  const endpoint = process.env.DOCKER_HOST && !process.env.DOCKER_CONTEXT ? process.env.DOCKER_HOST : (await execute('docker', ['context', 'inspect', '--format', '{{.Endpoints.docker.Host}}'])).trim();
+  validateEndpoint(endpoint);
+  const env = hostEnvironment();
+  delete env.DOCKER_CONTEXT;
+  env.DOCKER_HOST = endpoint;
+  await execute('docker', ['version', '--format', '{{.Server.Version}}'], { env });
+  return env;
+}
+function runner(state, env) {
+  const prefix = ['compose', '--project-directory', ROOT, '--env-file', path.join(state.directory, 'compose.env'), '-f', COMPOSE, '-p', state.config.LOCAL_PROJECT, ...(state.config.DEMO_ENABLED === 'true' ? ['--profile', 'demo'] : [])];
+  const compose = (args, options = {}) => execute('docker', [...prefix, ...args], { env, ...options });
+  const sql = (input, phase = '数据库查询') => compose(['exec', '-T', 'db', 'psql', '-X', '-qAt', '-v', 'ON_ERROR_STOP=1', '-U', 'postgres', '-d', 'taibu'], { input, phase });
+  return { compose, sql, env };
+}
+async function wait(check, description) {
+  for (let attempt = 0; attempt < 90; attempt++) {
+    try { if (await check()) return; } catch { /* bounded readiness, no sensitive diagnostics */ }
+    await delay(1000);
+  }
+  throw new Error(`${description}未在时限内就绪`);
+}
+async function httpReady(origin, route) {
+  const response = await fetch(`${origin}${route}`, { signal: AbortSignal.timeout(2000), redirect: 'error' });
+  await response.body?.cancel();
+  return response.ok;
+}
+export function validateResourceOwnership(marker, instance, requireAbsent = false) {
+  if (requireAbsent) throw new Error('恢复目标已有 Docker 资源，拒绝覆盖');
+  if (marker !== instance) throw new Error('Docker 资源缺少当前实例归属标记，拒绝接管');
+}
+export function containerNameFilter(project) {
+  validateProject(project);
+  // Match actual service/container names, not a different project's shared prefix.
+  return `name=^/${project}-(db|auth|rest|storage|redis|functions|web|gateway|scheduler|demo|maintenance|maintenance-attributes)-([0-9]+|run-[a-z0-9]+)$`;
+}
+async function assertOwnedVolumes(state, env, requireAbsent = false) {
+  const project = state.config.LOCAL_PROJECT;
+  const check = async (kind, id) => {
+    if (requireAbsent) throw new Error('恢复目标已有 Docker 资源，拒绝覆盖');
+    const prefix = kind === 'container' ? [] : [kind];
+    const labelPath = kind === 'container' ? '.Config.Labels' : '.Labels';
+    const marker = (await execute('docker', [...prefix, 'inspect', '--format', `{{index ${labelPath} "io.taibu.local.instance"}}`, id], { env })).trim();
+    validateResourceOwnership(marker, state.config.LOCAL_INSTANCE_ID);
+  };
+  // Check both project labels and conventional names: unlabeled leftovers are
+  // collisions too. Never adopt a namespace merely because its name matches.
+  for (const [kind, list, nameFilter] of [
+    ['container', ['ps', '-aq'], containerNameFilter(project)],
+    ['network', ['network', 'ls', '-q'], `name=^${project}_`],
+  ]) {
+    const outputs = await Promise.all([nameFilter, `label=com.docker.compose.project=${project}`].map(filter => execute('docker', [...list, '--filter', filter], { env })));
+    for (const id of new Set(outputs.flatMap(output => output.trim().split('\n').filter(Boolean)))) await check(kind, id);
+  }
+  for (const name of ['database', 'storage', 'redis']) {
+    const volume = `${project}_${name}`;
+    const found = (await execute('docker', ['volume', 'ls', '--format', '{{.Name}}', '--filter', `name=^${volume}$`], { env })).trim();
+    if (found) await check('volume', volume);
+  }
+}
+
+function rolesSQL(config) {
+  return `BEGIN;
+CREATE ROLE anon NOLOGIN NOSUPERUSER NOBYPASSRLS;
+CREATE ROLE authenticated NOLOGIN NOSUPERUSER NOBYPASSRLS;
+CREATE ROLE service_role NOLOGIN NOSUPERUSER BYPASSRLS;
+CREATE ROLE authenticator LOGIN NOINHERIT NOSUPERUSER NOBYPASSRLS PASSWORD ${quote(config.REST_DB_PASSWORD)};
+GRANT anon, authenticated, service_role TO authenticator;
+CREATE ROLE supabase_auth_admin LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS PASSWORD ${quote(config.AUTH_DB_PASSWORD)};
+CREATE SCHEMA auth AUTHORIZATION supabase_auth_admin;
+ALTER ROLE supabase_auth_admin SET search_path TO auth, public;
+CREATE ROLE supabase_storage_admin LOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS PASSWORD ${quote(config.STORAGE_DB_PASSWORD)};
+GRANT anon, authenticated, service_role TO supabase_storage_admin;
+CREATE SCHEMA storage AUTHORIZATION supabase_storage_admin;
+ALTER ROLE supabase_storage_admin SET search_path TO storage, public;
+CREATE ROLE taibu_vector_owner LOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS PASSWORD ${quote(config.VECTOR_DB_PASSWORD)};
+ALTER ROLE taibu_vector_owner SET search_path TO public, extensions;
+CREATE SCHEMA extensions;
+CREATE EXTENSION vector WITH SCHEMA extensions;
+CREATE EXTENSION pg_trgm WITH SCHEMA extensions;
+CREATE SCHEMA local_stack;
+REVOKE ALL ON SCHEMA local_stack FROM PUBLIC;
+CREATE TABLE local_stack.state (id boolean PRIMARY KEY DEFAULT true CHECK(id), instance_id text NOT NULL, fingerprint text, storage_ready boolean NOT NULL DEFAULT false, seeded boolean NOT NULL DEFAULT false);
+INSERT INTO local_stack.state(id,instance_id) VALUES(true,${quote(config.LOCAL_INSTANCE_ID)});
+COMMIT;`;
+}
+async function bootstrapRoles(run, config) {
+  const exists = (await run.sql("SELECT to_regclass('local_stack.state') IS NOT NULL")).trim();
+  if (exists === 't') {
+    const instance = (await run.sql('SELECT instance_id FROM local_stack.state')).trim();
+    if (instance !== config.LOCAL_INSTANCE_ID) throw new Error('数据库实例不属于当前私有配置，拒绝接管');
+    return;
+  }
+  const populated = (await run.sql("SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname IN ('public','auth','storage') AND c.relkind IN ('r','p','v','m','S')")).trim();
+  if (populated !== '0') throw new Error('数据库非空且缺少本地版本标记，拒绝初始化');
+  await run.sql(rolesSQL(config), '平台角色与扩展初始化');
+}
+export async function schemaBundle() {
+  await execute(process.execPath, ['scripts/selfhost-schema.mjs']);
+  const files = ['supabase/selfhost/manifest.json', 'supabase/selfhost/001-application.sql', MIGRATION, 'supabase/selfhost/002-storage.sql'];
+  const contents = await Promise.all(files.map(file => readFile(path.join(ROOT, file), 'utf8')));
+  const bootstrapContract = [rolesSQL.toString(), application.toString(), withStorageMigrationPrivilege.toString()];
+  return { fingerprint: digest(JSON.stringify([contents, bootstrapContract])), application: contents[1], migration: contents[2], storage: contents[3] };
+}
+// Source inventory changes can move caller lines without changing initialized SQL.
+// Only explicitly reviewed old/current pairs may reuse a volume or a v2 backup.
+const REVIEWED_SCHEMA_EQUIVALENCES = [{
+  previous: 'a9bd00e3c1d19991e5be5158f5fa2a9d313428cc60d42f8bb979f6a27a3c60d7',
+  current: 'b077a9df03e4593042bed6497fc0e2dd8d6daf07544d4076d4f4044e5018ae23',
+  sqlContract: 'e7f8e929833e0ea137129cfe03afb1d6ba4a49c1293c62c268eff8f244dc12fb',
+}];
+
+export function matchesSchemaFingerprint(fingerprint, bundle) {
+  const valid = /^[a-f0-9]{64}$/;
+  if (!valid.test(fingerprint) || !valid.test(bundle.fingerprint)) return false;
+  if (fingerprint === bundle.fingerprint) return true;
+  const sqlContract = digest(JSON.stringify([
+    bundle.application.replace(/^COMMENT ON SCHEMA public IS 'taibu-selfhost-v1:[a-f0-9]{64}';\n/m, ''),
+    bundle.migration,
+    bundle.storage,
+  ]));
+  return REVIEWED_SCHEMA_EQUIVALENCES.some(entry => entry.previous === fingerprint
+    && entry.current === bundle.fingerprint && entry.sqlContract === sqlContract);
+}
+
+async function application(run, bundle) {
+  const fingerprint = (await run.sql('SELECT coalesce(fingerprint,\'\') FROM local_stack.state')).trim();
+  if (fingerprint && !matchesSchemaFingerprint(fingerprint, bundle)) throw new Error('数据库与当前基线哈希不匹配；请使用独立项目，不可重放基线');
+  if (fingerprint) return;
+  // Baseline and guard commit atomically; interrupted initialization is resumable.
+  await run.sql(`BEGIN;\n${bundle.application}\n${bundle.migration}\nGRANT USAGE ON SCHEMA public, extensions TO taibu_vector_owner;
+-- PostgreSQL requires schema CREATE as well as table ownership for CREATE INDEX.
+-- This trusted maintenance identity is never granted to application API roles.
+GRANT CREATE ON SCHEMA public TO taibu_vector_owner;
+ALTER TABLE public.knowledge_entries OWNER TO taibu_vector_owner;
+UPDATE local_stack.state SET fingerprint=${quote(bundle.fingerprint)};\nCOMMIT;`, '应用基线与限流迁移');
+}
+async function seed(run, config) {
+  if ((await run.sql('SELECT seeded FROM local_stack.state')).trim() === 't') return;
+  for (const [email, password, admin] of [[config.ADMIN_EMAIL, config.ADMIN_PASSWORD, true], [config.USER_EMAIL, config.USER_PASSWORD, false], [config.USER2_EMAIL, config.USER2_PASSWORD, false]]) {
+    const existing = (await run.sql(`SELECT id FROM auth.users WHERE email=${quote(email)}`)).trim();
+    if (!existing) {
+      const result = await fetch(`${config.APP_ORIGIN}/auth/v1/admin/users`, { method: 'POST', headers: { authorization: `Bearer ${config.SERVICE_KEY}`, apikey: config.SERVICE_KEY, 'content-type': 'application/json' }, body: JSON.stringify({ email, password, email_confirm: true }), signal: AbortSignal.timeout(10_000), redirect: 'error' });
+      await result.body?.cancel();
+      if (!result.ok) throw new Error('初始化本地账号失败');
+    }
+    await run.sql(`INSERT INTO public.users(id,nickname,is_admin,membership,ai_chat_count) SELECT id,${quote(admin ? '本地管理员' : '本地测试用户')},${admin},'free',100 FROM auth.users WHERE email=${quote(email)} ON CONFLICT(id) DO UPDATE SET is_admin=EXCLUDED.is_admin,ai_chat_count=EXCLUDED.ai_chat_count;`);
+  }
+  if (config.DEMO_ENABLED === 'true') await run.sql(`BEGIN;
+INSERT INTO public.ai_gateways(gateway_key,display_name,base_url,api_key_env_var,is_enabled) VALUES('newapi','本地离线演示','http://demo:8000/v1','NEWAPI_API_KEY',true) ON CONFLICT(gateway_key) DO UPDATE SET base_url=EXCLUDED.base_url,api_key_env_var=EXCLUDED.api_key_env_var,is_enabled=true;
+INSERT INTO public.ai_models(model_key,display_name,vendor,required_tier,usage_type,routing_mode) VALUES('taibu-demo','本地离线演示','local','free','chat','newapi') ON CONFLICT(model_key) DO NOTHING;
+INSERT INTO public.ai_model_gateway_bindings(model_id,gateway_id,model_id_override) SELECT m.id,g.id,'taibu-demo' FROM public.ai_models m CROSS JOIN public.ai_gateways g WHERE m.model_key='taibu-demo' AND g.gateway_key='newapi' AND NOT EXISTS(SELECT 1 FROM public.ai_model_gateway_bindings b WHERE b.model_id=m.id AND b.gateway_id=g.id);
+COMMIT;`);
+  await run.sql('UPDATE local_stack.state SET seeded=true');
+}
+export async function withStorageMigrationPrivilege(sql, migrate) {
+  try {
+    await sql('GRANT CREATE ON DATABASE taibu TO supabase_storage_admin;', '文件存储迁移临时授权');
+    await migrate();
+  } finally {
+    // Must finish before web/scheduler starts; never retain migration privilege.
+    await sql('REVOKE CREATE ON DATABASE taibu FROM supabase_storage_admin;', '撤销文件存储迁移临时授权');
+  }
+}
+async function up(state, run, build = false) {
+  try {
+    await lstat(path.join(state.directory, 'restore-pending'));
+    throw new Error('该项目恢复未完成；禁止启动，请选择新的恢复目标');
+  } catch (error) { if (error.code !== 'ENOENT') throw error; }
+  const bundle = await schemaBundle();
+  await assertOwnedVolumes(state, run.env);
+  await run.compose(['up', '-d', '--wait', 'db'], { phase: '数据库启动' });
+  await bootstrapRoles(run, state.config);
+  // Recover a privilege left behind by an uncatchable previous process exit.
+  await run.sql('REVOKE CREATE ON DATABASE taibu FROM supabase_storage_admin;', '清理文件存储迁移临时授权');
+  await run.compose(['up', '-d', 'auth', 'gateway'], { phase: '身份服务与网关启动' });
+  await wait(() => httpReady(state.config.APP_ORIGIN, '/auth/v1/health'), '身份服务');
+  await application(run, bundle);
+  await run.compose(['up', '-d', 'rest', 'redis'], { phase: 'REST 与 Redis 启动' });
+  const storageReady = (await run.sql('SELECT storage_ready FROM local_stack.state')).trim() === 't';
+  const startStorage = async () => {
+    await run.compose(['up', '-d', 'storage'], { phase: '文件存储启动与受控迁移' });
+    await wait(() => httpReady(state.config.APP_ORIGIN, '/storage/v1/status'), '文件服务');
+  };
+  if (storageReady) await startStorage();
+  else await withStorageMigrationPrivilege(run.sql, startStorage);
+  if (!storageReady) await run.sql(`BEGIN;\n${bundle.storage}\nUPDATE local_stack.state SET storage_ready=true;\nCOMMIT;`, '文件存储策略初始化');
+  await seed(run, state.config);
+  await run.compose(['up', '-d', ...(build ? ['--build'] : []), 'functions', 'web', ...(state.config.DEMO_ENABLED === 'true' ? ['demo'] : [])], { timeout: 1_200_000 });
+  await wait(() => httpReady(state.config.APP_ORIGIN, '/api/health'), '应用');
+  await wait(() => httpReady(state.config.APP_ORIGIN, '/api/announcements?latest=1'), '应用数据库');
+  await run.compose(['up', '-d', 'scheduler']);
+  console.log(`本地服务已就绪：${state.config.APP_ORIGIN}；账号见私有 credentials.json`);
+}
+async function backup(state, run, destination) {
+  if (!destination || !path.isAbsolute(destination)) throw new Error('备份路径必须为新的绝对目录');
+  await privateDirectory(destination, true);
+  const running = JSON.parse(await run.compose(['ps', '--format', 'json']).then(value => value.trim().startsWith('[') ? value : `[${value.trim().split('\n').filter(Boolean).join(',')}]`));
+  const active = running.filter(service => service.State === 'running' && service.Service !== 'db').map(service => service.Service);
+  try {
+    if (active.length) await run.compose(['stop', ...active]);
+    const dump = await run.compose(['exec', '-T', 'db', 'pg_dump', '-U', 'postgres', '-d', 'taibu', '-Fc'], { binary: true, timeout: 300_000 });
+    const storage = await run.compose(['run', '--rm', '-T', '--no-deps', 'maintenance', 'tar', '-czf', '-', '-C', '/storage', '.'], { binary: true, timeout: 300_000 });
+    const attributes = await run.compose(['run', '--rm', '-T', '--no-deps', 'maintenance-attributes', 'capture'], { binary: true, timeout: 300_000, phase: '备份文件存储属性' });
+    storageAttributes.validateAttributes(attributes);
+    await writeFile(path.join(destination, 'storage-attributes.json'), attributes, { flag: 'wx', mode: 0o600 });
+    await writeFile(path.join(destination, 'database.dump'), dump, { flag: 'wx', mode: 0o600 });
+    await writeFile(path.join(destination, 'storage.tar.gz'), storage, { flag: 'wx', mode: 0o600 });
+    await writeFile(path.join(destination, 'config.json'), JSON.stringify(state.config), { flag: 'wx', mode: 0o600 });
+    await writeFile(path.join(destination, 'manifest.json'), JSON.stringify({ version: 2, sourceProject: state.config.LOCAL_PROJECT, fingerprint: (await run.sql('SELECT fingerprint FROM local_stack.state')).trim(), sha256: { 'database.dump': digest(dump), 'storage.tar.gz': digest(storage), 'storage-attributes.json': digest(attributes), 'config.json': digest(JSON.stringify(state.config)) } }), { flag: 'wx', mode: 0o600 });
+  } finally { if (active.length) await run.compose(['start', ...active]); }
+  console.log('备份完成；包含账号与密钥，须按敏感数据保管。Redis 临时限流状态不备份。');
+}
+export function validateStorageArchive(compressed) {
+  const archive = gunzipSync(compressed, { maxOutputLength: 512 * 1024 * 1024 });
+  const decoder = new TextDecoder('utf-8', { fatal: true });
+  const validatePath = name => {
+    if (!name || name.startsWith('/') || name.includes('\\') || name.includes('\0') || name.split('/').includes('..')) throw new Error('文件备份包含不安全路径或链接');
+    return name;
+  };
+  const octal = field => {
+    const value = field.toString('latin1').replace(/[\0 ]+$/g, '').trimStart();
+    if (!/^[0-7]+$/.test(value)) throw new Error('文件备份数字字段无效');
+    return Number.parseInt(value, 8);
+  };
+  if (archive.length % 512 !== 0) throw new Error('文件备份不完整');
+  let pendingName;
+  for (let offset = 0; offset < archive.length; ) {
+    const header = archive.subarray(offset, offset + 512);
+    if (header.every(byte => byte === 0)) {
+      if (pendingName !== undefined || archive.length - offset < 1024 || !archive.subarray(offset).every(byte => byte === 0)) throw new Error('文件备份结束标记无效');
+      return;
+    }
+    const expectedChecksum = octal(header.subarray(148, 156));
+    const checksum = header.reduce((sum, byte, index) => sum + (index >= 148 && index < 156 ? 32 : byte), 0);
+    if (checksum !== expectedChecksum) throw new Error('文件备份头校验失败');
+    const field = (start, length) => {
+      const bytes = header.subarray(start, start + length);
+      const end = bytes.indexOf(0);
+      return decoder.decode(end < 0 ? bytes : bytes.subarray(0, end));
+    };
+    const size = octal(header.subarray(124, 136));
+    const nextOffset = offset + 512 + Math.ceil(size / 512) * 512;
+    if (!Number.isSafeInteger(size) || nextOffset > archive.length) throw new Error('文件备份不完整');
+    const type = header[156];
+    if (type === 76) { // GNU LongLink filename (L), never long symlink (K).
+      if (pendingName !== undefined || size < 2 || size > 4096) throw new Error('文件备份长路径元数据无效');
+      validatePath(field(0, 100));
+      const payload = archive.subarray(offset + 512, offset + 512 + size);
+      if (payload.at(-1) !== 0 || payload.subarray(0, -1).includes(0)) throw new Error('文件备份长路径终止符无效');
+      pendingName = validatePath(decoder.decode(payload.subarray(0, -1)));
+    } else {
+      if (![0, 48, 53].includes(type) || (type === 53 && size !== 0) || field(157, 100)) throw new Error('文件备份包含不安全路径或链接');
+      // POSIX ustar uses a prefix; GNU's old header uses that region for
+      // timestamps, so never interpret its metadata as a path prefix.
+      const prefix = header.subarray(257, 263).equals(Buffer.from('ustar\0')) ? field(345, 155) : '';
+      const name = pendingName ?? [prefix, field(0, 100)].filter(Boolean).join('/');
+      validatePath(name);
+      pendingName = undefined; // Must apply to the immediately following file/dir.
+    }
+    offset = nextOffset;
+  }
+  throw new Error('文件备份缺少结束标记');
+}
+async function restore(source, project, port, env) {
+  if (!source || !path.isAbsolute(source) || !project || !port) throw new Error('恢复必须指定绝对备份路径、独立 --target 和 --port');
+  validateProject(project); validatePort(port);
+  const manifest = JSON.parse(await privateRead(path.join(source, 'manifest.json')));
+  if (manifest.version !== 2 || project === manifest.sourceProject) throw new Error('禁止覆盖来源项目；仅支持含文件属性的 v2 完整备份');
+  const bundle = await schemaBundle();
+  if (!matchesSchemaFingerprint(manifest.fingerprint, bundle)) throw new Error('备份基线版本不匹配');
+  const files = {};
+  for (const name of ['database.dump', 'storage.tar.gz', 'storage-attributes.json', 'config.json']) {
+    files[name] = await privateRead(path.join(source, name));
+    if (digest(files[name]) !== manifest.sha256[name]) throw new Error('备份文件校验失败');
+  }
+  validateStorageArchive(files['storage.tar.gz']);
+  storageAttributes.validateAttributes(files['storage-attributes.json']);
+  const config = validateConfig(JSON.parse(files['config.json']));
+  if (String(port) === config.APP_PORT) throw new Error('恢复项目须使用独立端口');
+  config.LOCAL_INSTANCE_ID = secret(); config.LOCAL_PROJECT = project; config.APP_PORT = validatePort(port); config.APP_ORIGIN = `http://127.0.0.1:${config.APP_PORT}`;
+  const state = { directory: path.join(STATE, project), config };
+  await assertOwnedVolumes(state, env, true);
+  await privateDirectory(STATE);
+  await privateDirectory(state.directory, true);
+  const lock = path.join(state.directory, '.lock');
+  await mkdir(lock, { mode: 0o700 });
+  try {
+  await saveConfig(state.directory, config);
+  await writeFile(path.join(state.directory, 'restore-pending'), '恢复进行中\n', { flag: 'wx', mode: 0o600 });
+  const run = runner(state, env);
+  await run.compose(['up', '-d', '--wait', 'db'], { phase: '数据库启动' });
+  await bootstrapRoles(run, config);
+  // Empty newly created target only. Drop our bootstrap placeholders, not source data.
+  await run.sql('DROP SCHEMA local_stack CASCADE; DROP SCHEMA auth; DROP SCHEMA storage; DROP SCHEMA extensions CASCADE;');
+  await run.compose(['exec', '-T', 'db', 'pg_restore', '--exit-on-error', '--single-transaction', '-U', 'postgres', '-d', 'taibu'], { input: files['database.dump'], timeout: 300_000 });
+  await run.compose(['run', '--rm', '-T', '--no-deps', 'maintenance', 'tar', '-xzf', '-', '-C', '/storage'], { input: files['storage.tar.gz'], timeout: 300_000 });
+  await run.compose(['run', '--rm', '-T', '--no-deps', 'maintenance-attributes', 'restore'], { input: files['storage-attributes.json'], timeout: 300_000, phase: '恢复并核验文件存储属性' });
+  await run.sql(`UPDATE local_stack.state SET instance_id=${quote(config.LOCAL_INSTANCE_ID)}`);
+  await rm(path.join(state.directory, 'restore-pending'));
+  console.log(`备份已恢复至独立项目 ${project}；执行 up 启动，来源项目未修改。`);
+  } finally { await rm(lock, { recursive: true }); }
+}
+export function summarizeLogs(text) {
+  const lines = text.split('\n').filter(Boolean).slice(-100);
+  return { lines: lines.length, errors: lines.filter(line => /\b(error|fatal|panic)\b|"level":(?:50|60)/i.test(line)).length, warnings: lines.filter(line => /\bwarn(?:ing)?\b|"level":40/i.test(line)).length };
+}
+async function observations(run, includeLogs = false) {
+  const raw = (await run.compose(['ps', '--all', '--format', 'json'], { phase: '读取服务状态' })).trim();
+  const rows = JSON.parse(raw.startsWith('[') ? raw : `[${raw.split('\n').filter(Boolean).join(',')}]`);
+  const services = new Set(['db', 'auth', 'rest', 'storage', 'redis', 'functions', 'web', 'gateway', 'scheduler', 'demo', 'maintenance']);
+  for (const row of rows) {
+    if (!services.has(row.Service)) continue;
+    const status = ['created', 'running', 'paused', 'restarting', 'removing', 'exited', 'dead'].includes(row.State) ? row.State : 'unknown';
+    const health = ['healthy', 'unhealthy', 'starting'].includes(row.Health) ? row.Health : '无探针';
+    const exitCode = Number.isInteger(row.ExitCode) ? row.ExitCode : '未知';
+    console.log(`${row.Service}：${status}；健康=${health}；退出码=${exitCode}`);
+    if (includeLogs) {
+      const output = await run.compose(['logs', '--no-color', '--tail', '100', row.Service], { phase: '读取有限日志' });
+      const summary = summarizeLogs(output);
+      // Never emit arbitrary log strings (including request/error bodies). Local
+      // Docker keeps rotated diagnostics; CLI only publishes controlled counts.
+      console.log(`  最近日志=${summary.lines}；错误=${summary.errors}；警告=${summary.warnings}`);
+    }
+  }
+  if (!rows.length) console.log('没有运行中的服务');
+}
+export async function main(args = process.argv.slice(2)) {
+  const [command, ...rest] = args;
+  const allowed = { init: ['project', 'port', 'demo'], up: ['project', 'build'], status: ['project'], logs: ['project'], down: ['project'], backup: ['project', 'output'], restore: ['input', 'target', 'port'] };
+  if (!allowed[command]) throw new Error('用法：selfhost init|up|status|logs|down|backup|restore [参数]');
+  const options = {};
+  for (let index = 0; index < rest.length; index++) {
+    const key = rest[index].replace(/^--/, '');
+    if (!rest[index].startsWith('--') || !allowed[command].includes(key) || key in options) throw new Error('参数无效或重复');
+    options[key] = ['demo', 'build'].includes(key) ? true : rest[++index];
+    if (options[key] === undefined || String(options[key]).startsWith('--')) throw new Error('参数缺少值');
+  }
+  const project = options.project ?? 'taibu-local';
+  if (command === 'init') { await initialize(project, options.port ?? '3080', options.demo); console.log('本地配置已生成；密钥与账号仅保存在私有 .taibu-local 项目目录。'); return; }
+  const env = await localDocker();
+  if (command === 'restore') { await restore(options.input, options.target, options.port, env); return; }
+  const state = await load(project);
+  const lock = path.join(state.directory, '.lock');
+  await mkdir(lock, { mode: 0o700 });
+  try {
+    const run = runner(state, env);
+    await assertOwnedVolumes(state, env);
+    if (command === 'up') await up(state, run, options.build);
+    if (command === 'down') { await run.compose(['down']); console.log('容器与网络已停止并移除，所有持久数据卷保留。'); }
+    if (command === 'status' || command === 'logs') await observations(run, command === 'logs');
+    if (command === 'backup') await backup(state, run, options.output);
+  } finally { await rm(lock, { recursive: true }); }
+}
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main().catch(error => { console.error(error instanceof Error && !error.code && /^[一-鿿]/.test(error.message) ? error.message : '本地操作失败；请检查路径、权限和项目状态'); process.exitCode = 1; });
