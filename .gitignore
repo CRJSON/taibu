@@ -70,3 +70,10 @@ docs/*
 
 # skill eval workspaces
 skills/*-workspace/
+
+# Generated local runtime, deployment and browser artifacts
+.agent/
+.taibu-local/
+.codex-deploy/
+.playwright-mcp/
+.playwright-cli/
