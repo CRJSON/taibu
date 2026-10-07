@@ -15,7 +15,7 @@ import {
   type LinuxDoUser,
 } from '@/lib/oauth/linuxdo';
 import { createAnonClient, getAuthAdminClient, getSystemAdminClient } from '@/lib/api-utils';
-import { setSessionCookies } from '@/lib/auth-session';
+import { clearAuthCookie, setSessionCookies } from '@/lib/auth-session';
 import type { MembershipType } from '@/lib/user/membership';
 
 const OAUTH_STATE_COOKIE = 'linuxdo-oauth-state';
@@ -29,7 +29,7 @@ type OAuthStatePayload = {
 };
 
 function clearOAuthStateCookie(response: NextResponse) {
-  response.cookies.delete(OAUTH_STATE_COOKIE);
+  clearAuthCookie(response.cookies, OAUTH_STATE_COOKIE);
 }
 
 function parseOAuthStateCookie(value: string | undefined): {

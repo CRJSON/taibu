@@ -341,7 +341,8 @@ export const NOTE_MOODS: { value: NoteMood; label: string; icon: string }[] = [
 export async function getRecords(
     filters?: RecordFilters,
     page: number = 1,
-    pageSize: number = 20
+    pageSize: number = 20,
+    options: { signal?: AbortSignal } = {},
 ): Promise<{ records: MingRecord[]; total: number }> {
     const query = new URLSearchParams({
         page: String(page),
@@ -356,7 +357,7 @@ export async function getRecords(
         query.append('tag', tag);
     }
 
-    const payload = await requestBrowserData<{ records?: unknown[]; total?: number }>(`/api/records?${query.toString()}`, undefined, {
+    const payload = await requestBrowserData<{ records?: unknown[]; total?: number }>(`/api/records?${query.toString()}`, { signal: options.signal }, {
         fallbackMessage: '请求失败',
     });
     const validRecords = (payload.records ?? []).filter(isValidMingRecord);
@@ -367,8 +368,16 @@ export async function getRecords(
 }
 
 /**
- * 创建记录
+ * 获取单条记录
  */
+export async function getRecord(recordId: string, options: { signal?: AbortSignal } = {}): Promise<MingRecord> {
+    const payload = await requestBrowserData<unknown>(`/api/records/${encodeURIComponent(recordId)}`, { signal: options.signal }, { fallbackMessage: '获取记录失败' });
+    const record = toMingRecord(payload);
+    if (!record) throw new Error('Invalid record data');
+    return record;
+}
+
+/** 创建记录 */
 export async function createRecord(input: RecordInput): Promise<MingRecord> {
     const payload = await requestBrowserData<unknown>('/api/records', {
         method: 'POST',
@@ -399,9 +408,10 @@ export async function updateRecord(recordId: string, input: Partial<RecordInput>
 /**
  * 删除记录
  */
-export async function deleteRecord(recordId: string): Promise<void> {
+export async function deleteRecord(recordId: string, options: { signal?: AbortSignal } = {}): Promise<void> {
     await requestBrowserData(`/api/records/${recordId}`, {
         method: 'DELETE',
+        signal: options.signal,
     }, {
         fallbackMessage: '请求失败',
     });
@@ -410,9 +420,10 @@ export async function deleteRecord(recordId: string): Promise<void> {
 /**
  * 切换记录置顶状态
  */
-export async function toggleRecordPin(recordId: string): Promise<MingRecord> {
+export async function toggleRecordPin(recordId: string, options: { signal?: AbortSignal } = {}): Promise<MingRecord> {
     const payload = await requestBrowserData<unknown>(`/api/records/${recordId}`, {
         method: 'PUT',
+        signal: options.signal,
         body: JSON.stringify({ togglePin: true }),
     }, {
         fallbackMessage: '请求失败',
@@ -429,8 +440,8 @@ export async function toggleRecordPin(recordId: string): Promise<MingRecord> {
 /**
  * 获取某日的小记
  */
-export async function getNotesByDate(date: string): Promise<MingNote[]> {
-    const payload = await requestBrowserData<{ notes?: unknown[] }>(`/api/notes?date=${encodeURIComponent(date)}`, undefined, {
+export async function getNotesByDate(date: string, options: { signal?: AbortSignal } = {}): Promise<MingNote[]> {
+    const payload = await requestBrowserData<{ notes?: unknown[] }>(`/api/notes?date=${encodeURIComponent(date)}`, { signal: options.signal }, {
         fallbackMessage: '请求失败',
     });
     return (payload.notes ?? []).filter(isValidMingNote);

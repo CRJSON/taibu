@@ -114,6 +114,11 @@ export function LoginForm({
     );
 }
 
+/** Preserve suffix shortcuts while accepting a complete address from any domain. */
+export function resolveAuthEmail(prefix: string, suffix: string): string {
+    return prefix.includes('@') ? prefix.trim() : prefix + suffix;
+}
+
 /** 共享邮箱输入字段 */
 export function EmailField({
     emailPrefix,
@@ -128,6 +133,7 @@ export function EmailField({
     onEmailSuffixChange: (value: string) => void;
     emailSuffixes: string[];
 }) {
+    const hasFullEmail = emailPrefix.includes('@');
     return (
         <div className="space-y-2">
             <label className="text-sm font-medium text-foreground-secondary">邮箱</label>
@@ -138,17 +144,21 @@ export function EmailField({
                         type="text"
                         value={emailPrefix}
                         onChange={(e) => onEmailPrefixChange(e.target.value)}
-                        placeholder="邮箱前缀"
+                        placeholder="邮箱前缀或完整邮箱"
+                        aria-label="邮箱"
+                        autoComplete="email"
                         required
                         className="w-full pl-10 pr-4 py-3 rounded-xl bg-background-secondary border border-border focus:border-accent focus:outline-none transition-colors"
                     />
                 </div>
                 <select
-                    value={emailSuffix}
+                    value={hasFullEmail ? '' : emailSuffix}
+                    disabled={hasFullEmail}
+                    aria-label="邮箱后缀"
                     onChange={(e) => onEmailSuffixChange(e.target.value)}
-                    className="px-3 py-3 rounded-xl bg-background-secondary border border-border focus:border-accent focus:outline-none transition-colors text-sm"
+                    className="px-3 py-3 rounded-xl bg-background-secondary border border-border focus:border-accent focus:outline-none transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                    {emailSuffixes.map(suffix => (
+                    {hasFullEmail ? <option value="">完整邮箱</option> : emailSuffixes.map(suffix => (
                         <option key={suffix} value={suffix}>{suffix}</option>
                     ))}
                 </select>

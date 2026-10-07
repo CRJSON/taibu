@@ -127,6 +127,10 @@ export function createChartGetHandler(config: ChartCrudConfig) {
     return async function GET(request: NextRequest) {
         const auth = await requireUserContext(request);
         if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
+        const expectedUserId = request.headers.get('X-Expected-User-Id');
+        if (expectedUserId !== null && expectedUserId !== auth.user.id) {
+            return jsonError('账号已切换，请重新加载命盘', 409);
+        }
         const db = resolveRequestDbClient(auth);
         if (!db) return jsonError('获取命盘失败', 500);
 
@@ -157,6 +161,10 @@ export function createChartPostHandler(config: ChartCrudConfig) {
     return async function POST(request: NextRequest) {
         const auth = await requireUserContext(request);
         if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
+        const expectedUserId = request.headers.get('X-Expected-User-Id');
+        if (expectedUserId !== null && expectedUserId !== auth.user.id) {
+            return jsonError('账号已切换，请重新加载命盘', 409);
+        }
         const db = resolveRequestDbClient(auth);
         if (!db) return jsonError('保存命盘失败', 500);
 
@@ -208,6 +216,10 @@ export function createChartUpdateHandler(config: ChartCrudConfig) {
     return async function POST(request: NextRequest) {
         const auth = await requireUserContext(request);
         if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
+        const expectedUserId = request.headers.get('X-Expected-User-Id');
+        if (expectedUserId !== null && expectedUserId !== auth.user.id) {
+            return jsonError('账号已切换，请重新加载命盘', 409);
+        }
         const db = resolveRequestDbClient(auth);
         if (!db) return jsonError('更新失败', 500);
 

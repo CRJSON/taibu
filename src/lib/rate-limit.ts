@@ -1,10 +1,11 @@
 /**
- * 基于 Supabase 的分布式速率限制
- * 
- * 支持多实例部署，数据持久化
+ * Distributed rate limiting: hosted PostgreSQL by default, opt-in Redis.
+ * Backend outages preserve fail-open availability; Redis never falls back to
+ * an independent counter. The legacy no-Supabase development path is unchanged.
  */
 
 import { getSystemAdminClient } from '@/lib/api-utils';
+import { consumeRedisRateLimit } from '@/lib/rate-limit-redis';
 
 // 尝试获取服务端客户端，失败返回null
 const getSystemAdminClientSafe = () => {
@@ -15,12 +16,18 @@ const getSystemAdminClientSafe = () => {
     }
 };
 
-interface RateLimitConfig {
+export interface RateLimitConfig {
     maxRequests: number;  // 最大请求数
     windowMs: number;     // 时间窗口（毫秒）
 }
 
-interface RateLimitResult {
+/** Shared AI admission default; each endpoint retains its own user-scoped bucket. */
+export const AI_RATE_LIMIT_CONFIG = {
+    maxRequests: 20,
+    windowMs: 60_000,
+} as const;
+
+export interface RateLimitResult {
     allowed: boolean;
     remaining: number;
     resetAt: Date;
@@ -50,6 +57,22 @@ export async function checkRateLimit(
     endpoint: string,
     config: RateLimitConfig
 ): Promise<RateLimitResult> {
+    if (![identifier, endpoint].every(value => typeof value === 'string' && value.length > 0 && value.length <= 1024)
+        || !Number.isInteger(config.maxRequests) || config.maxRequests <= 0 || config.maxRequests > 2_147_483_647
+        || !Number.isInteger(config.windowMs) || config.windowMs <= 0 || config.windowMs > 2_147_483_647) {
+        throw new Error('Invalid rate limit arguments');
+    }
+    const backend = process.env.RATE_LIMIT_BACKEND ?? 'postgres';
+    if (backend !== 'postgres' && backend !== 'redis') throw new Error('Invalid rate limit backend');
+    if (backend === 'redis') {
+        try {
+            return await consumeRedisRateLimit(identifier, endpoint, config);
+        } catch {
+            // Preserve fail-open availability without an independent memory/Postgres counter.
+            console.error('Rate limit check failed: redis unavailable');
+            return { allowed: true, remaining: config.maxRequests, resetAt: new Date() };
+        }
+    }
     const supabase = getSystemAdminClientSafe();
 
     // 如果没有 Supabase 配置，回退到内存限制（开发环境）
@@ -86,8 +109,8 @@ export async function checkRateLimit(
             remaining: result.remaining,
             resetAt: new Date(result.reset_at),
         };
-    } catch (error) {
-        console.error('Rate limit check failed:', error);
+    } catch {
+        console.error('Rate limit check failed: postgres unavailable');
         // 出错时允许请求（fail open）
         return { allowed: true, remaining: config.maxRequests, resetAt: now };
     }

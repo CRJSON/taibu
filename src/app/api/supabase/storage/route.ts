@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createRequestSupabaseClient, jsonError, jsonOk, requireUserContext } from '@/lib/api-utils';
 
+import { toPublicStorageUrl } from '@/lib/supabase-env';
+
 const ALLOWED_BUCKETS = new Set(['avatars']);
 const MAX_AVATAR_FILE_BYTES = 2 * 1024 * 1024;
 const STORAGE_PATH_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._/-]{0,255}$/;
@@ -39,7 +41,7 @@ export async function GET(request: NextRequest) {
     return jsonError('Public URL unavailable', 404);
   }
 
-  return NextResponse.redirect(data.publicUrl, 302);
+  return NextResponse.redirect(toPublicStorageUrl(data.publicUrl), 302);
 }
 
 export async function POST(request: NextRequest) {
@@ -102,7 +104,7 @@ export async function POST(request: NextRequest) {
       path: data?.path ?? path,
       fullPath: data?.fullPath ?? null,
       id: data?.id ?? null,
-      publicUrl: publicData.publicUrl,
+      publicUrl: toPublicStorageUrl(publicData.publicUrl),
     },
     error: null,
   });

@@ -21,7 +21,7 @@ import {
 import { supabase } from '@/lib/auth';
 import { PasswordStrengthIndicator, validatePasswordStrength } from '@/components/auth/PasswordStrengthIndicator';
 import { VerificationCodeInput } from '@/components/auth/VerificationCodeInput';
-import { LoginForm } from '@/components/auth/LoginForm';
+import { EmailField, LoginForm, resolveAuthEmail } from '@/components/auth/LoginForm';
 import { RegisterForm } from '@/components/auth/RegisterForm';
 import { OAuthButtons } from '@/components/auth/OAuthButtons';
 
@@ -147,7 +147,7 @@ export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
         dispatch({ type: 'SET_FIELD', field, value });
     }, []);
 
-    const email = emailPrefix + emailSuffix;
+    const email = resolveAuthEmail(emailPrefix, emailSuffix);
 
     // 倒计时效果
     useEffect(() => {
@@ -721,31 +721,13 @@ export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
 
                     {/* 忘记密码模式 - 邮箱输入 */}
                     {mode === 'forgot' && (
-                        <div className="space-y-2">
-                            <label className="text-sm font-medium text-foreground-secondary">邮箱</label>
-                            <div className="flex gap-2">
-                                <div className="relative flex-1">
-                                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-foreground-secondary" />
-                                    <input
-                                        type="text"
-                                        value={emailPrefix}
-                                        onChange={(e) => setField('emailPrefix', e.target.value)}
-                                        placeholder="邮箱前缀"
-                                        required
-                                        className="w-full pl-10 pr-4 py-3 rounded-xl bg-background-secondary border border-border focus:border-accent focus:outline-none transition-colors"
-                                    />
-                                </div>
-                                <select
-                                    value={emailSuffix}
-                                    onChange={(e) => setField('emailSuffix', e.target.value)}
-                                    className="px-3 py-3 rounded-xl bg-background-secondary border border-border focus:border-accent focus:outline-none transition-colors text-sm"
-                                >
-                                    {EMAIL_SUFFIXES.map(suffix => (
-                                        <option key={suffix} value={suffix}>{suffix}</option>
-                                    ))}
-                                </select>
-                            </div>
-                        </div>
+                        <EmailField
+                            emailPrefix={emailPrefix}
+                            onEmailPrefixChange={(v) => setField('emailPrefix', v)}
+                            emailSuffix={emailSuffix}
+                            onEmailSuffixChange={(v) => setField('emailSuffix', v)}
+                            emailSuffixes={EMAIL_SUFFIXES}
+                        />
                     )}
 
                     {/* 提交按钮 */}

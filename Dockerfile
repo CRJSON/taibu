@@ -1,33 +1,40 @@
-FROM node:20-alpine AS base
-
+FROM node:24.13.0-alpine3.23 AS base
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
-RUN corepack enable
-
-FROM base AS builder
+ENV NEXT_TELEMETRY_DISABLED=1
+RUN corepack enable && corepack prepare pnpm@10.33.0 --activate
 WORKDIR /app
 
+FROM base AS dependencies
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY packages/core/package.json ./packages/core/package.json
+COPY packages/mcp/package.json ./packages/mcp/package.json
+COPY packages/mcp-server/package.json ./packages/mcp-server/package.json
+RUN --mount=type=cache,id=taibu-pnpm,target=/pnpm/store pnpm install --frozen-lockfile
+
+FROM dependencies AS builder
 COPY . .
-
-RUN pnpm install --frozen-lockfile
-
+# Only public deployment settings belong in the build. Credentials are runtime-only.
+ARG SUPABASE_PUBLIC_URL
+ARG SELF_HOSTED=false
+ENV SUPABASE_PUBLIC_URL=$SUPABASE_PUBLIC_URL
+ENV SELF_HOSTED=$SELF_HOSTED
 RUN pnpm build
 
-FROM node:20-alpine AS runner
+FROM node:24.13.0-alpine3.23 AS runner
 WORKDIR /app
-
 ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
-
+ENV HOSTNAME=0.0.0.0
 RUN addgroup -S nodejs && adduser -S nextjs -G nodejs
-
-COPY --from=builder /app/public ./public
-COPY --from=builder /app/.next/standalone ./
-COPY --from=builder /app/.next/static ./.next/static
-
+COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+COPY --from=builder /app/LICENSE ./LICENSE
+COPY --from=builder /app/packages/core/LICENSE ./licenses/taibu-core.LICENSE
+RUN mkdir -p .next/cache && chown -R nextjs:nodejs .next/cache
 USER nextjs
-
 EXPOSE 3000
-
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 CMD node -e "fetch('http://127.0.0.1:3000/api/health',{signal:AbortSignal.timeout(3000)}).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 CMD ["node", "server.js"]

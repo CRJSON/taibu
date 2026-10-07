@@ -5,6 +5,8 @@ export const queryKeys = {
   notificationsPrefix: () => ['notifications'] as const,
   latestAnnouncement: () => ['announcements', 'latest'] as const,
   announcementsPrefix: () => ['announcements'] as const,
+  userCharts: (userId?: string | null) => ['user', 'charts', userId ?? 'visitor'] as const,
+  conversationList: (userId?: string | null) => ['chat', 'conversations', userId ?? 'visitor'] as const,
   chatBootstrap: (userId?: string | null) => ['chat', 'bootstrap', userId ?? 'visitor'] as const,
   chatBootstrapPrefix: () => ['chat', 'bootstrap'] as const,
   models: (userId?: string | null, options?: { vision?: boolean; membershipType?: string | null }) => ['models', userId ?? 'visitor', options?.membershipType ?? 'free', options?.vision === true ? 'vision' : 'chat'] as const,

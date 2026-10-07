@@ -3,6 +3,30 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
+test('record and note reads reject obsolete transport completions after cancellation', async (t) => {
+  const originalFetch = global.fetch;
+  t.after(() => { global.fetch = originalFetch; });
+  const { getRecords, getRecord, getNotesByDate } = require('../lib/records') as typeof import('../lib/records');
+  for (const read of [
+    (signal: AbortSignal) => getRecords({}, 1, 10, { signal }),
+    (signal: AbortSignal) => getRecord('artifact-record', { signal }),
+    (signal: AbortSignal) => getNotesByDate('2026-10-04', { signal }),
+  ]) {
+    const controller = new AbortController();
+    let finish!: (response: Response) => void;
+    let receivedSignal: AbortSignal | null | undefined;
+    global.fetch = async (_input, init) => {
+      receivedSignal = init?.signal;
+      return new Promise<Response>((resolve) => { finish = resolve; });
+    };
+    const pending = read(controller.signal);
+    controller.abort();
+    finish(new Response(JSON.stringify({ records: [], total: 42, notes: [] })));
+    await assert.rejects(pending, { name: 'AbortError' });
+    assert.equal(receivedSignal, controller.signal);
+  }
+});
+
 test('records page no longer keeps a parallel fetch client next to src/lib/records.ts', () => {
   const pageSource = readFileSync(resolve(process.cwd(), 'src/app/records/page.tsx'), 'utf8');
 

@@ -20,6 +20,8 @@ import {
 } from '@/lib/chat/custom-provider';
 import type { ChatStateReturn } from '@/lib/chat/use-chat-state';
 import { useFeatureToggles } from '@/lib/hooks/useFeatureToggles';
+import { useUserCharts } from '@/lib/hooks/useUserCharts';
+import { selectPrimarySavedBaziChart } from '@/lib/user/charts-client';
 import { filterMentionsByFeature, getEnabledDataSourceTypes } from '@/lib/data-sources/catalog';
 import { readLocalVisualizationSettings } from '@/lib/visualization/settings';
 import type { ChatStreamTaskRunner } from '@/lib/chat/chat-stream-manager';
@@ -136,6 +138,8 @@ export function useChatMessaging({
         removeConversationDetail,
     } = state;
     const isDreamMode = chatMode === 'dream';
+    const chartsQuery = useUserCharts(userId, { enabled: isDreamMode });
+    const primaryChartName = useMemo(() => selectPrimarySavedBaziChart(chartsQuery.data)?.name, [chartsQuery.data]);
     const isMangpaiMode = chatMode === 'mangpai';
     const { isFeatureEnabled, isLoading: featureToggleLoading } = useFeatureToggles({ enabled: !!userId });
     const knowledgeBaseEnabled = !featureToggleLoading && isFeatureEnabled('knowledge-base');
@@ -191,31 +195,42 @@ export function useChatMessaging({
         scrollToBottom(isLoading ? 'auto' : 'smooth');
     }, [isLoading, messages, scrollToBottom, shouldAutoScrollRef]);
 
-    // Dream context fetch
+    // Only the badge follows the current saved-chart bundle; message metadata
+    // remains the immutable context actually used for that message.
+    useEffect(() => {
+        if (!isDreamMode || !userId) return;
+        setDreamContext(current => current?.baziChartName === primaryChartName
+            ? current
+            : { ...current, baziChartName: primaryChartName });
+    }, [isDreamMode, primaryChartName, state.dreamContext?.baziChartName, setDreamContext, userId]);
+
+    // Dream daily-fortune context fetch (the chart name comes from Query).
     useEffect(() => {
         let isActive = true;
+        const controller = new AbortController();
         if (!isDreamMode || !userId) {
             setDreamContext(undefined);
-            return () => { isActive = false; };
+            setDreamContextLoading(false);
+            return () => { isActive = false; controller.abort(); };
         }
         const fetchDreamContext = async () => {
             setDreamContextLoading(true);
             try {
-                const response = await fetch('/api/dream-context');
+                const response = await fetch('/api/dream-context', { signal: controller.signal });
                 if (!response.ok) throw new Error('请求失败');
-                const data = await response.json();
+                const data = await response.json() as { dreamContext?: { dailyFortune?: string } };
                 if (!isActive) return;
-                setDreamContext(data?.dreamContext);
+                setDreamContext(current => ({ ...current, dailyFortune: data.dreamContext?.dailyFortune }));
             } catch (error) {
                 if (!isActive) return;
                 console.error('获取解梦上下文失败:', error);
-                setDreamContext(undefined);
+                setDreamContext(current => ({ ...current, dailyFortune: undefined }));
             } finally {
                 if (isActive) setDreamContextLoading(false);
             }
         };
-        fetchDreamContext();
-        return () => { isActive = false; };
+        void fetchDreamContext();
+        return () => { isActive = false; controller.abort(); };
     }, [isDreamMode, userId, setDreamContext, setDreamContextLoading]);
 
     // Stream manager subscription
