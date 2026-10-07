@@ -33,6 +33,8 @@ import { encryptAgentCredential } from "./credentials.server";
 import { validateAgentProviderUrl } from "./safe-fetch.server";
 import { isAgentRunTerminal, type AgentCheckpoint } from "./types";
 import { piHistory } from "./history.server";
+import { normalizeQuestions, validateAnswers, formatQuestionAnswers } from './questions';
+import { validateAttachmentIds } from './attachments.server';
 
 class AgentApiError extends Error {
   constructor(
@@ -139,6 +141,7 @@ function createBody(value: Record<string, unknown>) {
       id: message.id,
       content: message.content,
       attachments: {
+        ids: attachments?.ids,
         fileName:
           typeof attachments?.fileName === "string"
             ? attachments.fileName
@@ -248,6 +251,7 @@ export async function createAgentTask(request: NextRequest) {
     conversationId: body.conversationId,
     messageId: body.message.id,
     content: body.message.content,
+    attachmentIds: body.message.attachments.ids ?? [],
     model: body.model ?? null,
     custom: custom
       ? { ...custom, apiKey: hashAgentRequest(custom.apiKey) }
@@ -296,6 +300,7 @@ export async function createAgentTask(request: NextRequest) {
       (m) => m.id === body.replaceFromMessageId && m.role === "user",
     );
     if (index < 0) throw new AgentApiError("找不到需要编辑的消息");
+    if (history[index].metadata?.forkHistory === true) throw new AgentApiError('分叉历史只读，请发送新问题', 409);
     history = history.slice(0, index);
   }
   const account = await getUserAuthInfo(auth.user.id, {
@@ -308,6 +313,8 @@ export async function createAgentTask(request: NextRequest) {
       ? await getModelConfigAsync(body.model)
       : await getDefaultModelConfigAsync("chat");
   if (!custom && !config) throw new AgentApiError("模型不存在");
+  const attachments = await validateAttachmentIds(store.db,auth.user.id,body.message.attachments.ids).catch(error => { throw new AgentApiError(error.message); });
+  if (attachments.some(item => item.kind === 'image') && (custom || !config?.supportsVision)) throw new AgentApiError('图片资料需要平台视觉模型的 Agent 模式',400);
   if (
     config &&
     !isModelAllowedForMembership(config, account.effectiveMembership)
@@ -338,9 +345,10 @@ export async function createAgentTask(request: NextRequest) {
     createdAt: new Date().toISOString(),
   };
   if (Array.isArray(body.mentions)) userMessage.mentions = body.mentions;
-  if (typeof body.message.attachments?.fileName === "string")
+  if (typeof body.message.attachments?.fileName === "string" || attachments.length)
     userMessage.attachments = {
-      fileName: body.message.attachments.fileName,
+      fileName: body.message.attachments.fileName ?? attachments.map(item=>item.name).join('、'),
+      ids: attachments.map(item=>item.id),
       webSearchEnabled: body.webEnabled !== false,
     };
   const prepared = await buildChatPromptContext(
@@ -379,8 +387,8 @@ export async function createAgentTask(request: NextRequest) {
     version: 2,
     durable: { engine: "pi-durable/1.0.4" },
     messages: replay
-      ? [...replay, ...piHistory([prepared.sanitizedMessages.at(-1)!])]
-      : piHistory(prepared.sanitizedMessages),
+      ? [...replay, ...piHistory([userMessage])]
+      : piHistory(prepared.sanitizedMessages.map(message => ({ ...message, attachments: message.id === userMessage.id ? userMessage.attachments : history.find(item => item.id === message.id)?.attachments }))),
     parts: [],
     finalArtifacts: [],
   };
@@ -463,12 +471,39 @@ export async function controlAgentTask(
     body.clientRequestId.length > 160
   )
     throw new AgentApiError("补充消息无效");
+  const previousCommand = await store.db.from('agent_run_commands').select('message,original_message,mode,original_mode').eq('run_id', id).eq('request_id', body.clientRequestId).maybeSingle();
+  if (previousCommand.error) throw new AgentApiError('读取补充消息失败', 500);
+  if (previousCommand.data) {
+    const old = previousCommand.data.original_message ?? previousCommand.data.message;
+    if ((previousCommand.data.original_mode ?? previousCommand.data.mode) !== body.mode || old.content !== body.content || hashAgentRequest(old.attachments?.ids ?? []) !== hashAgentRequest(body.attachmentIds ?? []) || hashAgentRequest(old.metadata?.agentAnswers ?? null) !== hashAgentRequest(body.answers ?? null) || (body.questionId !== undefined && old.metadata?.agentQuestionId !== body.questionId)) throw new AgentApiError('同一消息标识对应了不同内容', 409);
+    return jsonOk({ message: previousCommand.data.message, run: await store.view(run) });
+  }
   const message: ChatMessage = {
     id: randomUUID(),
     role: "user",
     content: body.content,
     createdAt: new Date().toISOString(),
+    metadata: { agentRunId: id, agentCommandMode: body.mode },
   };
+  const commandAttachments = await validateAttachmentIds(store.db,auth.user.id,body.attachmentIds).catch(error => { throw new AgentApiError(error.message); });
+  if (commandAttachments.some(item=>item.kind==='image')) {
+    const model=run.input.customProvider ? null : await getModelConfigAsync(run.input.model);
+    if (!model?.supportsVision) throw new AgentApiError('当前任务的模型不支持图片；请在下个独立任务选择视觉模型');
+  }
+  if(commandAttachments.length) message.attachments={fileName:commandAttachments.map(item=>item.name).join('、'),ids:commandAttachments.map(item=>item.id)};
+  if (body.mode === 'reply') {
+    const question = [...run.public_message.agent?.parts ?? []].reverse().find(part => part.type === 'question');
+    const questionId = typeof body.questionId === 'string' ? body.questionId : run.checkpoint.questionId ?? question?.id;
+    if (body.questionId !== undefined && (!questionId || questionId !== (run.checkpoint.questionId ?? question?.id))) throw new AgentApiError('该问题已改变，请重新加载', 409);
+    let answers;
+    if (body.answers !== undefined) {
+      const questions=normalizeQuestions(run.checkpoint.questions ?? (question?.type === 'question' ? question.questions : undefined), run.checkpoint.question ?? (question?.type === 'question' ? question.question : undefined));
+      try { answers = validateAnswers(questions, body.answers); }
+      catch (error) { throw new AgentApiError(error instanceof Error ? error.message : '答案无效'); }
+      message.content = formatQuestionAnswers(questions, answers);
+    }
+    message.metadata = { ...message.metadata, agentQuestionId: questionId, ...(answers ? { agentAnswers: answers } : {}) };
+  }
   const command = await store.rpc<AgentCommandRow>("agent_submit_command", {
     p_run_id: id,
     p_request_id: body.clientRequestId,

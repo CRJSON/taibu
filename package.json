@@ -13,6 +13,10 @@
     "typecheck": "pnpm build:packages && tsc --noEmit --incremental false",
     "start": "next start",
     "selfhost": "node scripts/selfhost.mjs",
+    "local:up": "pnpm selfhost up --project taibu-agent-1006b",
+    "local:update": "pnpm selfhost up --project taibu-agent-1006b --build",
+    "local:status": "pnpm selfhost status --project taibu-agent-1006b",
+    "local:logs": "pnpm selfhost logs --project taibu-agent-1006b",
     "lint": "pnpm lint:code && pnpm lint:guards",
     "lint:code": "eslint .",
     "lint:guards": "node scripts/check-architecture-guards.mjs",
@@ -56,8 +60,12 @@
     "react-markdown": "^10.1.0",
     "recharts": "^3.6.0",
     "remark-gfm": "^4.0.1",
+    "remark-parse": "^11.0.0",
+    "sharp": "^0.35.5",
+    "shiki": "^4.5.0",
     "taibu-core": "workspace:*",
-    "undici": "8.11.2"
+    "undici": "8.11.2",
+    "unified": "^11.0.5"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

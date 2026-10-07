@@ -3,6 +3,7 @@ import { jsonSchema, streamText, tool, type ModelMessage } from "ai";
 import {
   createAssistantMessageEventStream,
   getCurrentTools,
+  isContextOverflow,
   type Api,
   type AssistantMessage,
   type JsonValue,
@@ -138,13 +139,15 @@ export function agentModelSources(config: AIModelConfig, apiKey?: string) {
 }
 export function createPiSDKStream(
   config: AIModelConfig,
-  settings: { reasoning: boolean; apiKey?: string },
+  settings: { reasoning: boolean; apiKey?: string; resolveImages?: (messages:ModelMessage[])=>Promise<ModelMessage[]> },
 ): StreamFn {
   return (piModel, context, options) => {
     const output = createAssistantMessageEventStream();
     void (async () => {
       const message = emptyPiAssistant(piModel);
       let started = false;
+      let emitted = false;
+      let emptyRecoveries = 0;
       try {
         const sources = agentModelSources(config, settings.apiKey);
         if (!sources.length) throw new Error("模型服务未配置");
@@ -158,8 +161,8 @@ export function createPiSDKStream(
             }),
           ]),
         );
-        for (let sourceIndex = 0; sourceIndex < sources.length; sourceIndex++) {
-          const source = sources[sourceIndex];
+        for (let sourceIndex = 0; sourceIndex < 3; sourceIndex++) {
+          const source = sources[Math.min(sourceIndex, sources.length - 1)];
           try {
             const requestSignal = agentModelRequestSignal(options?.signal);
             let finished = false;
@@ -172,7 +175,7 @@ export function createPiSDKStream(
                 apiKey: settings.apiKey,
                 fetch: settings.apiKey ? agentSafeFetch : undefined,
               }),
-              messages: toAgentModelMessages(context.messages),
+              messages: settings.resolveImages ? await settings.resolveImages(toAgentModelMessages(context.messages)) : toAgentModelMessages(context.messages),
               tools,
               maxRetries: 0,
               abortSignal: requestSignal,
@@ -233,6 +236,7 @@ export function createPiSDKStream(
                 if (index === undefined) continue;
                 const block = message.content[index];
                 if (event.type === "text-delta" && block.type === "text") {
+                  if (event.text) emitted = true;
                   block.text += event.text;
                   output.push({
                     type: "text_delta",
@@ -245,6 +249,7 @@ export function createPiSDKStream(
                   event.type === "reasoning-delta" &&
                   block.type === "thinking"
                 ) {
+                  if (event.text) emitted = true;
                   block.thinking += event.text;
                   output.push({
                     type: "thinking_delta",
@@ -282,6 +287,7 @@ export function createPiSDKStream(
                   });
                 }
               } else if (event.type === "tool-call") {
+                emitted = true;
                 if (!started) {
                   started = true;
                   output.push({ type: "start", partial: message });
@@ -322,17 +328,26 @@ export function createPiSDKStream(
                       ? "toolUse"
                       : "stop";
                 const usage = event.totalUsage;
+                const count = (value: number | undefined) => typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : 0;
+                const cacheRead = count(usage.inputTokenDetails?.cacheReadTokens);
+                const cacheWrite = count(usage.inputTokenDetails?.cacheWriteTokens);
+                // SDK inputTokens includes the caches; Pi counts them separately.
+                const input = usage.inputTokenDetails?.noCacheTokens === undefined
+                  ? Math.max(0, count(usage.inputTokens) - cacheRead - cacheWrite)
+                  : count(usage.inputTokenDetails.noCacheTokens);
+                const outputTokens = count(usage.outputTokens);
                 message.usage = {
                   ...structuredClone(EMPTY_USAGE),
-                  input: usage.inputTokens ?? 0,
-                  output: usage.outputTokens ?? 0,
-                  totalTokens: usage.totalTokens ?? 0,
+                  input, output: outputTokens, cacheRead, cacheWrite,
+                  ...(usage.outputTokenDetails?.reasoningTokens === undefined ? {} : { reasoning: count(usage.outputTokenDetails.reasoningTokens) }),
+                  totalTokens: count(usage.totalTokens) || input + outputTokens + cacheRead + cacheWrite,
                 };
               }
             }
             // EOF and an SDK abort are not successful Pi terminal messages.
             if (!finished) throw new Error("模型回复缺少结束标记");
             requestSignal.throwIfAborted();
+            if (!message.content.some(part => part.type === 'toolCall' || (part.type === 'text' && part.text.trim()) || (part.type === 'thinking' && part.thinking.trim()))) throw new Error('AGENT_EMPTY_RESPONSE');
             if (!started) {
               started = true;
               output.push({ type: "start", partial: message });
@@ -346,20 +361,28 @@ export function createPiSDKStream(
           } catch (error) {
             // Never restart a provider after emitting part of a response.
             if (
-              started ||
+              emitted ||
               options?.signal?.aborted ||
-              sourceIndex === sources.length - 1
+              sourceIndex === 2
             )
               throw error;
+            const empty = error instanceof Error && error.message === 'AGENT_EMPTY_RESPONSE';
+            if (empty && emptyRecoveries++ >= 1) throw error;
+            const status = (error as { statusCode?: number } | null)?.statusCode;
+            const transient = status === 408 || status === 429 || (typeof status === 'number' && status >= 500) || (error instanceof Error && /timeout|network|fetch failed|ECONNRESET/iu.test(error.message));
+            if (!empty && !transient && sourceIndex >= sources.length - 1) throw error;
+            started = false; message.content = []; message.stopReason = 'stop';
           }
         }
       } catch (error) {
         message.stopReason = options?.signal?.aborted ? "aborted" : "error";
+        const overflow = error instanceof Error && isContextOverflow({ ...message, stopReason: "error", errorMessage: error.message });
         message.errorMessage =
           message.stopReason === "aborted"
             ? "任务已停止"
             : error instanceof Error && error.message === "模型不支持工具调用"
               ? AGENT_UNSUPPORTED_TOOLS_MESSAGE
+            : overflow ? "模型上下文超出限制（context_length_exceeded）"
             : "模型调用失败，请确认模型支持工具调用或切换普通对话";
         output.push({
           type: "error",

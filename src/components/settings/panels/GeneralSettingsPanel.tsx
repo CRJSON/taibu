@@ -17,10 +17,14 @@ import { SettingsLoginRequired } from '@/components/settings/SettingsLoginRequir
 import { loadReminderSubscriptions, type ReminderType, updateReminderSubscriptionClient } from '@/lib/reminders-client';
 import { mutationEffects } from '@/lib/query/invalidation';
 import { getCurrentUserSettings, updateCurrentUserSettings } from '@/lib/user/settings';
+import { FONT_SCALES, type FontScale } from '@/lib/chat/preferences';
+import { BriefingSettings } from '../BriefingSettings';
+import { DEFAULT_BRIEFING_PREFERENCES, initialBriefingPreferences, type BriefingPreferences } from '@/lib/briefing-preferences';
 
 interface Settings {
   notifications: boolean;
   language: 'zh' | 'en';
+  briefingPreferences: BriefingPreferences;
 }
 
 type ReminderSettings = Record<ReminderType, boolean>;
@@ -29,6 +33,7 @@ const DEFAULT_REMINDER_SETTINGS: ReminderSettings = {
   solar_term: false,
   fortune: false,
   key_date: false,
+  daily_briefing: false,
 };
 
 const REMINDER_ITEMS: Array<{
@@ -121,13 +126,16 @@ export default function GeneralSettingsPanel() {
 }
 
 function AccountGeneralSettingsPanel() {
-  const { themeMode, setThemeMode } = useTheme();
+  const { themeMode, setThemeMode, fontScale, setFontScale } = useTheme();
   const { user, loading: sessionLoading } = useSessionSafe();
   const userId = user?.id ?? null;
   const [loading, setLoading] = useState(true);
+  const [desktopNotifications, setDesktopNotifications] = useState(false);
+  const [desktopError, setDesktopError] = useState('');
   const [settings, setSettings] = useState<Settings>({
     notifications: true,
     language: 'zh',
+    briefingPreferences: DEFAULT_BRIEFING_PREFERENCES,
   });
   const [reminders, setReminders] = useState<ReminderSettings>(DEFAULT_REMINDER_SETTINGS);
   const [remindersLoading, setRemindersLoading] = useState(true);
@@ -173,10 +181,14 @@ function AccountGeneralSettingsPanel() {
       }
 
       setLoadError(null);
+      let browserTimezone: string | undefined;
+      try { browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { /* Shanghai fallback */ }
       setSettings({
         notifications: settingsResult.value.settings?.notificationsEnabled ?? true,
         language: settingsResult.value.settings?.language ?? 'zh',
+        briefingPreferences: initialBriefingPreferences(settingsResult.value.settings?.briefingPreferences, settingsResult.value.settings?.briefingConfigured ?? false, browserTimezone),
       });
+      setDesktopNotifications(settingsResult.value.settings?.chatPreferences?.desktopNotifications ?? false);
 
       if (remindersResult.status === 'fulfilled') {
         if (remindersResult.value.ok) {
@@ -307,6 +319,18 @@ function AccountGeneralSettingsPanel() {
       <section className="space-y-3">
         <SectionTitle>基础偏好</SectionTitle>
         <div className="space-y-2">
+          <Row title="网页打开时桌面提醒" control={<button type="button" className="text-xs px-3 py-2 border border-border rounded" onClick={async () => {
+            setDesktopError('');
+            if (!desktopNotifications) {
+              if (!('Notification' in window)) { setDesktopError('此浏览器不支持桌面提醒'); return; }
+              const permission = await window.Notification.requestPermission();
+              if (permission !== 'granted') { setDesktopError('桌面提醒需要在浏览器中允许通知'); return; }
+            }
+            const current = await getCurrentUserSettings({ expectedUserId: userId! });
+            if (current.settings && await updateCurrentUserSettings({ chatPreferences: { ...current.settings.chatPreferences, desktopNotifications: !desktopNotifications } }, mutationEffects.userSettings(userId!), { expectedUserId: userId! })) setDesktopNotifications(!desktopNotifications);
+            else setDesktopError('保存桌面提醒偏好失败');
+          }}>{desktopNotifications ? '关闭桌面提醒' : '开启桌面提醒'}</button>} />
+          {desktopError && <p role="alert" className="text-sm text-foreground-secondary">{desktopError}</p>}
           <Row
             title="外观界面"
             control={(
@@ -333,6 +357,11 @@ function AccountGeneralSettingsPanel() {
               </select>
             )}
           />
+          <Row title="全站字号" control={<select aria-label="全站字号" value={fontScale} onChange={event => {
+            const scale = Number(event.target.value) as FontScale;
+            setFontScale(scale);
+            void getCurrentUserSettings({ expectedUserId: userId! }).then(current => current.settings && updateCurrentUserSettings({ chatPreferences: { ...current.settings.chatPreferences, fontScale: scale } }, mutationEffects.userSettings(userId!), { expectedUserId: userId! }));
+          }} className="rounded-md border border-border bg-background px-3 py-2 text-sm">{FONT_SCALES.map(scale => <option key={scale} value={scale}>{scale}%</option>)}</select>} />
         </div>
       </section>
 
@@ -380,6 +409,7 @@ function AccountGeneralSettingsPanel() {
           })}
         </div>
       </section>
+      {!loading && !loadError && <BriefingSettings key={user.id} userId={user.id} initialPreferences={settings.briefingPreferences} initialEnabled={reminders.daily_briefing} />}
     </div>
   );
 }

@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
   "baselineRevision": "5725dde",
-  "sourceFingerprint": "aafa52b1c13357312a9b3fd67bb43eede1b0c2ff2cf5bca0a11f936887fedfd8",
+  "sourceFingerprint": "c37d2ec4315d56a3a409de4015583d6676a8d99542bd41e6c751b19b12ee9ef3",
   "target": "empty local self-hosted application schema; NOT production parity or a migration replay",
   "bootstrapOrder": [
     "platform roles/extensions",
@@ -18,7 +18,7 @@
   "sources": [
     {
       "file": "supabase/tabel_export_from_supabase.sql",
-      "sha256": "50718710be9007057b6e9177c296afa9d86bc19dcec2e0c5e97d1d9623171642"
+      "sha256": "750f8a22f622dd265a2724cdb17020cfe7ddb7cc2a8644b4760d3e41f12c9dc3"
     },
     {
       "file": "supabase/migrations/20260118_create_gamification_tables.sql",
@@ -141,6 +141,46 @@
       "sha256": "1dad2e8fe0dd2614bcd416d479a26f314dd8b284c8f851cdc81ac9da71fefc3e"
     },
     {
+      "file": "supabase/migrations/20261007_100000_agent_chat_results.sql",
+      "sha256": "462a8badd3f41fa1f5f5b389f2e2fa4320bc7911d0e125da6d06a8dee27effe8"
+    },
+    {
+      "file": "supabase/migrations/20261007_110000_agent_reading_preferences.sql",
+      "sha256": "377a05f32be8c9de71ff7e410983c95a2663e1fdd707bad0680526abacc658e2"
+    },
+    {
+      "file": "supabase/migrations/20261007_120000_agent_search.sql",
+      "sha256": "0fffdb9815f41d84cc5a63e31dec2da7cecdd0387771ef03a27594aa4fb193cd"
+    },
+    {
+      "file": "supabase/migrations/20261007_130000_agent_input_preferences.sql",
+      "sha256": "84e29f04f70ec8eb0338baac047960ffa6556fbe3a43c90aec0c67b758e004e1"
+    },
+    {
+      "file": "supabase/migrations/20261007_140000_agent_queue.sql",
+      "sha256": "adf9092f2fa03d18fdaef52e3cb20134e84e6e5ece35580364a4a295959d40e6"
+    },
+    {
+      "file": "supabase/migrations/20261007_150000_agent_notifications.sql",
+      "sha256": "61a3c68ecf0ac582dc75ac86d1f3142dd030445ab834b67c957d95c91439ed4d"
+    },
+    {
+      "file": "supabase/migrations/20261007_160000_agent_attachments.sql",
+      "sha256": "53d5562f071394cb7fd30d0c91526891a9d9b299848d3d0b6a873882a2d56ca6"
+    },
+    {
+      "file": "supabase/migrations/20261007_170000_daily_briefing.sql",
+      "sha256": "4fa35a28d49e8f74ec770e09832cde23efd55755a118d0bc4b6833c6c88976ba"
+    },
+    {
+      "file": "supabase/migrations/20261007_180000_conversation_fork.sql",
+      "sha256": "e3bb2317479f95523b6079bf0a5e388802907cb8134771525179132174a9409d"
+    },
+    {
+      "file": "supabase/migrations/20261007_190000_agent_backend_access.sql",
+      "sha256": "26bf8dd2d1e758a1dbc3467c051fb4d8fd03c994c1856314b7c221181397e84d"
+    },
+    {
       "file": "supabase/selfhost/source-views.sql",
       "sha256": "3ec59bffedd43530835e728dd9e9fac580ed09bbacb23e64fe460cb2775c6342"
     },
@@ -154,7 +194,7 @@
     },
     {
       "file": "supabase/selfhost/002-storage.sql",
-      "sha256": "e1beff8c548f424216b2408d1bdd8aacc81f15fb1853bd8b41f6753ec9a80e66"
+      "sha256": "67d33b307fdce4c25aef8c23cab30f1aee3ed098bd0f92f9c04d811e248694b5"
     },
     {
       "file": "src/lib/app-settings.ts",
@@ -162,7 +202,7 @@
     },
     {
       "file": "scripts/selfhost-schema.mjs",
-      "sha256": "7f87500e6ae993b21eff2704701a714d43cc443129649d0eb5c0af8242ab365e"
+      "sha256": "2ad7d8ce87c7b10da993d5f73aeda83ca272842650974f6cdb71858789ee7068"
     },
     {
       "file": "src/app/api/supabase/storage/route.ts",
@@ -194,45 +234,57 @@
       "uniqueSource": null
     },
     {
+      "name": "agent_attachment_refs",
+      "source": "supabase/tabel_export_from_supabase.sql",
+      "security": "Feature migration: owner SELECT when granted; atomic owner or lease-fenced RPC writes",
+      "uniqueSource": null
+    },
+    {
+      "name": "agent_attachments",
+      "source": "supabase/tabel_export_from_supabase.sql",
+      "security": "Feature migration: owner SELECT when granted; atomic owner or lease-fenced RPC writes",
+      "uniqueSource": null
+    },
+    {
       "name": "agent_durable_commits",
       "source": "supabase/tabel_export_from_supabase.sql",
-      "security": "Agent runtime migration: owner SELECT; lease-fenced or owner-checked RPC mutations; credentials administrator only",
+      "security": "Feature migration: owner SELECT when granted; atomic owner or lease-fenced RPC writes",
       "uniqueSource": null
     },
     {
       "name": "agent_run_artifacts",
       "source": "supabase/tabel_export_from_supabase.sql",
-      "security": "Agent runtime migration: owner SELECT; lease-fenced or owner-checked RPC mutations; credentials administrator only",
+      "security": "Feature migration: owner SELECT when granted; atomic owner or lease-fenced RPC writes",
       "uniqueSource": null
     },
     {
       "name": "agent_run_commands",
       "source": "supabase/tabel_export_from_supabase.sql",
-      "security": "Agent runtime migration: owner SELECT; lease-fenced or owner-checked RPC mutations; credentials administrator only",
+      "security": "Feature migration: owner SELECT when granted; atomic owner or lease-fenced RPC writes",
       "uniqueSource": null
     },
     {
       "name": "agent_run_credentials",
       "source": "supabase/tabel_export_from_supabase.sql",
-      "security": "Agent runtime migration: owner SELECT; lease-fenced or owner-checked RPC mutations; credentials administrator only",
+      "security": "Feature migration: owner SELECT when granted; atomic owner or lease-fenced RPC writes",
       "uniqueSource": null
     },
     {
       "name": "agent_run_events",
       "source": "supabase/tabel_export_from_supabase.sql",
-      "security": "Agent runtime migration: owner SELECT; lease-fenced or owner-checked RPC mutations; credentials administrator only",
+      "security": "Feature migration: owner SELECT when granted; atomic owner or lease-fenced RPC writes",
       "uniqueSource": null
     },
     {
       "name": "agent_runs",
       "source": "supabase/tabel_export_from_supabase.sql",
-      "security": "Agent runtime migration: owner SELECT; lease-fenced or owner-checked RPC mutations; credentials administrator only",
+      "security": "Feature migration: owner SELECT when granted; atomic owner or lease-fenced RPC writes",
       "uniqueSource": null
     },
     {
       "name": "agent_workers",
       "source": "supabase/tabel_export_from_supabase.sql",
-      "security": "Agent runtime migration: owner SELECT; lease-fenced or owner-checked RPC mutations; credentials administrator only",
+      "security": "Feature migration: owner SELECT when granted; atomic owner or lease-fenced RPC writes",
       "uniqueSource": null
     },
     {
@@ -338,6 +390,12 @@
       "uniqueSource": null
     },
     {
+      "name": "daily_briefing_jobs",
+      "source": "supabase/tabel_export_from_supabase.sql",
+      "security": "Feature migration: owner SELECT when granted; atomic owner or lease-fenced RPC writes",
+      "uniqueSource": null
+    },
+    {
       "name": "daily_checkins",
       "source": "supabase/tabel_export_from_supabase.sql",
       "security": "owner SELECT + administrator JWT writes",
@@ -419,6 +477,12 @@
       "name": "palm_readings",
       "source": "supabase/tabel_export_from_supabase.sql",
       "security": "local owner CRUD + administrator JWT; linked resource ownership checked",
+      "uniqueSource": null
+    },
+    {
+      "name": "prompt_enhancement_usage",
+      "source": "supabase/tabel_export_from_supabase.sql",
+      "security": "Feature migration: owner SELECT when granted; atomic owner or lease-fenced RPC writes",
       "uniqueSource": null
     },
     {
@@ -548,11 +612,29 @@
       "reason": null
     },
     {
+      "name": "agent_change_command",
+      "callers": [
+        "src/app/api/agent/runs/[id]/queue/route.ts"
+      ],
+      "source": "supabase/migrations/20261007_140000_agent_queue.sql",
+      "status": "defined",
+      "reason": null
+    },
+    {
       "name": "agent_checkpoint",
       "callers": [
         "src/lib/agent/runtime.server.ts"
       ],
       "source": "supabase/migrations/20261005_100000_agent_runtime.sql",
+      "status": "defined",
+      "reason": null
+    },
+    {
+      "name": "agent_claim_command",
+      "callers": [
+        "src/lib/agent/runtime.server.ts"
+      ],
+      "source": "supabase/migrations/20261007_140000_agent_queue.sql",
       "status": "defined",
       "reason": null
     },
@@ -599,7 +681,7 @@
         "src/lib/agent/runtime.server.ts",
         "src/lib/agent/worker-entry.ts"
       ],
-      "source": "supabase/migrations/20261005_120000_agent_chart_identity.sql",
+      "source": "supabase/migrations/20261007_100000_agent_chat_results.sql",
       "status": "defined",
       "reason": null
     },
@@ -626,7 +708,7 @@
       "callers": [
         "src/lib/agent/api.server.ts"
       ],
-      "source": "supabase/migrations/20261005_100000_agent_runtime.sql",
+      "source": "supabase/migrations/20261007_140000_agent_queue.sql",
       "status": "defined",
       "reason": null
     },
@@ -678,11 +760,48 @@
       "reason": null
     },
     {
+      "name": "claim_agent_attachment_cleanup",
+      "callers": [
+        "src/lib/agent/attachments.server.ts"
+      ],
+      "source": "supabase/migrations/20261007_160000_agent_attachments.sql",
+      "status": "defined",
+      "reason": null
+    },
+    {
+      "name": "claim_daily_briefings",
+      "callers": [
+        "src/lib/daily-briefing.server.ts",
+        "src/lib/daily-briefing.server.ts"
+      ],
+      "source": "supabase/migrations/20261007_170000_daily_briefing.sql",
+      "status": "defined",
+      "reason": null
+    },
+    {
       "name": "claim_linuxdo_membership_as_service",
       "callers": [
         "src/app/api/auth/linuxdo/callback/route.ts"
       ],
       "source": "supabase/migrations/20260410_103000_fix_linuxdo_claim_concurrency.sql",
+      "status": "defined",
+      "reason": null
+    },
+    {
+      "name": "claim_notification_popup",
+      "callers": [
+        "src/app/api/notifications/popup/route.ts"
+      ],
+      "source": "supabase/migrations/20261007_150000_agent_notifications.sql",
+      "status": "defined",
+      "reason": null
+    },
+    {
+      "name": "claim_prompt_enhancement",
+      "callers": [
+        "src/app/api/chat/enhance/route.ts"
+      ],
+      "source": "supabase/migrations/20261007_130000_agent_input_preferences.sql",
       "status": "defined",
       "reason": null
     },
@@ -747,6 +866,24 @@
         "src/app/api/history-summaries/route.ts"
       ],
       "source": "supabase/migrations/20260723_100000_create_meihua_xiaoliuren_web.sql",
+      "status": "defined",
+      "reason": null
+    },
+    {
+      "name": "deliver_daily_briefing_notices",
+      "callers": [
+        "src/lib/daily-briefing.server.ts"
+      ],
+      "source": "supabase/migrations/20261007_170000_daily_briefing.sql",
+      "status": "defined",
+      "reason": null
+    },
+    {
+      "name": "fork_conversation_snapshot",
+      "callers": [
+        "src/app/api/conversations/[id]/fork/route.ts"
+      ],
+      "source": "supabase/migrations/20261007_180000_conversation_fork.sql",
       "status": "defined",
       "reason": null
     },
@@ -851,6 +988,15 @@
       "reason": null
     },
     {
+      "name": "search_conversation_messages",
+      "callers": [
+        "src/app/api/search/route.ts"
+      ],
+      "source": "supabase/migrations/20261007_120000_agent_search.sql",
+      "status": "defined",
+      "reason": null
+    },
+    {
       "name": "search_knowledge_fts",
       "callers": [
         "src/lib/knowledge-base/persistence.server.ts"
@@ -874,6 +1020,15 @@
         "src/lib/knowledge-base/persistence.server.ts"
       ],
       "source": "supabase/migrations/20261002_100000_fix_knowledge_search_contracts.sql",
+      "status": "defined",
+      "reason": null
+    },
+    {
+      "name": "settle_daily_briefing",
+      "callers": [
+        "src/lib/daily-briefing.server.ts"
+      ],
+      "source": "supabase/migrations/20261007_170000_daily_briefing.sql",
       "status": "defined",
       "reason": null
     },
@@ -947,6 +1102,48 @@
       ]
     },
     {
+      "name": "agent_attachment_refs",
+      "kind": "table",
+      "status": "defined",
+      "callers": [
+        {
+          "file": "src/lib/agent/attachments.server.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/agent/tools.server.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/chat/conversation-export.server.ts",
+          "kind": "literal-from"
+        }
+      ]
+    },
+    {
+      "name": "agent_attachments",
+      "kind": "table",
+      "status": "defined",
+      "callers": [
+        {
+          "file": "src/app/api/agent/attachments/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/agent/attachments/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/agent/attachments.server.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/agent/attachments.server.ts",
+          "kind": "literal-from"
+        }
+      ]
+    },
+    {
       "name": "agent_run_artifacts",
       "kind": "table",
       "status": "defined",
@@ -958,6 +1155,10 @@
         {
           "file": "src/lib/agent/store.server.ts",
           "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/chat/conversation-export.server.ts",
+          "kind": "literal-from"
         }
       ]
     },
@@ -966,6 +1167,10 @@
       "kind": "table",
       "status": "defined",
       "callers": [
+        {
+          "file": "src/lib/agent/api.server.ts",
+          "kind": "literal-from"
+        },
         {
           "file": "src/lib/agent/store.server.ts",
           "kind": "literal-from"
@@ -1241,6 +1446,10 @@
           "kind": "literal-from"
         },
         {
+          "file": "src/lib/daily-briefing.server.ts",
+          "kind": "literal-from"
+        },
+        {
           "file": "src/lib/data-sources/bazi.ts",
           "kind": "literal-from"
         },
@@ -1394,6 +1603,22 @@
       "kind": "table",
       "status": "defined",
       "callers": [
+        {
+          "file": "src/app/api/conversations/[id]/configuration/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/conversations/[id]/configuration/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/conversations/[id]/export/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/conversations/[id]/fork/route.ts",
+          "kind": "literal-from"
+        },
         {
           "file": "src/lib/agent/api.server.ts",
           "kind": "literal-from"
@@ -2009,6 +2234,10 @@
           "kind": "typed-adapter-catalog"
         },
         {
+          "file": "src/lib/daily-briefing.server.ts",
+          "kind": "literal-from"
+        },
+        {
           "file": "src/lib/data-sources/fortune.ts",
           "kind": "literal-from"
         },
@@ -2266,11 +2495,11 @@
   "artifacts": [
     {
       "file": "supabase/selfhost/001-application.sql",
-      "sha256": "f25829bac3e6a2cb0216f86f158f5e076112ddc958d66f75d988eab37cae3f6a"
+      "sha256": "0b80105ddaef164c5580ae89b197fe73bbdf9745a78b13ecdd897154cfbf064e"
     },
     {
       "file": "supabase/selfhost/002-storage.sql",
-      "sha256": "e1beff8c548f424216b2408d1bdd8aacc81f15fb1853bd8b41f6753ec9a80e66"
+      "sha256": "67d33b307fdce4c25aef8c23cab30f1aee3ed098bd0f92f9c04d811e248694b5"
     }
   ]
 }

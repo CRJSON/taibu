@@ -1,0 +1,46 @@
+/** Application context limits. Unknown model capacities are deliberately absent. */
+export interface ModelContextConfig {
+    maxContext: number;
+    promptRatio: number;
+    reserveOutput: number;
+    reserveHistory: number;
+    promptCapRatio?: number;
+    maxPromptTokens?: number;
+    minPromptTokens?: number;
+}
+
+const MODEL_CONTEXT_CONFIGS: Record<string, ModelContextConfig> = {
+    'deepseek-v3.2': { maxContext: 32000, promptRatio: 0.25, reserveOutput: 2000, reserveHistory: 4000 },
+    'deepseek-pro': { maxContext: 64000, promptRatio: 0.25, reserveOutput: 4000, reserveHistory: 4000 },
+    'deepseek-pro-reasoner': { maxContext: 64000, promptRatio: 0.35, reserveOutput: 4000, reserveHistory: 4000, promptCapRatio: 0.6, maxPromptTokens: 6000 },
+    'glm-4.6': { maxContext: 128000, promptRatio: 0.25, reserveOutput: 2000, reserveHistory: 4000 },
+    'glm-4.6-reasoner': { maxContext: 128000, promptRatio: 0.35, reserveOutput: 2000, reserveHistory: 4000, promptCapRatio: 0.6, maxPromptTokens: 6000 },
+    'glm-4.7': { maxContext: 128000, promptRatio: 0.3, reserveOutput: 4000, reserveHistory: 4000 },
+    'glm-4.7-reasoner': { maxContext: 128000, promptRatio: 0.35, reserveOutput: 4000, reserveHistory: 4000, promptCapRatio: 0.6, maxPromptTokens: 6000 },
+    'gemini-3': { maxContext: 128000, promptRatio: 0.3, reserveOutput: 2000, reserveHistory: 4000 },
+    'gemini-pro': { maxContext: 128000, promptRatio: 0.35, reserveOutput: 4000, reserveHistory: 4000, promptCapRatio: 0.6, maxPromptTokens: 6000 },
+    'qwen-3-max': { maxContext: 64000, promptRatio: 0.25, reserveOutput: 4000, reserveHistory: 4000 },
+    deepai: { maxContext: 128000, promptRatio: 0.3, reserveOutput: 4000, reserveHistory: 4000, promptCapRatio: 0.8, maxPromptTokens: 8000 },
+    'qwen-vl-plus': { maxContext: 32000, promptRatio: 0.25, reserveOutput: 4000, reserveHistory: 4000 },
+    'qwen-vl-plus-reasoner': { maxContext: 32000, promptRatio: 0.2, reserveOutput: 5000, reserveHistory: 4000 },
+    'gemini-vl': { maxContext: 32000, promptRatio: 0.2, reserveOutput: 4000, reserveHistory: 8000 },
+    'kimi-k2.5': { maxContext: 128000, promptRatio: 0.25, reserveOutput: 4000, reserveHistory: 4000 },
+    'kimi-k2.5-reasoner': { maxContext: 128000, promptRatio: 0.35, reserveOutput: 4000, reserveHistory: 4000, promptCapRatio: 0.6, maxPromptTokens: 6000 },
+};
+
+export function resolveKnownModelContextConfig(modelId: string, reasoningEnabled?: boolean): ModelContextConfig | null {
+    const reasoningId = `${modelId}-reasoner`;
+    if (reasoningEnabled && Object.hasOwn(MODEL_CONTEXT_CONFIGS, reasoningId)) return MODEL_CONTEXT_CONFIGS[reasoningId];
+    if (Object.hasOwn(MODEL_CONTEXT_CONFIGS, modelId)) return MODEL_CONTEXT_CONFIGS[modelId];
+    if (modelId.startsWith('gemini-pro-')) return MODEL_CONTEXT_CONFIGS['gemini-pro'];
+    if (modelId.startsWith('gemini-vl-')) return MODEL_CONTEXT_CONFIGS['gemini-vl'];
+    if (modelId.startsWith('deepai-')) return MODEL_CONTEXT_CONFIGS.deepai;
+    if (modelId.startsWith('kimi-')) return MODEL_CONTEXT_CONFIGS['kimi-k2.5'];
+    return null;
+}
+
+/** Ordinary chat still needs a bounded prompt budget when capacity is unknown. */
+const DEFAULT_PROMPT_BUDGET: ModelContextConfig = { maxContext: 32000, promptRatio: 0.25, reserveOutput: 2000, reserveHistory: 4000 };
+export function resolveModelContextConfig(modelId: string, reasoningEnabled?: boolean): ModelContextConfig {
+    return resolveKnownModelContextConfig(modelId, reasoningEnabled) ?? DEFAULT_PROMPT_BUDGET;
+}

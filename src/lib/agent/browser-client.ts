@@ -21,6 +21,28 @@ export function mergeAgentSnapshot(messages: ChatMessage[], run: AgentRunView) {
   next[index] = run.message;
   return next;
 }
+
+/** A task's aggregate output follows its in-run inputs in the visible transcript. */
+export function orderAgentMessagesForDisplay(messages: ChatMessage[], currentRun?: AgentRunView): ChatMessage[] {
+  const moveAfter = new Map<number, number>();
+  const commands = new Set(currentRun?.commandMessageIds);
+  let assistantIndex = -1;
+  let runId: string | undefined;
+  for (const [index, message] of messages.entries()) {
+    if (message.role === 'assistant') {
+      assistantIndex = index;
+      runId = message.agent?.runId;
+    } else if (message.role === 'user' && runId) {
+      // The snapshot also associates older inputs without changing loaded history.
+      const inputRunId = commands.has(message.id) ? currentRun?.id : message.metadata?.agentRunId;
+      if (inputRunId === runId) moveAfter.set(assistantIndex, index);
+    }
+  }
+  if (!moveAfter.size) return messages;
+  const insertAfter = new Map([...moveAfter].map(([from, to]) => [to, messages[from]]));
+  return messages.flatMap((message, index) => moveAfter.has(index) ? []
+    : insertAfter.has(index) ? [message, insertAfter.get(index)!] : [message]);
+}
 export async function readAgentStream(
   response: Response,
   signal: AbortSignal,
@@ -82,7 +104,7 @@ export async function postAgentRun(body: Record<string, unknown>) {
 }
 export async function postAgentCommand(
   runId: string,
-  body: { content: string; clientRequestId: string; mode: "steer" | "follow_up" | "reply" },
+  body: { content: string; clientRequestId: string; mode: "steer" | "follow_up" | "reply"; questionId?: string; answers?: import('./questions').AgentAnswers; attachmentIds?: string[] },
 ) {
   return postAgentJson<{ message: ChatMessage; run: AgentRunView }>(
     `/api/agent/runs/${runId}/messages`, body,

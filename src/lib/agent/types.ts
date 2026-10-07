@@ -1,5 +1,7 @@
 import type { Message, Tool, TSchema, Static, AssistantMessageEventStream, Model, Api, TranscriptContext, SimpleStreamOptions } from "@earendil-works/pi-ai";
 import type { ChatMessage } from "@/types";
+import type { AgentQuestion } from './questions';
+import type { AgentTodo } from './todos';
 
 export type AgentRunStatus =
   | "queued"
@@ -17,12 +19,14 @@ export type AgentPart =
       id: string;
       name: string;
       title: string;
-      status: "running" | "completed" | "failed";
+      status: "pending" | "running" | "awaiting_input" | "completed" | "failed";
       input?: unknown;
       output?: unknown;
+      canonicalText?: string;
     }
   | { type: "source"; id: string; title: string; url: string; content?: string }
-  | { type: "question"; id: string; question: string }
+  | { type: "question"; id: string; question: string; questions?: AgentQuestion[] }
+  | { type: 'todo'; id: string; revision: number; items: AgentTodo[] }
   | {
       type: "artifact";
       id: string;
@@ -38,6 +42,26 @@ export interface AgentMessageData {
   status: AgentRunStatus;
   parts: AgentPart[];
   error?: string;
+  runtime?: AgentRuntimeInfo;
+  compactions?: Array<{ id: string; summary?: string; through?: string; retainedFrom?: string; status: 'completed' | 'failed'; reason?: string }>;
+}
+
+/** Public projection of Pi's active context, never credentials or the full prompt. */
+export interface AgentRuntimeInfo {
+  model: { id: string; name: string; contextWindow: number | null; limitSource: "configured" | "unknown" };
+  context?: {
+    tokens: number;
+    measuredTokens: number;
+    estimatedTokens: number;
+    source: "usage" | "mixed" | "estimated";
+    input?: number;
+    output?: number;
+    cacheRead?: number;
+    cacheWrite?: number;
+    reasoning?: number;
+    compactions: number;
+  };
+  activity?: { phase: "preparing" | "generating" | "thinking" | "responding" | "tools" | "compacting" | "retrying" | "awaiting_input" | "settling"; toolTitle?: string; attempt?: number };
 }
 
 export interface AgentCheckpoint {
@@ -47,11 +71,16 @@ export interface AgentCheckpoint {
   parts: AgentPart[];
   finalArtifacts: string[];
   question?: string;
+  questions?: AgentQuestion[];
+  questionId?: string;
+  todos?: { revision: number; items: AgentTodo[] };
+  compactions?: AgentMessageData['compactions'];
   summary?: string;
   finalSelectionMade?: boolean;
   summaryThrough?: number;
   knowledgeQueries?: Record<string, number>;
   streamingAssistantId?: string;
+  runtime?: AgentRuntimeInfo;
   durable?: {
     engine: "pi-durable/1.0.4";
     seeded?: boolean;
@@ -84,6 +113,9 @@ export interface AgentRunView {
   createdAt: string;
   clientRequestId?: string;
   userMessage?: ChatMessage;
+  commandMessageIds?: string[];
+  queue?: Array<{ sequence: number; mode: 'steer' | 'follow_up' | 'reply'; message: ChatMessage; revision: number; sortOrder: number; state: 'pending' | 'claimed' | 'admitted' | 'consumed' | 'cancelled' }>;
+  configuration?: { model: string; reasoning: boolean; webEnabled: boolean };
 }
 
 export interface AgentRunEvent {

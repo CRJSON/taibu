@@ -44,6 +44,7 @@ export const ConversationItem = memo(function ConversationItem({
     const { mainTitle, subTitle, changedTitle } = getConversationDisplayParts(conv);
 
     const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+        if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
         if (event.key === 'Enter') {
             event.preventDefault();
             onSaveRename?.();
@@ -110,9 +111,8 @@ export const ConversationItem = memo(function ConversationItem({
                     transition-colors duration-150 text-[14px]
                     ${(isActive || isActionActive) ? 'bg-background-secondary text-foreground' : 'text-foreground hover:bg-background-secondary'}
                 `}
-                onClick={() => onSelect(conv.id)}
             >
-                <div className="flex-1 min-w-0 flex flex-col">
+                <button type="button" onClick={() => onSelect(conv.id)} aria-current={isActive ? 'page' : undefined} className="flex-1 min-w-0 text-left flex flex-col focus-visible:outline-2 focus-visible:outline-accent rounded">
                     <span className="truncate font-medium flex items-center gap-1">
                         <span className="truncate">{mainTitle}</span>
                         {changedTitle && (
@@ -127,11 +127,11 @@ export const ConversationItem = memo(function ConversationItem({
                             {subTitle}
                         </span>
                     )}
-                </div>
+                </button>
                 {conv.isArchived && (
                     <Archive className="w-3.5 h-3.5 text-foreground-secondary flex-shrink-0" />
                 )}
-                <div className={`flex-shrink-0 transition-opacity ${isActionActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+                <div className={`flex-shrink-0 transition-opacity ${isActionActive ? 'opacity-100' : 'opacity-100 lg:opacity-0 lg:group-hover:opacity-100 lg:group-focus-within:opacity-100'}`}>
                     <button
                         type="button"
                         onClick={(e) => {
@@ -140,6 +140,8 @@ export const ConversationItem = memo(function ConversationItem({
                         }}
                         className="p-1 hover:bg-background-tertiary rounded text-foreground-secondary hover:text-foreground"
                         aria-label="更多操作"
+                        aria-haspopup="menu"
+                        aria-expanded={isActionActive}
                     >
                         <Ellipsis className="w-4 h-4" />
                     </button>
@@ -202,9 +204,8 @@ export const ConversationItem = memo(function ConversationItem({
                 transition-colors text-sm
                 ${(isActive || isActionActive) ? 'bg-background-secondary' : 'hover:bg-background-secondary'}
             `}
-            onClick={() => onSelect(conv.id)}
         >
-            <div className="flex-1 min-w-0">
+            <button type="button" onClick={() => onSelect(conv.id)} aria-current={isActive ? 'page' : undefined} className="flex-1 min-w-0 text-left focus-visible:outline-2 focus-visible:outline-accent rounded">
                 <span className="text-sm truncate flex items-center gap-1">
                     <span className="truncate">{mainTitle}</span>
                     {changedTitle && (
@@ -219,7 +220,7 @@ export const ConversationItem = memo(function ConversationItem({
                         {subTitle}
                     </p>
                 )}
-            </div>
+            </button>
             {conv.isArchived && (
                 <span
                     className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md border border-border bg-background-tertiary text-[10px] text-foreground-secondary flex-shrink-0 ${subTitle ? 'mt-0.5' : ''}`}
@@ -233,7 +234,7 @@ export const ConversationItem = memo(function ConversationItem({
                     {!isSidebarCollapsed && <span>归档</span>}
                 </span>
             )}
-            <div className={`flex items-center flex-shrink-0 transition-opacity ${subTitle ? 'mt-0.5' : ''} ${isActionActive ? 'opacity-100' : 'opacity-100 lg:opacity-0 lg:group-hover:opacity-100'}`}>
+            <div className={`flex items-center flex-shrink-0 transition-opacity ${subTitle ? 'mt-0.5' : ''} ${isActionActive ? 'opacity-100' : 'opacity-100 lg:opacity-0 lg:group-hover:opacity-100 lg:group-focus-within:opacity-100'}`}>
                 <button
                     type="button"
                     onClick={(e) => {
@@ -242,6 +243,8 @@ export const ConversationItem = memo(function ConversationItem({
                     }}
                     className="p-1.5 hover:bg-background-tertiary rounded text-foreground-secondary hover:text-foreground"
                     aria-label="更多操作"
+                    aria-haspopup="menu"
+                    aria-expanded={isActionActive}
                 >
                     <Ellipsis className="w-4 h-4" />
                 </button>

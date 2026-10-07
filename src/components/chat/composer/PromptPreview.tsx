@@ -8,6 +8,9 @@
 
 import type { PromptLayerDiagnostic } from '@/types';
 import { groupPromptLayers } from '@/lib/chat/prompt-labels';
+import { useRef, useId } from 'react';
+import { X } from 'lucide-react';
+import { FloatingPanel } from '@/components/ui/FloatingPanel';
 
 interface PromptPreviewProps {
     promptPreviewLoading: boolean;
@@ -38,9 +41,12 @@ export function PromptPreview({
     displayUserMessageTokens,
     formatLayerLabel,
 }: PromptPreviewProps) {
+    const triggerRef = useRef<HTMLButtonElement>(null);
+    const id = useId();
     return (
         <div className="relative group">
             <button
+                ref={triggerRef}
                 type="button"
                 onClick={() => {
                     if (hasPromptDiagnostics) {
@@ -49,6 +55,9 @@ export function PromptPreview({
                 }}
                 className={`relative w-5 h-5 flex items-center justify-center ${promptPreviewLoading ? 'opacity-60' : ''} ${hasPromptDiagnostics ? 'cursor-pointer' : 'cursor-default'}`}
                 aria-label="提示词使用情况"
+                aria-expanded={hasPromptDiagnostics && promptDiagnosticsOpen}
+                aria-haspopup="dialog"
+                aria-controls={promptDiagnosticsOpen ? id : undefined}
             >
                 <svg viewBox="0 0 36 36" className="w-5 h-5">
                     <path
@@ -80,15 +89,10 @@ export function PromptPreview({
                     ? '正在加载预览'
                     : `上下文 ${contextProgressPercent}% | ${promptUsageLabel}`}
             </div>
-            {hasPromptDiagnostics && promptDiagnosticsOpen && (
-                <>
-                    <div
-                        className="fixed inset-0 z-40"
-                        onClick={() => setPromptDiagnosticsOpen(false)}
-                    />
-                    <div className="fixed left-2 right-2 bottom-[calc(5rem+var(--sab))] md:absolute md:left-1/2 md:right-auto md:bottom-full mb-2 md:-translate-x-1/2 md:w-64 rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground shadow-lg z-50">
+            <FloatingPanel open={hasPromptDiagnostics && promptDiagnosticsOpen} anchorRef={triggerRef} onClose={() => setPromptDiagnosticsOpen(false)} id={id} label="提示词使用情况" role="dialog" side="top" align="end" className="w-72 px-3 py-2 text-xs">
                         <div className="flex items-center justify-between font-medium text-foreground-secondary">
                             <span>提示词使用</span>
+                            <button type="button" aria-label="关闭提示词统计" onClick={() => setPromptDiagnosticsOpen(false)}><X size={14} /></button>
                             <span className="tabular-nums">
                                 {promptPreviewTokens} / {promptPreviewBudget}
                             </span>
@@ -127,9 +131,7 @@ export function PromptPreview({
                                 </div>
                             ))}
                         </div>
-                    </div>
-                </>
-            )}
+            </FloatingPanel>
         </div>
     );
 }

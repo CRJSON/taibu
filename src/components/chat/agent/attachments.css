@@ -1,0 +1,4 @@
+.agent-attachments{display:flex;flex-wrap:wrap;gap:.4rem;padding:.4rem .7rem;min-width:0}
+.agent-attachment-chip{display:flex;align-items:center;min-width:0;max-width:18rem;border:1px solid var(--border);border-radius:.65rem;background:var(--background-secondary)}
+.agent-attachment-chip button{display:flex;align-items:center;gap:.4rem;padding:.4rem .6rem;min-width:0;font-size:.8rem}
+.agent-attachment-chip span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

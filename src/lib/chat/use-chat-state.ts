@@ -24,6 +24,7 @@ import {
     useConversationList,
 } from '@/lib/chat/ConversationListContext';
 import type { AttachmentState } from '@/types';
+import { useConversationDraft } from './use-conversation-draft';
 
 export type ChatMode = 'normal' | 'dream' | 'mangpai';
 
@@ -61,6 +62,8 @@ export interface ChatStateReturn {
     setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
     inputValue: string;
     setInputValue: React.Dispatch<React.SetStateAction<string>>;
+    moveDraft: (conversationId: string) => void;
+    captureSubmittedDraft: (clearAttachment?: boolean) => () => void;
     isSendingToList: boolean;
     setIsSendingToList: React.Dispatch<React.SetStateAction<boolean>>;
     messagesEndRef: React.MutableRefObject<HTMLDivElement | null>;
@@ -160,7 +163,7 @@ export function useChatState({
 
     // Messages state
     const [messages, setMessages] = useState<ChatMessage[]>([]);
-    const [inputValue, setInputValue] = useState('');
+    const { inputValue, setInputValue, mentions, setMentions, attachmentState, setAttachmentState, removeDraft, moveDraft, captureSubmittedDraft } = useConversationDraft(userId, activeConversationId);
     const [isSendingToList, setIsSendingToList] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement | null>(null);
     const messageScrollContainerRef = useRef<HTMLDivElement | null>(null);
@@ -177,11 +180,9 @@ export function useChatState({
     // Model & reasoning
     const [selectedModel, setSelectedModel] = useState<string>(DEFAULT_MODEL_ID);
     const [reasoningEnabled, setReasoningEnabled] = useState(false);
-    const [customProviderConfig, setCustomProviderConfig] = useState<CustomProviderConfig | null>(() => getCustomProvider());
+    const [customProviderConfig, setCustomProviderConfig] = useState<CustomProviderConfig | null>(null);
 
     // Attachments & mentions
-    const [attachmentState, setAttachmentState] = useState<AttachmentState>({ file: undefined, webSearchEnabled: false });
-    const [mentions, setMentions] = useState<Mention[]>([]);
     const [kbModalOpen, setKbModalOpen] = useState(false);
     const [kbTargetMessage, setKbTargetMessage] = useState<ChatMessage | null>(null);
 
@@ -257,6 +258,7 @@ export function useChatState({
     }, []);
 
     const resetDeletedConversationState = useCallback((conversationId: string) => {
+        removeDraft(conversationId);
         removeConversationDetail(conversationId);
         if (
             activeConversationIdRef.current !== conversationId
@@ -275,7 +277,7 @@ export function useChatState({
         if (searchParams.get('id') === conversationId) {
             router.replace('/chat');
         }
-    }, [removeConversationDetail, router, searchParams]);
+    }, [removeConversationDetail, removeDraft, router, searchParams]);
 
     // Init: reset on logout
     useEffect(() => {
@@ -475,6 +477,7 @@ export function useChatState({
         manualRenamedConversationIdsRef, conversationsRef,
         messages, setMessages,
         inputValue, setInputValue,
+        moveDraft, captureSubmittedDraft,
         isSendingToList, setIsSendingToList,
         messagesEndRef, messageScrollContainerRef, shouldAutoScrollRef,
         chatMode, setChatMode,

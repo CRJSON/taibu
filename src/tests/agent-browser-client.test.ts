@@ -6,8 +6,10 @@ import {
   canAdoptAgentRun,
   postAgentRun,
   postAgentCommand,
+  orderAgentMessagesForDisplay,
 } from "../lib/agent/browser-client";
 import type { AgentRunView } from "../lib/agent/types";
+import type { ChatMessage } from "../types";
 
 const view: AgentRunView = {
   id: "run",
@@ -73,6 +75,36 @@ test("commands retry an uncertain receipt with the exact same ID, mode and conte
   });
   await assert.rejects(postAgentCommand("run", { content: "reply", clientRequestId: "denied", mode: "reply" }), /任务已结束/);
   assert.equal(denied, 1);
+});
+
+test('task output follows associated replies without changing persisted message order', () => {
+  const input = (id: string, runId?: string): ChatMessage => ({ id, role: 'user', content: id, createdAt: '2026-01-01', metadata: { agentRunId: runId } });
+  const messages = [input('request'), view.message, input('reply', 'run'), input('steer', 'run'), input('next request'), { ...view.message, id: 'plain', agent: undefined }];
+  const original = messages.map(message => message.id);
+  const ordered = orderAgentMessagesForDisplay(messages);
+  assert.deepEqual(ordered.map(message => message.id), ['request', 'reply', 'steer', 'agent:run', 'next request', 'plain']);
+  assert.deepEqual(messages.map(message => message.id), original);
+  assert.equal(ordered[3], view.message);
+});
+
+test('display ordering preserves ordinary history, invalid associations and later assistant boundaries', () => {
+  const messages: ChatMessage[] = [view.message,
+    { id: 'other-run', role: 'user', content: '', createdAt: '', metadata: { agentRunId: 'other' } },
+    { id: 'plain', role: 'assistant', content: '', createdAt: '' },
+    { id: 'late', role: 'user', content: '', createdAt: '', metadata: { agentRunId: 'run' } },
+  ];
+  assert.equal(orderAgentMessagesForDisplay(messages), messages);
+});
+
+test('snapshots order legacy inputs without changing loaded history or another task', () => {
+  const legacy: ChatMessage = { id: 'legacy', role: 'user', content: 'answer', createdAt: '2026-01-01', metadata: { original: true } };
+  const messages = [view.message, legacy];
+  const snapshot = { ...view, commandMessageIds: ['legacy', 'missing', 'agent:run'] };
+  const restored = orderAgentMessagesForDisplay(messages, snapshot);
+  assert.deepEqual(legacy.metadata, { original: true });
+  assert.deepEqual(restored.map(message => message.id), ['legacy', 'agent:run']);
+  assert.equal(restored.length, 2);
+  assert.equal(orderAgentMessagesForDisplay(messages, { ...snapshot, id: 'other-run' }), messages);
 });
 test("late snapshots from a previous task cannot replace the current task", () => {
   const newer = { ...view, id: "new-run", createdAt: "2026-01-02", cursor: 1 };

@@ -12,6 +12,7 @@ import {
   AgentHttpError,
 } from "./browser-client";
 import { isAgentRunTerminal, type AgentRunView } from "./types";
+import { useNextTaskConfiguration } from '@/lib/chat/use-next-task-configuration';
 
 type AgentCapabilities = {
   enabled: boolean;
@@ -37,6 +38,9 @@ export function useAgentChat(
   const [restoring, setRestoring] = useState(false);
   const [syncingRunId, setSyncingRunId] = useState<string | null>(null);
   const [webEnabled, setWebEnabled] = useState(true);
+  useNextTaskConfiguration(userId, state.activeConversationId, { model: state.selectedModel, reasoning: state.reasoningEnabled, webEnabled }, value => {
+    state.setSelectedModel(value.model); state.setReasoningEnabled(value.reasoning); setWebEnabled(value.webEnabled);
+  });
   const identity = useRef({ userId, epoch: 0 });
   if (identity.current.userId !== userId) {
     identity.current = { userId, epoch: identity.current.epoch + 1 };
@@ -302,17 +306,20 @@ export function useAgentChat(
     return view;
   };
   const active = !!run && !isAgentRunTerminal(run.status);
-  const sendCommand = async (content: string, queue = false) => {
+  const sendCommand = async (content: string, queue = false, structured?: { questionId: string; answers: import('./questions').AgentAnswers }) => {
     if (!run || !active) throw new Error("任务已结束");
     const isCurrent = captureConversation(run.conversationId);
     if (!userId || identity.current.epoch !== ownerEpoch || !isCurrent())
       throw new Error("对话或登录状态已变更，请重新发送");
     // The task can resume while a reply's HTTP receipt is lost. Retain its
     // original mode as well as its ID, even if the observed status has changed.
-    const key = JSON.stringify([run.id, content, queue]);
+    const attachmentIds=latest.current.state.attachmentState.uploaded?.map(item=>item.id);
+    const key = JSON.stringify([run.id, content, queue, structured,attachmentIds]);
     const body: AgentCommandRequest = pendingCommands.current.get(key) ?? {
       content, clientRequestId: crypto.randomUUID(),
       mode: run.status === "awaiting_input" ? "reply" : queue ? "follow_up" : "steer",
+      ...structured,
+      attachmentIds,
     };
     pendingCommands.current.set(key, body);
     const forget = () => {

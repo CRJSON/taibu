@@ -97,6 +97,7 @@ export type MessageRole = 'user' | 'assistant' | 'system';
 
 /** 消息版本（用于编辑历史） */
 export interface MessageVersion {
+    attachments?: MessageAttachment;
     userContent: string;
     mentions?: Mention[];
     aiContent: string;
@@ -109,6 +110,7 @@ export interface MessageVersion {
 
 /** 消息附件信息（仅用户消息） */
 export interface MessageAttachment {
+    ids?: string[];
     fileName: string;              // 文件名（含后缀）
     webSearchEnabled?: boolean;    // 是否启用了网络搜索
 }
@@ -357,9 +359,11 @@ export type DifyMode = 'file' | 'web' | 'all';
 
 /** 附件选择状态（前端使用） */
 export interface AttachmentState {
+    uploaded?: PrivateAttachment[];
     file?: File;
     webSearchEnabled: boolean;
 }
+export interface PrivateAttachment { id: string; name: string; kind: 'image' | 'text'; mimeType: string; size: number; sha256: string; width?: number; height?: number }
 
 /** Dify API 响应数据 */
 export interface DifyResponse {

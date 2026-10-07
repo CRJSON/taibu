@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { MockLanguageModelV3 } from "ai/test";
 import {
   normalizeContext,
+  isContextOverflow,
   Type,
   type Api,
   type Model,
@@ -62,6 +63,22 @@ function mockModel(parts: Part[]) {
   });
 }
 
+test('source fallback and transient errors share three external attempts; empty responses recover once', async t => {
+  const sdk = require('../lib/ai/providers/ai-sdk-provider') as typeof import('../lib/ai/providers/ai-sdk-provider');
+  t.mock.method(sdk, 'isModelAvailable', () => true);
+  const model = new MockLanguageModelV3({ doStream: async () => { throw Object.assign(new Error('network timeout'), { statusCode: 503 }); } });
+  t.mock.method(sdk, 'createModelFromConfig', () => model);
+  const fallback = { ...config, sources: Array.from({length:5},(_,index)=>({sourceKey:String(index),sourceName:String(index),apiUrl:`https://source${index}.example/v1`,apiKeyEnvVar:'KEY'})) };
+  let stream = createPiSDKStream(fallback,{reasoning:false})(piModel,context());
+  for await(const event of stream) void event;
+  assert.equal((await stream.result()).stopReason,'error'); assert.equal(model.doStreamCalls.length,3);
+  const empty = mockModel([{ type:'stream-start', warnings:[] },{type:'finish', finishReason:{unified:'stop',raw:'stop'},usage}]);
+  t.mock.method(sdk, 'createModelFromConfig', () => empty);
+  stream = createPiSDKStream(config,{reasoning:false})(piModel,context());
+  for await(const event of stream) void event;
+  assert.equal((await stream.result()).stopReason,'error'); assert.equal(empty.doStreamCalls.length,2);
+});
+
 test("Pi StreamFn uses one SDK request and preserves text, reasoning signatures and tool arguments", async (t) => {
   const sdk =
     require("../lib/ai/providers/ai-sdk-provider") as typeof import("../lib/ai/providers/ai-sdk-provider");
@@ -99,6 +116,7 @@ test("Pi StreamFn uses one SDK request and preserves text, reasoning signatures 
   const message = await output.result();
   assert.equal(message.stopReason, "toolUse");
   assert.equal(message.usage.totalTokens, 8);
+  assert.equal(message.usage.reasoning, 1);
   assert.ok(events.some((e) => e.type === "thinking_end"));
   assert.ok(events.some((e) => e.type === "text_end"));
   assert.deepEqual(
@@ -114,6 +132,34 @@ test("Pi StreamFn uses one SDK request and preserves text, reasoning signatures 
   assert.equal(model.doStreamCalls.length, 1);
   assert.equal(model.doStreamCalls[0].tools?.length, 1);
   assert.ok(model.doStreamCalls[0].abortSignal);
+});
+
+test("SDK cached inputs map to Pi without double-counting and overflow stays recognizable without private details", async (t) => {
+  const sdk = require("../lib/ai/providers/ai-sdk-provider") as typeof import("../lib/ai/providers/ai-sdk-provider");
+  t.mock.method(sdk, "isModelAvailable", () => true);
+  t.mock.method(sdk, "createModelFromConfig", () => mockModel([
+    { type: "stream-start", warnings: [] },
+    { type: "text-start", id: "text" },
+    { type: "text-delta", id: "text", delta: "answer" },
+    { type: "text-end", id: "text" },
+    { type: "finish", finishReason: { unified: "stop", raw: "stop" }, usage: { inputTokens: { total: 900, noCache: 600, cacheRead: 200, cacheWrite: 100 }, outputTokens: { total: 100, text: 70, reasoning: 30 } } },
+  ]));
+  let stream = createPiSDKStream(config, { reasoning: false })(piModel, context());
+  for await (const _event of stream) void _event;
+  const result = await stream.result();
+  assert.equal(result.usage.input, 600);
+  assert.equal(result.usage.cacheRead, 200);
+  assert.equal(result.usage.cacheWrite, 100);
+  assert.equal(result.usage.output, 100);
+  assert.equal(result.usage.reasoning, 30);
+  assert.equal(result.usage.totalTokens, 1000);
+  t.mock.method(sdk, "createModelFromConfig", () => new MockLanguageModelV3({ doStream: async () => { throw new Error("context_length_exceeded private-user-content secret-key"); } }));
+  t.mock.method(console, "error", () => {});
+  stream = createPiSDKStream(config, { reasoning: false })(piModel, context());
+  for await (const _event of stream) void _event;
+  const failure = await stream.result();
+  assert.equal(isContextOverflow(failure), true);
+  assert.doesNotMatch(JSON.stringify(failure), /private-user-content|secret-key/);
 });
 
 test("Pi source fallback retries only before any response part; provider errors are sanitized", async (t) => {

@@ -218,7 +218,10 @@ export async function schemaBundle() {
   const files = ['supabase/selfhost/manifest.json', 'supabase/selfhost/001-application.sql', MIGRATION, 'supabase/selfhost/002-storage.sql'];
   const contents = await Promise.all(files.map(file => readFile(path.join(ROOT, file), 'utf8')));
   const bootstrapContract = [rolesSQL.toString(), application.toString(), withStorageMigrationPrivilege.toString()];
-  return { fingerprint: digest(JSON.stringify([contents, bootstrapContract])), application: contents[1], migration: contents[2], storage: contents[3] };
+  // Caller inventory/line numbers are provenance, not a schema change. Hash the
+  // actual SQL and bootstrap contract so ordinary code updates reuse this stack.
+  const applicationSQL = contents[1].replace(/^COMMENT ON SCHEMA public IS 'taibu-selfhost-v1:[a-f0-9]{64}';\n/m, '');
+  return { fingerprint: digest(JSON.stringify([applicationSQL, contents[2], contents[3], bootstrapContract])), application: contents[1], migration: contents[2], storage: contents[3] };
 }
 // Source inventory changes can move caller lines without changing initialized SQL.
 // Only explicitly reviewed old/current pairs may reuse a volume or a v2 backup.
@@ -227,6 +230,43 @@ const REVIEWED_SCHEMA_EQUIVALENCES = [{
   current: 'b077a9df03e4593042bed6497fc0e2dd8d6daf07544d4076d4f4044e5018ae23',
   sqlContract: 'e7f8e929833e0ea137129cfe03afb1d6ba4a49c1293c62c268eff8f244dc12fb',
 }];
+
+// Only this reviewed Agent baseline may upgrade in place. Unknown SQL drift
+// continues to fail closed; this never replays initialization or resets data.
+const EXPERIENCE_MIGRATIONS = [
+  ['110000_agent_reading_preferences', '377a05f32be8c9de71ff7e410983c95a2663e1fdd707bad0680526abacc658e2'],
+  ['120000_agent_search', '0fffdb9815f41d84cc5a63e31dec2da7cecdd0387771ef03a27594aa4fb193cd'],
+  ['130000_agent_input_preferences', '84e29f04f70ec8eb0338baac047960ffa6556fbe3a43c90aec0c67b758e004e1'],
+  ['140000_agent_queue', 'adf9092f2fa03d18fdaef52e3cb20134e84e6e5ece35580364a4a295959d40e6'],
+  ['150000_agent_notifications', '61a3c68ecf0ac582dc75ac86d1f3142dd030445ab834b67c957d95c91439ed4d'],
+  ['160000_agent_attachments', '53d5562f071394cb7fd30d0c91526891a9d9b299848d3d0b6a873882a2d56ca6'],
+  ['170000_daily_briefing', '4fa35a28d49e8f74ec770e09832cde23efd55755a118d0bc4b6833c6c88976ba'],
+  ['180000_conversation_fork', 'e3bb2317479f95523b6079bf0a5e388802907cb8134771525179132174a9409d'],
+  ['190000_agent_backend_access', '26bf8dd2d1e758a1dbc3467c051fb4d8fd03c994c1856314b7c221181397e84d'],
+].map(([name, sha256]) => ({ file: `supabase/migrations/20261007_${name}.sql`, sha256 }));
+const EXPERIENCE_FINGERPRINT = '6072a25ccaae42b489af7f836ec52d80e806906fa4e722d1a343577502afe3be';
+const REVIEWED_SCHEMA_UPGRADES = [{
+  previous: '9a6fd07d2d17f61ee6669d20d4910f2b3b7c621d3d07d9ceeba2b0af26df90be',
+  current: 'e639cd6d5a7d70ed5450bd5ee5cc7cd44f3a0924b5b91ce33d719df2c99cec9f',
+  file: 'supabase/migrations/20261007_100000_agent_chat_results.sql',
+  sha256: '462a8badd3f41fa1f5f5b389f2e2fa4320bc7911d0e125da6d06a8dee27effe8',
+}, {
+  previous: 'e639cd6d5a7d70ed5450bd5ee5cc7cd44f3a0924b5b91ce33d719df2c99cec9f',
+  current: EXPERIENCE_FINGERPRINT,
+  files: EXPERIENCE_MIGRATIONS,
+}, {
+  previous: '9a6fd07d2d17f61ee6669d20d4910f2b3b7c621d3d07d9ceeba2b0af26df90be',
+  current: EXPERIENCE_FINGERPRINT,
+  files: [{ file: 'supabase/migrations/20261007_100000_agent_chat_results.sql', sha256: '462a8badd3f41fa1f5f5b389f2e2fa4320bc7911d0e125da6d06a8dee27effe8' }, ...EXPERIENCE_MIGRATIONS],
+}, {
+  previous: 'aa23300ca84196b4c6e3a5ab0669168420c78be450c4ea8f5cc273ccc3687fc2',
+  current: EXPERIENCE_FINGERPRINT,
+  files: EXPERIENCE_MIGRATIONS.slice(-1),
+}];
+
+export function reviewedSchemaUpgrade(fingerprint, bundle) {
+  return REVIEWED_SCHEMA_UPGRADES.find(entry => entry.previous === fingerprint && entry.current === bundle.fingerprint) ?? null;
+}
 
 export function matchesSchemaFingerprint(fingerprint, bundle) {
   const valid = /^[a-f0-9]{64}$/;
@@ -243,7 +283,18 @@ export function matchesSchemaFingerprint(fingerprint, bundle) {
 
 async function application(run, bundle) {
   const fingerprint = (await run.sql('SELECT coalesce(fingerprint,\'\') FROM local_stack.state')).trim();
-  if (fingerprint && !matchesSchemaFingerprint(fingerprint, bundle)) throw new Error('数据库与当前基线哈希不匹配；请使用独立项目，不可重放基线');
+  if (fingerprint && !matchesSchemaFingerprint(fingerprint, bundle)) {
+    const upgrade = reviewedSchemaUpgrade(fingerprint, bundle);
+    if (!upgrade) throw new Error('数据库与当前基线哈希不匹配；请使用独立项目，不可重放基线');
+    const files = upgrade.files ?? [{ file: upgrade.file, sha256: upgrade.sha256 }];
+    const migrations = await Promise.all(files.map(async entry => {
+      const content = await readFile(path.join(ROOT, entry.file), 'utf8');
+      if (digest(content) !== entry.sha256) throw new Error('本地升级迁移校验不匹配，拒绝执行');
+      return content.replace(/^BEGIN;\s*$/gm, '').replace(/^COMMIT;\s*$/gm, '');
+    }));
+    await run.sql(`BEGIN;\n${migrations.join('\n')}\nUPDATE local_stack.state SET fingerprint=${quote(bundle.fingerprint)};\nCOMMIT;`, 'Agent 体验与能力迁移');
+    return;
+  }
   if (fingerprint) return;
   // Baseline and guard commit atomically; interrupted initialization is resumable.
   await run.sql(`BEGIN;\n${bundle.application}\n${bundle.migration}\nGRANT USAGE ON SCHEMA public, extensions TO taibu_vector_owner;
@@ -280,6 +331,9 @@ export async function withStorageMigrationPrivilege(sql, migrate) {
     await sql('REVOKE CREATE ON DATABASE taibu FROM supabase_storage_admin;', '撤销文件存储迁移临时授权');
   }
 }
+export async function refreshRestSchema(sql) {
+  await sql("NOTIFY pgrst, 'reload schema';", 'REST schema 缓存刷新');
+}
 async function up(state, run, build = false) {
   try {
     await lstat(path.join(state.directory, 'restore-pending'));
@@ -295,6 +349,8 @@ async function up(state, run, build = false) {
   await wait(() => httpReady(state.config.APP_ORIGIN, '/auth/v1/health'), '身份服务');
   await application(run, bundle);
   await run.compose(['up', '-d', 'rest', 'redis'], { phase: 'REST 与 Redis 启动' });
+  // Existing REST containers otherwise retain old column/RPC metadata after an upgrade.
+  await refreshRestSchema(run.sql);
   const storageReady = (await run.sql('SELECT storage_ready FROM local_stack.state')).trim() === 't';
   const startStorage = async () => {
     await run.compose(['up', '-d', 'storage'], { phase: '文件存储启动与受控迁移' });
@@ -308,7 +364,9 @@ async function up(state, run, build = false) {
   await wait(() => httpReady(state.config.APP_ORIGIN, '/api/health'), '应用');
   await wait(() => httpReady(state.config.APP_ORIGIN, '/api/announcements?latest=1'), '应用数据库');
   await wait(async () => (await run.sql("SELECT EXISTS(SELECT 1 FROM public.agent_workers WHERE engine='pi-durable/1.0.4' AND heartbeat_at > now() - interval '30 seconds')")).trim() === 't', 'Agent worker');
-  await run.compose(['up', '-d', 'scheduler']);
+  // The scheduler script is bind-mounted; recreating its stateless process
+  // loads updated polling code even when its image/configuration did not change.
+  await run.compose(['up', '-d', '--no-deps', '--force-recreate', 'scheduler']);
   console.log(`本地服务已就绪：${state.config.APP_ORIGIN}；账号见私有 credentials.json`);
 }
 async function backup(state, run, destination) {

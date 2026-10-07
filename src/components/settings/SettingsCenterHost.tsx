@@ -2,7 +2,7 @@
 
 import { Suspense, lazy, useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import type { ComponentType, ReactElement } from 'react';
-import { createPortal } from 'react-dom';
+import { Modal } from '@/components/ui/Modal';
 import {
   LockKeyhole,
   X,
@@ -196,15 +196,6 @@ export function SettingsCenterHost() {
     openSettingsCenter(tab, { replace: true });
   }, []);
 
-  useEffect(() => {
-    if (!activeTab) return;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = previousOverflow;
-    };
-  }, [activeTab]);
-
   const flags = useMemo<SettingsCenterFlags>(
     () => ({
       upgradeEnabled: !featureTogglesLoaded || isFeatureEnabled('upgrade'),
@@ -258,24 +249,11 @@ export function SettingsCenterHost() {
   const displayTab = resolvedActiveTab ?? renderedTabs.at(-1) ?? 'general';
   const activeTabLabel = tabs.find((tab) => tab.id === displayTab)?.label ?? '设置';
 
-  const modal = (
-    <div
-      className="fixed inset-0 z-[90]"
-      hidden={!activeTab}
-      aria-hidden={!activeTab}
-    >
-      <div
-        className="absolute inset-0 bg-black/20 backdrop-blur-[1px]"
-        onClick={() => closeSettingsCenter()}
-      />
-
-      <div
-        className="absolute inset-x-0 bottom-0 top-0 flex items-stretch justify-center p-0 md:inset-x-10 md:inset-y-8 md:items-center"
-        onClick={() => closeSettingsCenter()}
-      >
+  return (
+    <Modal open={Boolean(activeTab)} onClose={() => closeSettingsCenter()} labelledBy="settings-center-heading" className="settings-center-dialog" keepMounted>
+        <h2 id="settings-center-heading" className="sr-only">设置中心</h2>
         <div
-          className="flex h-full w-full overflow-hidden border border-border bg-[#f7f6f3] text-[#37352f] shadow-md dark:bg-background dark:text-foreground md:h-[min(660px,calc(100vh-64px))] md:max-w-[50rem] md:rounded-2xl"
-          onClick={(event) => event.stopPropagation()}
+          className="flex h-full w-full overflow-hidden bg-background text-foreground"
         >
           <aside className="hidden w-46 flex-shrink-0 border-r border-border bg-[#f7f6f3] p-2 dark:bg-background md:flex md:flex-col">
             <div className="mb-4 flex items-center justify-between px-2 py-1">
@@ -302,6 +280,7 @@ export function SettingsCenterHost() {
                     onClick={() => setActiveTab(tab.id)}
                     disabled={tab.disabled}
                     aria-disabled={tab.disabled}
+                    aria-pressed={isActive}
                     className={`flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm transition-colors duration-150 ${
                       isDisabled
                         ? 'cursor-not-allowed border border-border bg-background-secondary/70 text-foreground/45 dark:text-foreground/50'
@@ -350,6 +329,7 @@ export function SettingsCenterHost() {
                         onClick={() => setActiveTab(tab.id)}
                         disabled={tab.disabled}
                         aria-disabled={tab.disabled}
+                        aria-pressed={isActive}
                         className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs transition-colors ${
                           isDisabled
                             ? 'cursor-not-allowed border-border bg-background-secondary/70 text-foreground/45 dark:text-foreground/50'
@@ -374,6 +354,7 @@ export function SettingsCenterHost() {
                   key={`${user?.id ?? "visitor"}:${tab}`}
                   className={tab === resolvedActiveTab ? 'block' : 'hidden'}
                   aria-hidden={tab === resolvedActiveTab ? undefined : true}
+                  inert={tab !== resolvedActiveTab}
                 >
                   {renderSettingsCenterPanel(tab, flags, {
                     isLoggedIn: !!user,
@@ -386,9 +367,6 @@ export function SettingsCenterHost() {
             </div>
           </div>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
-
-  return createPortal(modal, document.body);
 }

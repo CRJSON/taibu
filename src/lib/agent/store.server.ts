@@ -49,6 +49,9 @@ export interface AgentCommandRow {
   sequence: number;
   mode: "steer" | "follow_up" | "reply";
   message: ChatMessage;
+  revision?: number;
+  sort_order?: number;
+  delivery_state?: 'pending' | 'claimed' | 'admitted' | 'consumed' | 'cancelled';
 }
 export interface AgentStoredEvent {
   sequence: number;
@@ -107,6 +110,7 @@ export class AgentStore {
     return (data ?? []) as AgentStoredEvent[];
   }
   async view(run: AgentRunRow): Promise<AgentRunView> {
+    const commands = await this.commands(run, { includeConsumed: true });
     const message = structuredClone(run.public_message);
     if (message.agent) message.agent.status = run.status;
     if (
@@ -132,6 +136,9 @@ export class AgentStore {
       createdAt: run.created_at,
       clientRequestId: run.request_id,
       userMessage: run.input?.userMessage,
+      commandMessageIds: commands.filter(command => command.delivery_state !== 'cancelled').map(command => command.message.id),
+      configuration: run.input ? { model: run.input.model, reasoning: run.input.reasoning, webEnabled: run.input.webEnabled } : undefined,
+      queue: commands.map(command => ({ sequence: command.sequence, message: command.message, mode: command.mode, revision: command.revision ?? 1, sortOrder: command.sort_order ?? command.sequence, state: command.delivery_state ?? 'admitted' })),
     };
   }
   async workerReady() {
@@ -147,13 +154,13 @@ export class AgentStore {
   lease(run: AgentRunRow) {
     return { p_run_id: run.id, p_worker_id: run.worker_id, p_fence: run.fence };
   }
-  async commands(run: AgentRunRow) {
-    const { data, error } = await this.db
+  async commands(run: AgentRunRow, { includeConsumed = false } = {}) {
+    let query = this.db
       .from("agent_run_commands")
-      .select("sequence,mode,message")
-      .eq("run_id", run.id)
-      .eq("consumed", false)
-      .order("sequence");
+      .select("sequence,mode,message,revision,sort_order,delivery_state")
+      .eq("run_id", run.id);
+    if (!includeConsumed) query = query.eq("consumed", false);
+    const { data, error } = await query.order("sort_order").order("sequence");
     if (error) throw new Error(error.message);
     return (data ?? []) as AgentCommandRow[];
   }

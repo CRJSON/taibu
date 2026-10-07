@@ -86,8 +86,8 @@ function maskSecret(value?: string | null) {
 function SummaryField({ label, value }: { label: string; value: string }) {
     return (
         <div className="min-w-0 rounded-xl border border-[#e7e2d9] bg-white/85 px-3 py-2">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#37352f]/35">{label}</p>
-            <p className="mt-1 break-all text-[12px] leading-5 text-[#37352f]" title={value}>{value}</p>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-foreground-secondary">{label}</p>
+            <p className="mt-1 break-all text-[12px] leading-5 text-foreground-secondary" title={value}>{value}</p>
         </div>
     );
 }
@@ -111,13 +111,13 @@ function SelectField({
 }) {
     return (
         <div className="space-y-1">
-            <label className="text-[11px] font-bold text-[#37352f]/40 uppercase tracking-wider">{label}</label>
+            <label className="text-[11px] font-bold text-foreground-secondary uppercase tracking-wider">{label}</label>
             <div className="relative">
                 <select
                     value={value}
                     onChange={(event) => onChange(event.target.value)}
                     disabled={disabled}
-                    className="w-full appearance-none rounded-xl border border-[#e7e2d9] bg-white px-3 py-2 pr-10 text-[13px] outline-none transition-all duration-150 focus:border-[#cdbb8b] focus:bg-white disabled:cursor-not-allowed disabled:bg-[#f7f3eb] disabled:text-[#37352f]/35"
+                    className="w-full appearance-none rounded-xl border border-[#e7e2d9] bg-white px-3 py-2 pr-10 text-[13px] outline-none transition-all duration-150 focus:border-[#cdbb8b] focus:bg-white disabled:cursor-not-allowed disabled:bg-[#f7f3eb] disabled:text-foreground-secondary"
                 >
                     <option value="">{placeholder}</option>
                     {options.map((option) => (
@@ -126,7 +126,7 @@ function SelectField({
                         </option>
                     ))}
                 </select>
-                <ChevronDown className="pointer-events-none absolute inset-y-0 right-3 my-auto h-4 w-4 text-[#37352f]/35" />
+                <ChevronDown className="pointer-events-none absolute inset-y-0 right-3 my-auto h-4 w-4 text-foreground-secondary" />
             </div>
             <InputError message={error} />
         </div>
@@ -410,7 +410,7 @@ export function CustomProviderPanel({
                     <div className="flex items-start justify-between gap-3">
                         <div className="space-y-1">
                             <div className="flex flex-wrap items-center gap-2">
-                                <h3 id={embedded ? undefined : 'custom-provider-panel-title'} className="text-[14px] font-semibold text-[#37352f]">
+                                <h3 id={embedded ? undefined : 'custom-provider-panel-title'} className="text-[14px] font-semibold text-foreground-secondary">
                                     {title}
                                 </h3>
                                 {showByokBadge ? (
@@ -420,7 +420,7 @@ export function CustomProviderPanel({
                                 ) : null}
                             </div>
                             {description ? (
-                                <p className="text-[12px] leading-tight text-[#37352f]/60">
+                                <p className="text-[12px] leading-tight text-foreground-secondary">
                                     {description}
                                 </p>
                             ) : null}
@@ -437,18 +437,18 @@ export function CustomProviderPanel({
                                 <SummaryField label="MODEL" value={activeConfig.modelId} />
                                 <div className="min-w-0 rounded-xl border border-[#e7e2d9] bg-white/85 px-3 py-2">
                                     <div className="flex items-center justify-between gap-2">
-                                        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#37352f]/35">KEY</p>
+                                        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-foreground-secondary">KEY</p>
                                         <button
                                             type="button"
                                             onClick={() => setShowApiKey((prev) => !prev)}
-                                            className="flex h-5 w-5 items-center justify-center rounded-md text-[#37352f]/35 transition-colors duration-150 hover:bg-[#f3f0ea] hover:text-[#37352f]"
+                                            className="flex h-5 w-5 items-center justify-center rounded-md text-foreground-secondary transition-colors duration-150 hover:bg-[#f3f0ea] hover:text-foreground-secondary"
                                             title={showApiKey ? '隐藏 API Key' : '查看 API Key'}
                                         >
                                             {showApiKey ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
                                         </button>
                                     </div>
                                     <p
-                                        className="mt-1 break-all text-[12px] leading-5 text-[#37352f]"
+                                        className="mt-1 break-all text-[12px] leading-5 text-foreground-secondary"
                                         title={showApiKey ? activeConfig.apiKey : maskSecret(activeConfig.apiKey)}
                                     >
                                         {showApiKey ? activeConfig.apiKey : maskSecret(activeConfig.apiKey)}
@@ -472,7 +472,7 @@ export function CustomProviderPanel({
                             <button
                                 type="button"
                                 onClick={handleDeactivate}
-                                className="flex h-9 items-center justify-center rounded-xl border border-[#e7e2d9] bg-white px-3 text-[12px] font-medium text-[#37352f]/65 transition-colors duration-150 hover:bg-[#f3f0ea] hover:text-[#37352f]"
+                                className="flex h-9 items-center justify-center rounded-xl border border-[#e7e2d9] bg-white px-3 text-[12px] font-medium text-foreground-secondary transition-colors duration-150 hover:bg-[#f3f0ea] hover:text-foreground-secondary"
                             >
                                 停用
                             </button>
@@ -503,7 +503,7 @@ export function CustomProviderPanel({
 
                             <div className={isOtherProvider ? '' : 'md:col-span-2'}>
                                 <div className="space-y-1">
-                                    <label className="text-[11px] font-bold text-[#37352f]/40 uppercase tracking-wider">API Key</label>
+                                    <label className="text-[11px] font-bold text-foreground-secondary uppercase tracking-wider">API Key</label>
                                     <div className="relative">
                                         <input
                                             value={draft.apiKey}
@@ -516,7 +516,7 @@ export function CustomProviderPanel({
                                         <button
                                             type="button"
                                             onClick={() => setShowApiKey((prev) => !prev)}
-                                            className="absolute inset-y-0 right-0 flex items-center px-3 text-[#37352f]/30 hover:text-[#37352f]"
+                                            className="absolute inset-y-0 right-0 flex items-center px-3 text-foreground-secondary hover:text-foreground-secondary"
                                         >
                                             {showApiKey ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
                                         </button>
@@ -528,7 +528,7 @@ export function CustomProviderPanel({
                             {isOtherProvider ? (
                                 <>
                                     <div className="space-y-1">
-                                        <label className="text-[11px] font-bold text-[#37352f]/40 uppercase tracking-wider">API URL</label>
+                                        <label className="text-[11px] font-bold text-foreground-secondary uppercase tracking-wider">API URL</label>
                                         <input
                                             value={draft.apiUrl}
                                             onChange={(event) => handleFieldChange('apiUrl', event.target.value)}
@@ -540,7 +540,7 @@ export function CustomProviderPanel({
                                     </div>
 
                                     <div className="space-y-1">
-                                        <label className="text-[11px] font-bold text-[#37352f]/40 uppercase tracking-wider">Model ID</label>
+                                        <label className="text-[11px] font-bold text-foreground-secondary uppercase tracking-wider">Model ID</label>
                                         <input
                                             value={draft.modelId}
                                             onChange={(event) => handleFieldChange('modelId', event.target.value)}
@@ -552,7 +552,7 @@ export function CustomProviderPanel({
                                     </div>
 
                                     <div className="space-y-1 md:col-span-2">
-                                        <label className="text-[11px] font-bold text-[#37352f]/40 uppercase tracking-wider">显示名称</label>
+                                        <label className="text-[11px] font-bold text-foreground-secondary uppercase tracking-wider">显示名称</label>
                                         <input
                                             value={draft.modelName}
                                             onChange={(event) => handleFieldChange('modelName', event.target.value)}
@@ -564,7 +564,7 @@ export function CustomProviderPanel({
                                 </>
                             ) : (
                                 <div className="space-y-1 md:col-span-2">
-                                    <label className="text-[11px] font-bold text-[#37352f]/40 uppercase tracking-wider">Model ID</label>
+                                    <label className="text-[11px] font-bold text-foreground-secondary uppercase tracking-wider">Model ID</label>
                                     <input
                                         value={draft.modelId}
                                         onChange={(event) => handleManualModelIdChange(event.target.value)}
@@ -589,7 +589,7 @@ export function CustomProviderPanel({
                                 <button
                                     type="button"
                                     onClick={handleCancelEdit}
-                                    className="flex h-9 items-center justify-center rounded-xl border border-[#e7e2d9] bg-white px-3 text-[12px] font-medium text-[#37352f]/55 transition-colors duration-150 hover:bg-[#f3f0ea] hover:text-[#37352f]"
+                                    className="flex h-9 items-center justify-center rounded-xl border border-[#e7e2d9] bg-white px-3 text-[12px] font-medium text-foreground-secondary transition-colors duration-150 hover:bg-[#f3f0ea] hover:text-foreground-secondary"
                                 >
                                     取消
                                 </button>
@@ -597,7 +597,7 @@ export function CustomProviderPanel({
                                 <button
                                     type="button"
                                     onClick={handleReactivateLastConfig}
-                                    className="flex h-9 flex-1 items-center justify-center rounded-xl border border-[#e7e2d9] bg-white px-3 text-[12px] font-medium text-[#37352f]/65 transition-colors duration-150 hover:bg-[#f3f0ea] hover:text-[#37352f]"
+                                    className="flex h-9 flex-1 items-center justify-center rounded-xl border border-[#e7e2d9] bg-white px-3 text-[12px] font-medium text-foreground-secondary transition-colors duration-150 hover:bg-[#f3f0ea] hover:text-foreground-secondary"
                                 >
                                     上次启用
                                 </button>

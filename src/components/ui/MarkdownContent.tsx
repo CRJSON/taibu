@@ -12,9 +12,10 @@
  */
 'use client';
 
-import { memo, useMemo, lazy, Suspense } from 'react';
+import { memo, useMemo, lazy, Suspense, type HTMLAttributes } from 'react';
 import ReactMarkdown, { type Components } from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import { MarkdownBlocks, markdownPlugins, pendingChartFence } from '@/lib/chat/markdown-blocks';
+import { HighlightedCode, MarkdownTable } from './MarkdownTools';
 import type { ChartData } from '@/lib/visualization/chart-types';
 
 const ChartRenderer = lazy(() => import('@/components/visualization/ChartRenderer'));
@@ -22,6 +23,7 @@ const ChartRenderer = lazy(() => import('@/components/visualization/ChartRendere
 interface MarkdownContentProps {
     content: string;
     className?: string;
+    streaming?: boolean;
 }
 
 // 静态组件定义，避免每次渲染重新创建
@@ -53,11 +55,8 @@ const staticComponents: Partial<Components> = {
         </blockquote>
     ),
     hr: () => <hr className="my-6 border-border" />,
-    table: ({ children }) => (
-        <div className="my-4 overflow-x-auto">
-            <table className="w-full border-collapse text-sm">{children}</table>
-        </div>
-    ),
+    table: ({ children }) => <MarkdownTable>{children}</MarkdownTable>,
+    pre: ({ children }) => <div className="markdown-code-block">{children}</div>,
     thead: ({ children }) => (
         <thead className="border-b-2 border-border bg-background-secondary/50">{children}</thead>
     ),
@@ -75,7 +74,7 @@ const staticComponents: Partial<Components> = {
     em: ({ children }) => <em className="italic">{children}</em>,
     code: ({ className, children }) => {
         const match = /language-(\w+)/.exec(className || '');
-        const isInline = !className;
+        const isInline = !className && !String(children).includes('\n');
 
         if (!isInline && match?.[1] === 'chart') {
             try {
@@ -96,6 +95,7 @@ const staticComponents: Partial<Components> = {
             }
         }
 
+        if (!isInline) return <HighlightedCode code={String(children)} language={match?.[1] ?? ''} />;
         return (
             <code
                 className={isInline
@@ -109,9 +109,9 @@ const staticComponents: Partial<Components> = {
 };
 
 // remarkPlugins 数组提取到外部，避免每次渲染创建新数组
-const remarkPlugins = [remarkGfm];
+const remarkPlugins = markdownPlugins;
 
-function MarkdownContentInner({ content, className }: MarkdownContentProps) {
+const MarkdownBlock = memo(function MarkdownBlock({ content, className, streaming }: MarkdownContentProps) {
     // 使用 useMemo 缓存 textClass，避免每次渲染重新拼接字符串
     const textClass = useMemo(
         () => `leading-relaxed ${className ?? 'text-sm text-foreground'}`,
@@ -120,6 +120,9 @@ function MarkdownContentInner({ content, className }: MarkdownContentProps) {
 
     // 使用 useMemo 缓存依赖 className 的组件
     const dynamicComponents = useMemo<Partial<Components>>(() => ({
+        ...(streaming && pendingChartFence(content) ? {
+            code: ({ className: codeClass, children }: HTMLAttributes<HTMLElement>) => codeClass === 'language-chart' ? <div className="py-4 text-sm text-foreground-secondary" role="status">图表正在生成…</div> : <code className={codeClass}>{children}</code>,
+        } : {}),
         p: ({ children }) => (
             <p className={`${textClass} whitespace-pre-wrap`}>{children}</p>
         ),
@@ -130,7 +133,7 @@ function MarkdownContentInner({ content, className }: MarkdownContentProps) {
             <ol className={`${textClass} list-decimal pl-5 space-y-1`}>{children}</ol>
         ),
         li: ({ children }) => <li className={textClass}>{children}</li>,
-    }), [textClass]);
+    }), [textClass, streaming, content]);
 
     // 合并静态和动态组件
     const components = useMemo<Partial<Components>>(
@@ -143,6 +146,12 @@ function MarkdownContentInner({ content, className }: MarkdownContentProps) {
             {content}
         </ReactMarkdown>
     );
+});
+
+function MarkdownContentInner({ content, className, streaming = false }: MarkdownContentProps) {
+    const cache = useMemo(() => new MarkdownBlocks(), []);
+    const blocks = useMemo(() => cache.advance(content), [cache, content]);
+    return <>{blocks.map((block, index) => <MarkdownBlock key={index} content={block} className={className} streaming={streaming && index === blocks.length - 1} />)}</>;
 }
 
 // 使用 memo 包装，只在 content 或 className 变化时重渲染

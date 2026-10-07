@@ -1,5 +1,7 @@
 -- WARNING: This schema is for context only and is not meant to be run.
 -- Table order and constraints may not be valid for execution.
+-- Backend access for the 20261007 Agent additions is defined by 20261007_190000_agent_backend_access.sql:
+-- authenticated system admin RLS, guarded briefing/cleanup RPCs, and private Storage backend policies.
 
 CREATE TABLE public.activation_keys (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -228,6 +230,7 @@ CREATE TABLE public.conversation_messages (
   CONSTRAINT conversation_messages_conversation_id_fkey FOREIGN KEY (conversation_id) REFERENCES public.conversations(id)
 );
 CREATE TABLE public.conversations (
+  next_task_config jsonb,
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   user_id uuid,
   personality text DEFAULT 'master'::text,
@@ -408,6 +411,9 @@ CREATE TABLE public.ming_records (
   CONSTRAINT ming_records_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
 );
 CREATE TABLE public.notifications (
+  event_key text,
+  event_data jsonb,
+  popup_claimed_at timestamptz,
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL,
   type character varying NOT NULL,
@@ -512,6 +518,8 @@ CREATE TABLE public.user_oauth_providers (
   CONSTRAINT user_oauth_providers_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
 );
 CREATE TABLE public.user_settings (
+  chat_preferences jsonb NOT NULL DEFAULT '{}',
+  daily_briefing_settings jsonb NOT NULL DEFAULT '{}',
   user_id uuid NOT NULL,
   notifications_enabled boolean DEFAULT true,
   notify_email boolean DEFAULT true,
@@ -598,6 +606,7 @@ CREATE TABLE public.agent_runs (
   fence bigint NOT NULL DEFAULT 0,
   lease_until timestamptz,
   cancel_requested boolean NOT NULL DEFAULT false,
+  -- Historical links only; 20261007_100000_agent_chat_results no longer creates records.
   record_id uuid REFERENCES public.ming_records(id) ON DELETE SET NULL,
   event_cursor bigint NOT NULL DEFAULT 0,
   created_at timestamptz NOT NULL DEFAULT now(),
@@ -612,6 +621,11 @@ CREATE TABLE public.agent_run_events (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE TABLE public.agent_run_commands (
+  revision integer NOT NULL DEFAULT 1,
+  sort_order bigint NOT NULL,
+  delivery_state text NOT NULL DEFAULT 'pending' CHECK(delivery_state IN ('pending','claimed','admitted','consumed','cancelled')),
+  original_message jsonb,
+  original_mode text,
   sequence bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   run_id uuid NOT NULL REFERENCES public.agent_runs(id) ON DELETE CASCADE,
   request_id text NOT NULL,
@@ -651,4 +665,33 @@ CREATE TABLE public.agent_durable_commits (
   writes jsonb NOT NULL CHECK(jsonb_typeof(writes)='array'),
   created_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY(run_id,sequence)
+);
+
+CREATE TABLE public.agent_attachments (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  object_path text NOT NULL UNIQUE, name text NOT NULL, kind text NOT NULL CHECK(kind IN ('image','text')),
+  mime_type text NOT NULL, size integer NOT NULL CHECK(size>0 AND size<=10485760), sha256 text NOT NULL,
+  width integer, height integer, status text NOT NULL DEFAULT 'uploading' CHECK(status IN ('uploading','ready','deleting')),
+  created_at timestamptz NOT NULL DEFAULT now(), orphaned_at timestamptz DEFAULT now()
+);
+CREATE TABLE public.agent_attachment_refs (
+  attachment_id uuid NOT NULL REFERENCES public.agent_attachments(id) ON DELETE CASCADE,
+  conversation_id uuid REFERENCES public.conversations(id) ON DELETE CASCADE,
+  command_sequence bigint REFERENCES public.agent_run_commands(sequence) ON DELETE CASCADE,
+  CHECK((conversation_id IS NULL)<>(command_sequence IS NULL))
+);
+CREATE TABLE public.prompt_enhancement_usage (
+  user_id uuid NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  local_date date NOT NULL, calls integer NOT NULL DEFAULT 0 CHECK(calls BETWEEN 0 AND 5),
+  PRIMARY KEY(user_id,local_date)
+);
+CREATE TABLE public.daily_briefing_jobs (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  local_date date NOT NULL, timezone text NOT NULL, deadline timestamptz NOT NULL,
+  status text NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','generating','completed','failed','cancelled','skipped')),
+  billing text NOT NULL DEFAULT 'none' CHECK(billing IN ('none','reserved','settled','refunded')),
+  attempts integer NOT NULL DEFAULT 0 CHECK(attempts BETWEEN 0 AND 3), lease_token uuid, lease_until timestamptz,
+  result_conversation_id uuid REFERENCES public.conversations(id) ON DELETE SET NULL, content text, error text,
+  notification_pending boolean NOT NULL DEFAULT false, created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE(user_id,local_date)
 );

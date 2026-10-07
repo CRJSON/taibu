@@ -223,7 +223,7 @@ test("Pi completes more than common loop defaults using real core tools with no 
       ];
     return [{ type: "text", text: "最终八字分析" }];
   });
-  await executeAgentRun(store, run, undefined, { config, streamFn });
+  await executeAgentRun(store, run, undefined, { config: { ...config, id: "deepseek-v3.2" }, streamFn });
   const finish = store.writes.find((w) => w.name === "agent_finish_run")!;
   assert.equal(
     finish.args.p_status,
@@ -522,7 +522,7 @@ test("fresh unavailable or disabled Agent permission blocks every model turn eve
   }
 });
 
-test("final record permission is fresh: disabled skips saving; unavailable fails settlement without saving", async (t) => {
+test("Agent completion depends on chat permissions, independently of records availability", async (t) => {
   const features = require("../lib/app-settings") as typeof import("../lib/app-settings");
   t.mock.method(console, "warn", () => {});
   t.mock.method(features, "isFeatureModuleEnabled", async () => true);
@@ -532,8 +532,9 @@ test("final record permission is fresh: disabled skips saving; unavailable fails
     await executeAgentRun(store, row(), undefined, { config, streamFn: scripted(() => [{ type: "text", text: "visible final text" }]) });
     const finish = store.writes.filter(w => w.name === "agent_finish_run");
     assert.equal(finish.length, 1);
-    assert.equal(finish[0].args.p_status, state === "disabled" ? "completed" : "failed");
+    assert.equal(finish[0].args.p_status, "completed");
     assert.equal(finish[0].args.p_record, null);
+    assert.equal((finish[0].args.p_message as AgentRunRow["public_message"]).content, "visible final text");
   }
 });
 
@@ -745,11 +746,8 @@ test("takeover completes final selection after a committed model response", asyn
     (finish.args.p_checkpoint as AgentRunRow["checkpoint"]).finalArtifacts,
     [artifact.id],
   );
-  assert.equal(
-    (finish.args.p_record as { content: string }).content,
-    "最终分析",
-    "intermediate text stays in execution history",
-  );
+  assert.equal(finish.args.p_record, null);
+  assert.ok((finish.args.p_message as AgentRunRow["public_message"]).content.includes("最终分析"), "final analysis stays in chat history");
 });
 
 test("takeover replaces interrupted assistant parts without duplicating visible output", async () => {
@@ -1050,8 +1048,54 @@ test("new calculations invalidate an earlier selection; selected tool-only resul
     (saved.args.p_message as AgentRunRow["public_message"]).content,
     "",
   );
-  assert.ok(
-    saved.args.p_record,
-    "canonical calculation can be saved without prose",
-  );
+  assert.equal(saved.args.p_record, null);
+  assert.equal((saved.args.p_checkpoint as AgentRunRow["checkpoint"]).finalArtifacts.length, 1, "selected calculation still settles without prose or a record");
+});
+
+test("unknown Pi models carry an unknown capacity and expose native context usage in snapshots", async () => {
+  const store = new MemoryStore();
+  let capacity: number | undefined;
+  const streamFn: StreamFn = (model, context, options) => {
+    capacity = model.contextWindow;
+    return scripted(() => [{ type: "text", text: "chat-only result" }])(model, context, options);
+  };
+  await executeAgentRun(store, row(), undefined, { config, streamFn });
+  assert.equal(capacity, 0, "Pi's sentinel does not invent a 32k limit");
+  const finish = store.writes.find(w => w.name === "agent_finish_run")!;
+  const data = (finish.args.p_message as AgentRunRow["public_message"]).agent!;
+  assert.equal(data.runtime?.model.contextWindow, null);
+  assert.equal(data.runtime?.model.limitSource, "unknown");
+  assert.equal(data.runtime?.context?.source, "usage");
+  assert.ok(data.runtime!.context!.measuredTokens > 0);
+  assert.ok(store.writes.some(w => w.name === "agent_checkpoint" && (w.args.p_message as AgentRunRow["public_message"]).agent?.runtime?.context));
+  assert.equal(finish.args.p_record, null);
+});
+
+test("unknown capacity still uses Pi's bounded compaction recovery on a reported overflow", async () => {
+  const store = new MemoryStore(), run = row();
+  run.checkpoint.messages = Array.from({ length: 5 }, (_, index) => ({ role: "user" as const, content: `old turn ${index}: ${"history ".repeat(5000)}`, timestamp: index + 1 }));
+  let calls = 0;
+  const streamFn: StreamFn = model => {
+    assert.equal(model.contextWindow, 0);
+    const stream = createAssistantMessageEventStream(), message = emptyPiAssistant(model);
+    if (calls++ === 0) {
+      message.stopReason = "error";
+      message.errorMessage = "context_length_exceeded";
+      stream.push({ type: "error", reason: "error", error: message });
+    } else {
+      message.content = [{ type: "text", text: "recovered answer" }];
+      message.usage.input = 100;
+      message.usage.totalTokens = 100;
+      stream.push({ type: "done", reason: "stop", message });
+    }
+    stream.end(message);
+    return stream;
+  };
+  await executeAgentRun(store, run, undefined, { config, streamFn });
+  assert.equal(calls, 2);
+  assert.ok(store.nativeEntries().some(entry => entry.kind === "pi.compaction"));
+  const finish = store.writes.find(w => w.name === "agent_finish_run")!;
+  assert.equal(finish.args.p_status, "completed");
+  assert.equal((finish.args.p_message as AgentRunRow["public_message"]).agent?.runtime?.context?.compactions, 1);
+  assert.equal(finish.args.p_record, null);
 });

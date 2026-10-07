@@ -6,6 +6,8 @@ const ts = require('typescript');
 const projectRoot = process.cwd();
 const srcRoot = path.join(projectRoot, 'src');
 const _resolveCache = new Map();
+// Node component tests have no CSS pipeline. Visual/style contracts run in Chrome.
+require.extensions['.css'] = module => { module.exports = {}; };
 
 function resolveAlias(request) {
     if (request === 'server-only') {

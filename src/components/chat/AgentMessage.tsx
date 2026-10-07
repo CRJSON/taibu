@@ -1,72 +1,34 @@
 "use client";
-import {
-  Check,
-  ChevronRight,
-  CircleAlert,
-  FileText,
-  Globe,
-  LoaderCircle,
-  Wrench,
-} from "lucide-react";
-import Link from "next/link";
+import { ArrowUpRight, Globe } from "lucide-react";
 import type { AgentMessageData } from "@/lib/agent/types";
 import { MarkdownContent } from "@/components/ui/MarkdownContent";
-import { ThinkingBlock } from "./ThinkingBlock";
-
-const statusLabels = {
-  queued: "任务已排队",
-  running: "正在执行",
-  awaiting_input: "等待补充信息",
-  cancelling: "正在停止",
-  completed: "任务完成",
-  cancelled: "任务已停止",
-  failed: "任务未完成",
-};
+import { AgentStatus } from './agent/AgentStatus';
+import { AgentArtifactCard } from './agent/AgentArtifactCard';
+import { AgentActivityGroup, AgentActivityIndicator } from './agent/AgentActivityGroup';
+import { groupAgentParts } from './agent/presentation';
 export function AgentMessage({ data }: { data: AgentMessageData }) {
+  const groups = groupAgentParts(data.parts);
+  const active = ['queued', 'running', 'awaiting_input', 'cancelling'].includes(data.status);
   return (
     <div
-      className="space-y-3"
+      className="agent-message"
       data-agent-run-id={data.runId}
       data-agent-status={data.status}
     >
-      <div
-        className="flex items-center gap-2 text-xs text-foreground-secondary"
-        role="status"
-      >
-        {data.status === "running" || data.status === "queued" ? (
-          <LoaderCircle className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
-        ) : data.status === "completed" ? (
-          <Check className="h-3.5 w-3.5" />
-        ) : (
-          <CircleAlert className="h-3.5 w-3.5" />
-        )}
-        <span>{statusLabels[data.status]}</span>
-      </div>
-      {data.parts.map((part) => {
+      <div className="agent-message-heading"><span className="font-medium text-foreground">太卜 Agent</span><AgentStatus status={data.status} /></div>
+      {data.parts.filter(part => part.type === 'todo').map(part => part.type === 'todo' && <ol key={part.id} className="agent-todo-list" aria-label="任务清单">{part.items.map(item => <li key={item.id} data-state={item.status}><span aria-hidden="true">{item.status === 'completed' ? '✓' : item.status === 'in_progress' ? '◉' : '○'}</span>{item.title}</li>)}</ol>)}
+      {data.compactions?.map(record => <details key={record.id} className="agent-compaction"><summary>{record.status === 'completed' ? '已压缩上下文' : '上下文压缩失败'}</summary><p>压缩至：{record.through ?? '由 Pi 确定'} · 保留起点：{record.retainedFrom ?? '最近内容'}</p><MarkdownContent content={record.summary ?? record.reason ?? ''} /></details>)}
+      {groups.map((group, index) => {
+        if (group.type === 'activity') return <AgentActivityGroup key={group.id} parts={group.parts} data={data} active={active && !groups.slice(index + 1).some(next => next.type === 'activity')} />;
+        const part = group.part;
         if (part.type === "text")
           return (
             <MarkdownContent
               key={part.id}
               content={part.text}
-              className="text-base text-foreground leading-relaxed"
+              className="chat-prose"
+              streaming={active && index === groups.length - 1}
             />
-          );
-        if (part.type === "reasoning")
-          return (
-            <ThinkingBlock
-              key={part.id}
-              content={part.text}
-              isStreaming={data.status === "running"}
-            />
-          );
-        if (part.type === "question")
-          return (
-            <div
-              key={part.id}
-              className="border-l-2 border-accent pl-4 py-2 text-sm"
-            >
-              <MarkdownContent content={part.question} />
-            </div>
           );
         if (part.type === "source")
           return /^https?:\/\//iu.test(part.url) ? (
@@ -75,60 +37,22 @@ export function AgentMessage({ data }: { data: AgentMessageData }) {
               href={part.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-start gap-2 text-sm text-accent hover:underline break-words"
+              className="agent-source-link"
             >
               <Globe className="h-4 w-4 shrink-0 mt-0.5" />
               {part.title || part.url}
+              <ArrowUpRight className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
             </a>
           ) : null;
         if (part.type === "artifact")
           return (
-            <Link
-              key={part.id}
-              href={
-                part.recordId
-                  ? `/records?id=${encodeURIComponent(part.recordId)}`
-                  : part.chartType === "bazi"
-                    ? `/bazi/result?chart=${encodeURIComponent(part.chartId ?? "")}`
-                    : `/ziwei/result?chart=${encodeURIComponent(part.chartId ?? "")}`
-              }
-              className="inline-flex items-center gap-2 border border-border rounded-lg px-3 py-2 text-sm hover:bg-background-secondary"
-            >
-              <FileText className="h-4 w-4" />
-              {part.title}
-              <ChevronRight className="h-3.5 w-3.5" />
-            </Link>
+            <AgentArtifactCard key={part.id} artifact={part} />
           );
-        return (
-          <details
-            key={part.id}
-            className="border-l border-border pl-3 py-1.5 text-sm"
-          >
-            <summary className="flex cursor-pointer items-center gap-2 text-foreground-secondary marker:hidden">
-              {part.status === "running" ? (
-                <LoaderCircle className="h-4 w-4 animate-spin motion-reduce:animate-none" />
-              ) : part.status === "failed" ? (
-                <CircleAlert className="h-4 w-4 text-amber-600" />
-              ) : (
-                <Wrench className="h-4 w-4" />
-              )}
-              <span className="min-w-0 flex-1">{part.title}</span>
-              <span className="text-xs">
-                {part.status === "running"
-                  ? "执行中"
-                  : part.status === "failed"
-                    ? "失败"
-                    : "完成"}
-              </span>
-            </summary>
-            <pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap break-all rounded-lg bg-background-secondary px-3 py-2 text-xs">
-              {JSON.stringify({ 参数: part.input, 结果: part.output }, null, 2)}
-            </pre>
-          </details>
-        );
+        return null;
       })}
+      <AgentActivityIndicator data={data} />
       {data.error && (
-        <p className="text-sm text-amber-700 dark:text-amber-300" role="alert">
+        <p className="agent-error" role="alert">
           {data.error}
         </p>
       )}

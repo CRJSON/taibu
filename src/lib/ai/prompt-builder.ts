@@ -61,50 +61,8 @@ export interface PromptContext {
     previousCharts?: ExtractedChart[];
 }
 
-interface ModelContextConfig {
-    maxContext: number;
-    promptRatio: number;
-    reserveOutput: number;
-    reserveHistory: number;
-    promptCapRatio?: number;
-    maxPromptTokens?: number;
-    minPromptTokens?: number;
-}
-
-// 各模型上下文预算配置：预留输出与历史消息，剩余按比例作为提示词预算
-const MODEL_CONTEXT_CONFIGS: Record<string, ModelContextConfig> = {
-    'deepseek-v3.2': { maxContext: 32000, promptRatio: 0.25, reserveOutput: 2000, reserveHistory: 4000 },
-    'deepseek-pro': { maxContext: 64000, promptRatio: 0.25, reserveOutput: 4000, reserveHistory: 4000 },
-    'deepseek-pro-reasoner': { maxContext: 64000, promptRatio: 0.35, reserveOutput: 4000, reserveHistory: 4000, promptCapRatio: 0.6, maxPromptTokens: 6000 },
-    'glm-4.6': { maxContext: 128000, promptRatio: 0.25, reserveOutput: 2000, reserveHistory: 4000 },
-    'glm-4.6-reasoner': { maxContext: 128000, promptRatio: 0.35, reserveOutput: 2000, reserveHistory: 4000, promptCapRatio: 0.6, maxPromptTokens: 6000 },
-    'glm-4.7': { maxContext: 128000, promptRatio: 0.3, reserveOutput: 4000, reserveHistory: 4000 },
-    'glm-4.7-reasoner': { maxContext: 128000, promptRatio: 0.35, reserveOutput: 4000, reserveHistory: 4000, promptCapRatio: 0.6, maxPromptTokens: 6000 },
-    'gemini-3': { maxContext: 128000, promptRatio: 0.3, reserveOutput: 2000, reserveHistory: 4000 },
-    'gemini-pro': { maxContext: 128000, promptRatio: 0.35, reserveOutput: 4000, reserveHistory: 4000, promptCapRatio: 0.6, maxPromptTokens: 6000 }, // Gemini Pro（包含 2.5/3），默认推理
-    'qwen-3-max': { maxContext: 64000, promptRatio: 0.25, reserveOutput: 4000, reserveHistory: 4000 },
-    deepai: { maxContext: 128000, promptRatio: 0.3, reserveOutput: 4000, reserveHistory: 4000, promptCapRatio: 0.8, maxPromptTokens: 8000 }, // DeepAI 默认推理，提升至 8000
-    'qwen-vl-plus': { maxContext: 32000, promptRatio: 0.25, reserveOutput: 4000, reserveHistory: 4000 },
-    'qwen-vl-plus-reasoner': { maxContext: 32000, promptRatio: 0.2, reserveOutput: 5000, reserveHistory: 4000 },
-    'gemini-vl': { maxContext: 32000, promptRatio: 0.2, reserveOutput: 4000, reserveHistory: 8000 },
-    'kimi-k2.5': { maxContext: 128000, promptRatio: 0.25, reserveOutput: 4000, reserveHistory: 4000 },
-    'kimi-k2.5-reasoner': { maxContext: 128000, promptRatio: 0.35, reserveOutput: 4000, reserveHistory: 4000, promptCapRatio: 0.6, maxPromptTokens: 6000 },
-    default: { maxContext: 32000, promptRatio: 0.25, reserveOutput: 2000, reserveHistory: 4000 }
-};
-
-// 计算系统提示词的总预算（token 级），防止挤压历史对话与输出空间
-export function resolveModelContextConfig(modelId: string, reasoningEnabled?: boolean): ModelContextConfig {
-    if (reasoningEnabled) {
-        const reasoningId = `${modelId}-reasoner`;
-        if (MODEL_CONTEXT_CONFIGS[reasoningId]) return MODEL_CONTEXT_CONFIGS[reasoningId];
-    }
-    if (MODEL_CONTEXT_CONFIGS[modelId]) return MODEL_CONTEXT_CONFIGS[modelId];
-    if (modelId.startsWith('gemini-pro-')) return MODEL_CONTEXT_CONFIGS['gemini-pro'];
-    if (modelId.startsWith('gemini-vl-')) return MODEL_CONTEXT_CONFIGS['gemini-vl'];
-    if (modelId.startsWith('deepai-')) return MODEL_CONTEXT_CONFIGS.deepai;
-    if (modelId.startsWith('kimi-')) return MODEL_CONTEXT_CONFIGS['kimi-k2.5'];
-    return MODEL_CONTEXT_CONFIGS.default;
-}
+import { resolveModelContextConfig } from './model-context';
+export { resolveModelContextConfig } from './model-context';
 
 export async function calculatePromptBudget(modelId: string, reasoningEnabled?: boolean): Promise<number> {
     const config = resolveModelContextConfig(modelId, reasoningEnabled);

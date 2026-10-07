@@ -352,7 +352,7 @@ export async function agentDatabaseContracts(
   );
 
   await t.test(
-    "Agent input pause/reply and command acknowledgement retain one debit; final save and chart reuse are durable",
+    "Agent input pause/reply retain one debit; charts settle without creating analysis records",
     async () => {
       const before = await balance();
       const queued = await create(await createConversation());
@@ -400,16 +400,16 @@ export async function agentDatabaseContracts(
         "completed",
         { ...assistant(run.id), content: "可见分析" },
         { ...checkpoint, finalArtifacts: [draft.id] },
-        { title: "最终分析", content: "可见分析" },
+        null,
       );
-      assert.ok(result.record_id);
+      assert.equal(result.record_id, null);
       assert.equal(await balance(), before - 1);
       const durable = JSON.parse(
         await asOwner(
-          `SELECT json_build_object('records',(SELECT count(*) FROM public.ming_records WHERE id=${quote(result.record_id)}),'charts',(SELECT count(*) FROM public.bazi_charts WHERE user_id=${quote(owner)}),'credentials',(SELECT count(*) FROM public.agent_run_credentials WHERE run_id=${quote(run.id)}),'message',(SELECT messages FROM public.conversations WHERE id=${quote(run.conversation_id)}),'cursor',(SELECT max(sequence) FROM public.agent_run_events WHERE run_id=${quote(run.id)}));`,
+          `SELECT json_build_object('records',(SELECT count(*) FROM public.ming_records WHERE user_id=${quote(owner)}),'charts',(SELECT count(*) FROM public.bazi_charts WHERE user_id=${quote(owner)}),'credentials',(SELECT count(*) FROM public.agent_run_credentials WHERE run_id=${quote(run.id)}),'message',(SELECT messages FROM public.conversations WHERE id=${quote(run.conversation_id)}),'cursor',(SELECT max(sequence) FROM public.agent_run_events WHERE run_id=${quote(run.id)}));`,
         ),
       );
-      assert.equal(durable.records, 1);
+      assert.equal(durable.records, 0);
       assert.equal(durable.charts, 1);
       assert.equal(durable.credentials, 0);
       assert.equal(Number(result.event_cursor), durable.cursor);
@@ -418,11 +418,9 @@ export async function agentDatabaseContracts(
           .status,
         "completed",
       );
-      assert.ok(
-        result.public_message.agent.parts.some(
-          (p) => p.recordId === result.record_id,
-        ),
-      );
+      assert.equal(result.public_message.content, "可见分析");
+      assert.equal(result.public_message.agent.parts.filter(part => part.type === 'artifact' && part.chartId).length, 1);
+      assert.equal(result.public_message.agent.parts.some(part => part.recordId), false);
       await assert.rejects(
         finish(run, "completed", result.public_message, checkpoint, {
           title: "duplicate",
@@ -440,6 +438,7 @@ export async function agentDatabaseContracts(
         { ...checkpoint, finalArtifacts: [next.id] },
         { title: "另一段分析", content: "另一段分析" },
       );
+      assert.equal(await asOwner(`SELECT count(*) FROM public.ming_records WHERE user_id=${quote(owner)};`), '0', 'old workers supplying p_record cannot recreate automatic records');
       assert.equal(
         await asOwner(
           `SELECT count(*) FROM public.bazi_charts WHERE user_id=${quote(owner)};`,
@@ -508,7 +507,7 @@ export async function agentDatabaseContracts(
   );
 
   await t.test(
-    "Agent final-save event failure rolls back charts, analysis and status; retry commits once",
+    "Agent completion event failure rolls back charts and status; retry commits once without a record",
     async () => {
       await create(await createConversation());
       const run = await claim();
@@ -557,13 +556,14 @@ export async function agentDatabaseContracts(
         title: "atomic analysis",
         content: "atomic analysis",
       });
-      assert.ok(result.record_id);
+      assert.equal(result.record_id, null);
       assert.equal(
         await asOwner(
           `SELECT count(*) FROM public.ming_records WHERE title='atomic analysis';`,
         ),
-        "1",
+        "0",
       );
+      assert.equal(await asOwner(`SELECT count(*) FROM public.bazi_charts WHERE user_id=${quote(owner)} AND birth_date='1995-06-20';`), '1');
     },
   );
 

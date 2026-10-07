@@ -2,8 +2,10 @@ import "server-only";
 import type { Context } from "@earendil-works/chord";
 import type { AssistantMessage } from "@earendil-works/pi-ai";
 import type { Conversation, Cursor, EntryRecord, LiveState, ToolTaskInput } from "@earendil-works/pi-durable";
+import { CompactionEntry } from "@earendil-works/pi-durable";
 import type { AgentDurableStorage } from "./durable-storage.server";
 import type { AgentCheckpoint, AgentPart, DomainTool } from "./types";
+import { projectAgentContextUsage } from "./context-usage";
 
 /** Public messages are a projection; Durable entries remain the execution truth. */
 export async function projectDurableConversation(
@@ -23,6 +25,19 @@ export async function projectDurableConversation(
     cursor = page.next;
   } while (cursor);
   history.reverse();
+  const title = (name: string) => tools.find(t => t.name === name)?.label ?? name;
+  if (checkpoint.runtime) {
+    const transcript = await root.context(context);
+    checkpoint.runtime.context = projectAgentContextUsage(transcript.messages, history.filter(entry => entry.kind === CompactionEntry.kind).length);
+    const runningTool = live?.tools?.find(slot => slot.status === "running");
+    const content = live?.generation?.message?.content;
+    checkpoint.runtime.activity = checkpoint.question ? { phase: "awaiting_input" }
+      : live?.compactions?.some(slot => slot.blocking) ? { phase: "compacting" }
+      : live?.generation?.retry ? { phase: "retrying", attempt: live.generation.attempt }
+      : runningTool ? { phase: "tools", toolTitle: title(runningTool.name) }
+      : live?.generation ? { phase: content?.at(-1)?.type === "thinking" ? "thinking" : content?.some(part => part.type === "text") ? "responding" : "generating" }
+      : live?.run ? { phase: "preparing" } : { phase: "settling" };
+  }
   const answeredTasks = new Map(history.flatMap((e, index) =>
     e.byTaskId && e.model?.some(m => m.role === "assistant" &&
       m.stopReason !== "aborted" && m.stopReason !== "error") ? [[e.byTaskId, index] as const] : [],
@@ -41,7 +56,6 @@ export async function projectDurableConversation(
     attached.set(cardId, parts);
     parts.forEach(p => attachedIds.add(`${p.type}:${p.id}`));
   };
-  const title = (name: string) => tools.find(t => t.name === name)?.label ?? name;
   const assistantParts = (message: AssistantMessage, id: string, entryId?: string) => {
     message.content.forEach((part, index) => {
       if (part.type === "text") native.push({ type: "text", id: `${id}:${index}`, text: part.text });
@@ -51,7 +65,7 @@ export async function projectDurableConversation(
         const old = previous.get(`tool:${key}`);
         const card: Extract<AgentPart, { type: "tool" }> = {
           type: "tool", id: key, name: part.name, title: title(part.name),
-          status: old?.type === "tool" ? old.status : "running",
+          status: old?.type === "tool" ? old.status : "pending",
           input: part.arguments, ...(old?.type === "tool" ? { output: old.output } : {}),
         };
         cards.set(key, card);
@@ -74,6 +88,7 @@ export async function projectDurableConversation(
         if (card) {
           card.status = message.isError ? "failed" : "completed";
           card.output = message.details ?? message.content;
+          if (['bazi', 'ziwei', 'liuyao', 'meihua', 'tarot', 'qimen', 'daliuren', 'xiaoliuren'].includes(card.name)) card.canonicalText = message.content.filter(part => part.type === 'text').map(part => part.type === 'text' ? part.text : '').join('\n');
           if (entry.byTaskId) attach(card.id, `${entry.byTaskId}:${message.toolCallId}`);
         }
       }
@@ -95,7 +110,7 @@ export async function projectDurableConversation(
       if (slot.taskId) attach(card.id, `${slot.taskId}:${slot.callId}`);
       if (slot.status === "done" && !slot.entry) card.status = "failed";
       if (slot.status !== "done") {
-        card.status = slot.name === "ask_user" && checkpoint.question ? "completed" : "running";
+        card.status = slot.name === "ask_user" && checkpoint.question ? "awaiting_input" : slot.status === "pending" ? "pending" : "running";
         card.output = slot.details ?? slot.output ?? card.output;
       }
     }

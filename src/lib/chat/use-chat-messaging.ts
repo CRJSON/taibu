@@ -113,17 +113,17 @@ export function useChatMessaging({
     const agent = useAgentChat(state, userId, refreshViewerState);
     const {
         messages, setMessages,
-        inputValue, setInputValue,
+        inputValue,
         isSendingToList, setIsSendingToList,
         activeConversationId, setActiveConversationId,
         activeConversationIdRef, conversationValidatedRef,
         hasLoadedConversationsRef,
-        messagesEndRef, messageScrollContainerRef, shouldAutoScrollRef,
+        messageScrollContainerRef, shouldAutoScrollRef,
         chatMode,
         selectedModel, reasoningEnabled,
         customProviderConfig,
         attachmentState, setAttachmentState,
-        mentions, setMentions,
+        mentions,
         dreamContextLoading,
         setDreamContext, setDreamContextLoading,
         setStreamingConversationIds,
@@ -139,20 +139,6 @@ export function useChatMessaging({
         cacheConversationMessages,
         removeConversationDetail,
     } = state;
-    const draftRef = useRef({ inputValue, mentions, file: attachmentState.file, chatMode });
-    if (draftRef.current.inputValue !== inputValue || draftRef.current.mentions !== mentions ||
-        draftRef.current.file !== attachmentState.file || draftRef.current.chatMode !== chatMode) {
-        draftRef.current = { inputValue, mentions, file: attachmentState.file, chatMode };
-    }
-    const captureDraft = (isCurrent: () => boolean, clearAttachment = false) => {
-        const submitted = draftRef.current;
-        return () => {
-            if (!isCurrent() || draftRef.current !== submitted) return;
-            setInputValue('');
-            setMentions([]);
-            if (clearAttachment) setAttachmentState(current => ({ ...current, file: undefined }));
-        };
-    };
     const isDreamMode = chatMode === 'dream';
     const chartsQuery = useUserCharts(userId, { enabled: isDreamMode });
     const primaryChartName = useMemo(() => selectPrimarySavedBaziChart(chartsQuery.data)?.name, [chartsQuery.data]);
@@ -193,8 +179,9 @@ export function useChatMessaging({
 
     // Scroll helpers
     const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
-        messagesEndRef.current?.scrollIntoView({ behavior, block: 'end' });
-    }, [messagesEndRef]);
+        const container = messageScrollContainerRef.current;
+        if (container) container.scrollTo({ top: container.scrollHeight, behavior });
+    }, [messageScrollContainerRef]);
 
     const handleMessageListScroll = useCallback(() => {
         const container = messageScrollContainerRef.current;
@@ -205,11 +192,6 @@ export function useChatMessaging({
             clientHeight: container.clientHeight,
         });
     }, [messageScrollContainerRef, shouldAutoScrollRef]);
-
-    useEffect(() => {
-        if (!messages.length || !shouldAutoScrollRef.current) return;
-        scrollToBottom(isLoading ? 'auto' : 'smooth');
-    }, [isLoading, messages, scrollToBottom, shouldAutoScrollRef]);
 
     // Only the badge follows the current saved-chart bundle; message metadata
     // remains the immutable context actually used for that message.
@@ -347,7 +329,7 @@ export function useChatMessaging({
 
     const handleQueueMessage = async () => {
         if (!agent.active || !inputValue.trim() || isSendingToList) return;
-        const clearSubmittedDraft = captureDraft(agent.captureConversation());
+        const clearSubmittedDraft = state.captureSubmittedDraft(true);
         setIsSendingToList(true);
         try { await agent.sendCommand(inputValue.trim(), true); clearSubmittedDraft(); }
         catch (error) { showToast('error', error instanceof Error ? error.message : '发送失败'); }
@@ -358,7 +340,7 @@ export function useChatMessaging({
     const handleSend = async () => {
         const trimmedInput = inputValue.trim();
         if (agent.active && trimmedInput && !isSendingToList) {
-            const clearSubmittedDraft = captureDraft(agent.captureConversation());
+            const clearSubmittedDraft = state.captureSubmittedDraft(true);
             setIsSendingToList(true);
             try { await agent.sendCommand(trimmedInput); clearSubmittedDraft(); }
             catch (error) { showToast('error', error instanceof Error ? error.message : '发送失败'); }
@@ -366,9 +348,10 @@ export function useChatMessaging({
             return;
         }
         if (!trimmedInput || isLoading || isSendingToList) return;
+        if (attachmentState.uploaded?.length && agent.mode !== 'agent') { showToast('info', '私有图片和文本资料请使用 Agent 模式发送'); return; }
         if (isDreamMode && dreamContextLoading) return;
         let isCurrent = agent.captureConversation();
-        const clearSubmittedDraft = captureDraft(() => isCurrent(), true);
+        const clearSubmittedDraft = state.captureSubmittedDraft(true);
         setIsSendingToList(true);
 
         const messageMentions = sanitizeOutgoingMentions(mentions);
@@ -393,6 +376,7 @@ export function useChatMessaging({
                     state.conversationEpochRef.current += 1;
                     activeConversationIdRef.current = newId;
                     conversationValidatedRef.current = true;
+                    state.moveDraft(newId);
                     setActiveConversationId(newId);
                     isCurrent = agent.captureConversation(newId);
                     if (searchParams.get('id') !== newId) router.replace(`/chat?id=${newId}`);
@@ -424,7 +408,7 @@ export function useChatMessaging({
             const userMessage: ChatMessage = {
                 id: Date.now().toString(), role: 'user', content: trimmedInput, createdAt: new Date().toISOString(),
                 mentions: messageMentions.length ? [...messageMentions] : undefined,
-                attachments: (attachmentState.file || attachmentState.webSearchEnabled) ? { fileName: attachmentState.file?.name || '', webSearchEnabled: attachmentState.webSearchEnabled } : undefined,
+                attachments: (attachmentState.file || attachmentState.uploaded?.length || attachmentState.webSearchEnabled) ? { fileName: attachmentState.file?.name || attachmentState.uploaded?.map(item=>item.name).join('、') || '', ids: attachmentState.uploaded?.map(item=>item.id), webSearchEnabled: attachmentState.webSearchEnabled } : undefined,
                 dreamInfo,
             };
             const newMessages = [...messages, userMessage];
@@ -460,8 +444,6 @@ export function useChatMessaging({
             };
             const optimisticMessages = [...newMessages, initialAssistantMessage];
             setMessages(optimisticMessages);
-            setInputValue('');
-            setMentions([]);
             const saveSucceeded = await saveMessages(conversationId, newMessages, isNewConversation ? (draftTitle || undefined) : undefined);
             if (!saveSucceeded) {
                 if (isNewConversation) {
@@ -484,6 +466,7 @@ export function useChatMessaging({
                 showToast('error', '保存对话失败，请重试');
                 return;
             }
+            clearSubmittedDraft();
 
             const headers: Record<string, string> = { 'Content-Type': 'application/json' };
 
@@ -562,7 +545,7 @@ export function useChatMessaging({
 
         const existingVersions = [...(originalMessage.versions || [])];
         if (existingVersions.length === 0 && originalMessage.content) {
-            existingVersions.push({ userContent: originalMessage.content, mentions: originalMessage.mentions ? [...originalMessage.mentions] : undefined, aiContent: originalAiContent, aiAgent: originalAiMessage?.agent, aiMetadata: originalAiMessage?.metadata, createdAt: originalMessage.createdAt, subsequentMessages: subsequentMessages.length > 0 ? subsequentMessages : undefined });
+            existingVersions.push({ userContent: originalMessage.content, attachments: originalMessage.attachments, mentions: originalMessage.mentions ? [...originalMessage.mentions] : undefined, aiContent: originalAiContent, aiAgent: originalAiMessage?.agent, aiMetadata: originalAiMessage?.metadata, createdAt: originalMessage.createdAt, subsequentMessages: subsequentMessages.length > 0 ? subsequentMessages : undefined });
         } else if (existingVersions.length > 0 && subsequentMessages.length > 0) {
             const idx = originalMessage.currentVersionIndex ?? existingVersions.length - 1;
             if (existingVersions[idx] && !existingVersions[idx].subsequentMessages) existingVersions[idx] = { ...existingVersions[idx], subsequentMessages };
@@ -597,7 +580,7 @@ export function useChatMessaging({
             const headers: Record<string, string> = { 'Content-Type': 'application/json' };
 
             const onBeforeSave = (finalMessages: ChatMessage[], assistantContent: string): ChatMessage[] => {
-                const newVersion = { userContent: newContent, mentions: messageMentions.length ? [...messageMentions] : undefined, aiContent: assistantContent || '抱歉，我暂时无法回答这个问题。', createdAt: new Date().toISOString() };
+                const newVersion = { userContent: newContent, attachments: updatedUserMessage.attachments, mentions: messageMentions.length ? [...messageMentions] : undefined, aiContent: assistantContent || '抱歉，我暂时无法回答这个问题。', createdAt: new Date().toISOString() };
                 const updatedVersions = [...existingVersions, newVersion];
                 const finalUserMessage: ChatMessage = { ...updatedUserMessage, versions: updatedVersions, currentVersionIndex: updatedVersions.length - 1 };
                 return finalMessages.map(msg => msg.id === updatedUserMessage.id ? finalUserMessage : msg);
@@ -660,7 +643,7 @@ export function useChatMessaging({
         if (lastUserMessage) {
             existingVersions = [...(lastUserMessage.versions || [])];
             if (existingVersions.length === 0 && oldAiContent) {
-                existingVersions.push({ userContent: lastUserMessage.content, mentions: lastUserMessage.mentions ? [...lastUserMessage.mentions] : undefined, aiContent: oldAiContent, aiAgent: oldAiMessage.agent, aiMetadata: oldAiMessage.metadata, createdAt: oldAiMessage.createdAt || new Date().toISOString(), subsequentMessages: subsequentMessages.length > 0 ? subsequentMessages : undefined });
+                existingVersions.push({ userContent: lastUserMessage.content, attachments: lastUserMessage.attachments, mentions: lastUserMessage.mentions ? [...lastUserMessage.mentions] : undefined, aiContent: oldAiContent, aiAgent: oldAiMessage.agent, aiMetadata: oldAiMessage.metadata, createdAt: oldAiMessage.createdAt || new Date().toISOString(), subsequentMessages: subsequentMessages.length > 0 ? subsequentMessages : undefined });
             } else if (existingVersions.length > 0 && subsequentMessages.length > 0) {
                 const currentVersionIdx = lastUserMessage.currentVersionIndex ?? existingVersions.length - 1;
                 if (existingVersions[currentVersionIdx] && !existingVersions[currentVersionIdx].subsequentMessages) existingVersions[currentVersionIdx] = { ...existingVersions[currentVersionIdx], subsequentMessages };
@@ -693,7 +676,7 @@ export function useChatMessaging({
 
             const onBeforeSave = lastUserMessage
                 ? (finalMessages: ChatMessage[], assistantContent: string): ChatMessage[] => {
-                    const newVersion = { userContent: lastUserMessage.content, mentions: messageMentions.length ? [...messageMentions] : undefined, aiContent: assistantContent || '抱歉，我暂时无法回答这个问题。', createdAt: new Date().toISOString() };
+                    const newVersion = { userContent: lastUserMessage.content, attachments: lastUserMessage.attachments, mentions: messageMentions.length ? [...messageMentions] : undefined, aiContent: assistantContent || '抱歉，我暂时无法回答这个问题。', createdAt: new Date().toISOString() };
                     const updatedVersions = [...existingVersions, newVersion];
                     const finalUserMessage: ChatMessage = {
                         ...lastUserMessage,
@@ -743,7 +726,7 @@ export function useChatMessaging({
             const version = message.versions[versionIndex];
             const previousMessages = prev.slice(0, messageIndex);
             const versionMentions = sanitizeOutgoingMentions(version.mentions ?? message.mentions);
-            const updatedUserMessage: ChatMessage = { ...message, content: version.userContent, mentions: versionMentions ? [...versionMentions] : undefined, currentVersionIndex: versionIndex };
+            const updatedUserMessage: ChatMessage = { ...message, content: version.userContent, attachments: Object.hasOwn(version, 'attachments') ? version.attachments : message.attachments, mentions: versionMentions ? [...versionMentions] : undefined, currentVersionIndex: versionIndex };
             const aiMessage: ChatMessage = { id: `ai-version-${versionIndex}-${Date.now()}`, role: 'assistant', content: version.aiContent, createdAt: version.createdAt, agent: version.aiAgent, metadata: version.aiMetadata };
             let newMessages = [...previousMessages, updatedUserMessage, aiMessage];
             if (version.subsequentMessages?.length) newMessages = [...newMessages, ...version.subsequentMessages];

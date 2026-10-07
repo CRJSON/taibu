@@ -8,6 +8,8 @@
 .claude
 .codex-deploy
 .taibu-local
+.playwright-cli
+output/playwright
 GEMINI.md
 skills/notion-style.md
 .trae

@@ -127,6 +127,7 @@ export default function ChatPage() {
         <>
             <ChatLayout
                 activeConversationId={state.activeConversationId}
+                conversationTitle={state.conversations.find(conversation => conversation.id === state.activeConversationId)?.title || state.pendingSidebarTitle || undefined}
                 conversationLoading={state.conversationLoading}
                 conversationError={state.conversationError}
                 messages={state.messages}
@@ -134,6 +135,7 @@ export default function ChatPage() {
                 isSendingToList={state.isSendingToList || messaging.agent.restoring || messaging.agent.syncing}
                 messagesEndRef={state.messagesEndRef}
                 messageScrollContainerRef={state.messageScrollContainerRef}
+                shouldAutoScrollRef={state.shouldAutoScrollRef}
                 onMessageListScroll={messaging.handleMessageListScroll}
                 onEditMessage={messaging.handleEditMessage}
                 onRegenerateResponse={messaging.handleRegenerateResponse}

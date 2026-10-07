@@ -17,6 +17,13 @@ pnpm test           # 自动先构建 packages/core、mcp、mcp-server，再跑�
 
 > **注意**：`pnpm test` 会先执行 `pnpm -C packages/core build && pnpm -C packages/mcp build && pnpm -C packages/mcp-server build`，修改 `packages/*` 源码后无需手动 build 即可直接跑测试。
 
+## 固定本地测试环境
+
+- 通用测试栈沿用 Docker Compose 项目 `taibu-agent-1006b`，统一入口 `http://127.0.0.1:3196`；后续 Web、Agent worker 及相关服务的本地更新在此栈验收。
+- `pnpm local:update` 重建并更新服务；`pnpm local:up` 启动既有镜像；`pnpm local:status` / `pnpm local:logs` 检查状态。
+- 复用现有 `selfhost` CLI 的项目归属、配置与数据库基线校验，保留账号和持久数据卷。不要为 UI 更新重建数据库或更换项目名；真正的 schema 变更遵守迁移规范。
+- 登录凭据保存在私有 `.taibu-local/taibu-agent-1006b/credentials.json`，不得输出或提交。
+
 ## 项目最小地图
 
 - `packages/core`（`taibu-core`）: 占术计算引擎，以及 **`text.ts` 规范文本渲染层以及`json.ts` 规范json输出格式**。

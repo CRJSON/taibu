@@ -5,6 +5,7 @@ import { readFile, lstat } from "node:fs/promises";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { chromium } from "playwright";
+import { verifyAgentExperience } from './agent-experience-browser.mjs';
 import {
   ROOT,
   validateConfig,
@@ -35,6 +36,8 @@ let page;
 try {
   const context = await browser.newContext({
     viewport: { width: 1440, height: 1100 },
+    timezoneId: 'America/New_York',
+    permissions: ['clipboard-read', 'clipboard-write'],
   });
   await context.route("**/*", (route) => {
     const origin = new URL(route.request().url()).origin;
@@ -45,14 +48,16 @@ try {
   page = await context.newPage();
   page.setDefaultTimeout(20_000);
   page.on("pageerror", (error) => {
-    let message = error.message.replace(
+    let message = `${error.message}\n${error.stack ?? ''}`.replace(
       /[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/gu,
       "[redacted token]",
     );
     for (const [key, value] of Object.entries(config))
       if (value && /PASSWORD|KEY|SECRET|INSTANCE/u.test(key))
         message = message.replaceAll(value, "[redacted]");
-    errors.push(`${new URL(page.url()).pathname}: ${error.name}: ${message.slice(0, 240)}`);
+    const detail = `${new URL(page.url()).pathname}: ${error.name}: ${message.slice(0, 8000)}`;
+    errors.push(detail);
+    console.error('浏览器异常：', detail);
   });
   page.on("response", (response) => {
     if (response.status() >= 500)
@@ -135,8 +140,52 @@ try {
   );
   assert.ok((await context.cookies()).some((cookie) => cookie.httpOnly));
 
+  await uiReady();
+  const personalizationLink = page.getByRole('link', { name: '个性化', exact: true });
+  await personalizationLink.click();
+  const settingsDialog = page.getByRole('dialog', { name: '设置中心', exact: true });
+  await settingsDialog.waitFor();
+  for (const key of ['Tab', 'Shift+Tab']) {
+    for (let index = 0; index < 12; index++) {
+      await page.keyboard.press(key);
+      assert.ok(await settingsDialog.evaluate(element => element.contains(document.activeElement)), `settings modal contains focus after ${key}`);
+    }
+  }
+  await page.keyboard.press('Escape');
+  await settingsDialog.waitFor({ state: 'hidden' });
+  assert.ok(await personalizationLink.evaluate(element => element === document.activeElement), 'closing settings returns focus to its link');
+  const providerTrigger = page.locator('button[aria-label="自定义模型"]');
+  await providerTrigger.click();
+  const providerDialog = page.locator('dialog.chat-provider-dialog[open]');
+  await providerDialog.waitFor();
+  for (const key of ['Tab', 'Shift+Tab']) {
+    for (let index = 0; index < 12; index++) {
+      await page.keyboard.press(key);
+      const providerFocus = await providerDialog.evaluate(element => ({ inside: element.contains(document.activeElement), active: document.activeElement?.tagName }));
+      assert.ok(providerFocus.inside, `custom model modal contains focus after ${key} (${providerFocus.active})`);
+    }
+  }
+  await page.keyboard.press('Escape');
+  await providerDialog.waitFor({ state: 'hidden' });
+  assert.ok(await providerTrigger.evaluate(element => element === document.activeElement), 'closing custom model settings returns trigger focus');
+  let composingSubmissions = 0;
+  const trackComposingSubmission = request => {
+    if (request.method() === 'POST' && new URL(request.url()).pathname === '/api/agent/runs') composingSubmissions++;
+  };
+  page.on('request', trackComposingSubmission);
+  await composer().fill('中文输入法选字');
+  await composer().evaluate(element => {
+    element.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true, isComposing: true }));
+    element.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true, keyCode: 229 }));
+  });
+  await delay(200);
+  page.off('request', trackComposingSubmission);
+  assert.equal(composingSubmissions, 0, 'IME Enter selects characters without submitting a task');
+  await composer().fill('');
+  await page.screenshot({ path: path.join(directory, 'agent-empty-acceptance.png'), fullPage: true });
+
   const initial = await credits();
-  const first = await send("Agent验收：跨命盘对比，请排盘并保存最终分析。");
+  const first = await send("Agent验收：跨命盘对比，请排盘并在聊天中分析。");
   await page.goto(`${config.APP_ORIGIN}/chat?id=${first.run.conversationId}`);
   const finished = await waitForRun(first.run.id, "completed");
   await page.locator('[data-agent-status="completed"]').waitFor();
@@ -154,13 +203,27 @@ try {
     (part) => part.type === "artifact",
   );
   assert.equal(artifacts.filter((part) => part.chartType === "bazi").length, 2);
-  const record = artifacts.find((part) => part.recordId);
-  assert.ok(record);
-  const saved = await get(`/api/records/${record.recordId}`);
-  assert.ok(
-    saved.content.includes("日主") && saved.content.includes("Agent 离线验收"),
-    "canonical tools and final analysis are saved together",
-  );
+  assert.equal(artifacts.some(part => part.recordId), false, 'completed analysis stays in chat without a separate record');
+  assert.ok(finished.message.content.includes('Agent 离线验收'));
+  assert.ok(finished.message.agent.runtime.context.tokens > 0, 'Pi projects the real active transcript');
+  assert.equal(finished.message.agent.runtime.model.contextWindow, null, 'unconfigured models have no invented capacity');
+  await page.getByRole('button', { name: '上下文用量', exact: true }).click();
+  const usagePanel = page.getByRole('dialog', { name: 'Pi 上下文统计', exact: true });
+  await usagePanel.waitFor();
+  assert.ok((await usagePanel.innerText()).includes('容量未知'));
+  assert.ok(await page.locator('.agent-context-usage').getAttribute('data-context-source') !== 'unavailable');
+  await page.screenshot({ path: path.join(directory, 'agent-context-acceptance.png'), fullPage: true });
+  await page.keyboard.press('Escape');
+  assert.ok(await page.getByRole('button', { name: '上下文用量', exact: true }).evaluate(element => element === document.activeElement), 'closing context details restores its trigger focus');
+  const contextBounds = await page.getByRole('button', { name: '上下文用量', exact: true }).boundingBox();
+  const modelBounds = await page.getByRole('button', { name: /^选择模型：/ }).boundingBox();
+  const sendBounds = await page.getByRole('button', { name: '发送消息', exact: true }).boundingBox();
+  assert.ok(contextBounds && modelBounds && sendBounds && contextBounds.x < modelBounds.x && modelBounds.x < sendBounds.x, 'context and model controls precede Send on the right');
+  const toolsTrigger = page.getByRole('button', { name: '更多选项', exact: true });
+  await toolsTrigger.click();
+  await page.getByRole('menu', { name: '更多选项', exact: true }).waitFor();
+  await page.keyboard.press('Escape');
+  assert.ok(await toolsTrigger.evaluate(element => element === document.activeElement), 'keyboard dismissal returns focus even when menu actions focus the composer');
   const duplicate = await context.request.post(
     `${config.APP_ORIGIN}/api/agent/runs`,
     { data: first.payload },
@@ -172,26 +235,78 @@ try {
     initial - 1,
     "duplicate submission does not debit again",
   );
+  await page.locator('.agent-message .agent-activity-heading').first().click();
+  const toolCard = page.locator('.agent-message details.agent-tool-card').first();
+  await toolCard.locator('summary').click();
+  await toolCard.getByRole('heading', { name: '调用参数', exact: true }).waitFor();
+  await toolCard.getByRole('heading', { name: '工具结果', exact: true }).waitFor();
+  await toolCard.getByRole('button', { name: '复制调用参数', exact: true }).click();
+  assert.deepEqual(JSON.parse(await page.evaluate(() => navigator.clipboard.readText())), finished.message.agent.parts.find(part => part.type === 'tool').input);
+  await toolCard.locator('summary').click();
+  await page.getByRole('button', { name: '任务工作区', exact: true }).click();
+  const panel = page.locator('aside#agent-workspace-panel');
+  await panel.waitFor();
+  const originalPanelWidth = (await panel.boundingBox()).width;
+  await panel.getByRole('separator', { name: '调整工作区宽度', exact: true }).press('ArrowLeft');
+  assert.equal((await panel.boundingBox()).width, originalPanelWidth + 24, 'workspace width can be adjusted with the keyboard');
+  await panel.getByRole('separator', { name: '调整工作区宽度', exact: true }).press('ArrowRight');
+  assert.equal(await panel.locator('.agent-artifact-card').count(), 2, 'workspace collects the selected charts');
+  await panel.getByRole('button', { name: /^过程/ }).click();
+  assert.equal(await panel.locator('details.agent-tool-card').count(), 3);
+  await panel.getByRole('button', { name: /^成果/ }).click();
+  await page.screenshot({ path: path.join(directory, 'agent-workspace-acceptance.png'), fullPage: true });
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.locator('html.dark').waitFor();
+  // The existing site-wide theme transition lasts 300 ms.
+  await delay(350);
+  await page.screenshot({ path: path.join(directory, 'agent-workspace-dark-acceptance.png'), fullPage: true });
+  await page.emulateMedia({ colorScheme: 'light' });
+  await page.locator('html:not(.dark)').waitFor();
+  await delay(350);
+  await panel.getByRole('button', { name: '关闭任务工作区', exact: true }).click();
   await page.screenshot({
     path: path.join(directory, "agent-acceptance.png"),
     fullPage: true,
   });
-  await page.getByRole("link", { name: record.title, exact: true }).click();
+  const chartArtifact = artifacts.find(part => part.chartId);
+  await page.locator(`a[href="/bazi/result?chart=${encodeURIComponent(chartArtifact.chartId)}"]`).first().click();
   await page.waitForURL(
     (url) =>
-      url.pathname === "/records" &&
-      url.searchParams.get("id") === record.recordId,
+      url.pathname === "/bazi/result" &&
+      url.searchParams.get("chart") === chartArtifact.chartId,
   );
-  await page
-    .getByRole("heading", { name: "编辑命理记录", exact: true })
-    .waitFor();
   console.log(
     "Agent 浏览器：真实登录、跨命盘工具调用、后台完成、刷新恢复、成果入口和一次扣费通过。",
   );
+  console.log('Agent UI：任务步骤分组、中文输入法、工具详情复制、聊天分析、原生命盘入口、Pi 上下文与右侧控件通过。');
 
   await page.goto(`${config.APP_ORIGIN}/chat?id=${first.run.conversationId}`);
   await page.locator('[data-agent-status="completed"]').waitFor();
   await uiReady();
+  await verifyAgentExperience({ page, context, origin: config.APP_ORIGIN, directory, conversationId: first.run.conversationId });
+  const savedDraft = '验收草稿：留在当前对话';
+  const newDraft = '验收草稿：留在新对话';
+  await composer().fill(savedDraft);
+  await newChat();
+  await uiReady();
+  await composer().fill(newDraft);
+  await page.goto(`${config.APP_ORIGIN}/chat?id=${first.run.conversationId}`);
+  await page.locator('[data-agent-status="completed"]').waitFor();
+  await uiReady();
+  assert.equal(await composer().inputValue(), savedDraft, 'switching conversations restores its own draft');
+  await page.reload();
+  await page.locator('[data-agent-status="completed"]').waitFor();
+  await uiReady();
+  assert.equal(await composer().inputValue(), savedDraft, 'refresh restores the session draft');
+  await composer().fill('');
+  await newChat();
+  await uiReady();
+  assert.equal(await composer().inputValue(), newDraft, 'the new conversation draft is independent');
+  await composer().fill('');
+  await page.goto(`${config.APP_ORIGIN}/chat?id=${first.run.conversationId}`);
+  await page.locator('[data-agent-status="completed"]').waitFor();
+  await uiReady();
+  console.log('聊天草稿：跨对话切换、刷新恢复、新对话隔离通过。');
   const regenerateResponse = page.waitForResponse(
     (response) =>
       new URL(response.url()).pathname === "/api/agent/runs" &&
@@ -240,7 +355,7 @@ try {
     .locator("textarea")
     .filter({ visible: true })
     .first()
-    .fill("Agent验收：编辑消息后跨命盘对比并保存。");
+    .fill("Agent验收：编辑消息后跨命盘对比，在聊天中分析。");
   await page.getByRole("button", { name: "发送", exact: true }).click();
   const editedResponse = await editResponse;
   assert.equal(editedResponse.status(), 201);
@@ -260,9 +375,21 @@ try {
   await page.goto(`${config.APP_ORIGIN}/chat?id=${second.run.conversationId}`);
   await page.locator('[data-agent-status="awaiting_input"]').waitFor();
   await page.getByText("补充信息后继续同一任务", { exact: true }).waitFor();
-  await page
-    .getByText("请补充出生年月日、出生时刻和性别。", { exact: true })
-    .waitFor();
+  const questionDialog = page.getByRole('dialog', { name: '需要你的补充', exact: true });
+  await questionDialog.waitFor();
+  await questionDialog.getByText('请补充出生年月日、出生时刻和性别。', { exact: true }).waitFor();
+  await questionDialog.getByLabel('你的回答', { exact: true }).fill('1990年1月15日9时，男。');
+  await page.setViewportSize({ width: 390, height: 844 });
+  for (let index = 0; index < 10; index++) await page.keyboard.press('Tab');
+  assert.ok(await questionDialog.evaluate(element => element.contains(document.activeElement)), 'question modal traps keyboard focus');
+  await page.screenshot({ path: path.join(directory, 'agent-question-mobile-acceptance.png'), fullPage: true });
+  await page.keyboard.press('Escape');
+  await questionDialog.waitFor({ state: 'hidden' });
+  assert.equal((await get(`/api/agent/runs/${second.run.id}`)).status, 'awaiting_input', 'dismissing leaves the same task waiting');
+  const answerTrigger = page.getByRole('button', { name: '回答问题', exact: true });
+  assert.ok(await answerTrigger.evaluate(element => element === document.activeElement), 'modal dismissal restores trigger focus');
+  await answerTrigger.click();
+  assert.equal(await questionDialog.getByLabel('你的回答', { exact: true }).inputValue(), '1990年1月15日9时，男。', 'reopening keeps the answer draft');
   await uiReady();
   const replyResponse = page.waitForResponse(
     (response) =>
@@ -270,11 +397,42 @@ try {
         `/api/agent/runs/${second.run.id}/messages` &&
       response.request().method() === "POST",
   );
-  await composer().fill("1990年1月15日9时，男。");
-  await composer().press("Enter");
-  assert.ok((await replyResponse).ok());
+  await questionDialog.getByRole('button', { name: '下一步', exact: true }).click();
+  await page.getByRole('dialog', { name: '确认回答', exact: true }).getByRole('button', { name: '提交并继续', exact: true }).click();
+  const reply = await replyResponse;
+  assert.ok(reply.ok());
+  assert.equal(reply.request().postDataJSON().mode, 'reply');
+  const replyPayload = await reply.json();
+  assert.equal(replyPayload.message.metadata.agentRunId, second.run.id);
+  await questionDialog.waitFor({ state: 'hidden' });
   await waitForRun(second.run.id, "completed");
   await page.locator('[data-agent-status="completed"]').waitFor();
+  const assertReplyOrder = async () => {
+    await uiReady();
+    const order = await page.locator('[data-message-id]').evaluateAll(elements => elements.map(element => element.getAttribute('data-message-id')));
+    assert.ok(order.indexOf(replyPayload.message.id) >= 0 && order.indexOf(replyPayload.message.id) < order.indexOf(second.run.message.id), 'the task response follows the in-run answer');
+  };
+  await assertReplyOrder();
+  const legacyReplyPattern = `${config.APP_ORIGIN}/api/conversations/${second.run.conversationId}*`;
+  let legacyReplyLoads = 0;
+  const legacyReplyHistory = async route => {
+    if (route.request().method() !== 'GET') return route.continue();
+    const response = await route.fetch();
+    const payload = await response.json();
+    const savedReply = payload.conversation.messages.find(message => message.id === replyPayload.message.id);
+    assert.equal(savedReply.metadata.agentRunId, second.run.id, 'the task association survives persistence');
+    // Exercise old histories without modifying saved conversation data.
+    delete savedReply.metadata.agentRunId;
+    legacyReplyLoads++;
+    return route.fulfill({ response, json: payload });
+  };
+  await page.route(legacyReplyPattern, legacyReplyHistory);
+  await page.reload();
+  await page.locator('[data-agent-status="completed"]').waitFor();
+  assert.ok((await get(`/api/agent/runs/${second.run.id}`)).commandMessageIds.includes(replyPayload.message.id), 'the snapshot retains consumed answer IDs');
+  await assertReplyOrder();
+  assert.ok(legacyReplyLoads > 0, 'the reload exercises the legacy conversation fixture');
+  await page.unroute(legacyReplyPattern, legacyReplyHistory);
   assert.equal(
     await credits(),
     beforeReply - 1,
@@ -291,6 +449,50 @@ try {
     ),
     "mobile layout has no horizontal overflow",
   );
+  await page.getByRole('button', { name: '任务工作区', exact: true }).click();
+  const drawer = page.getByRole('dialog', { name: '任务工作区', exact: true });
+  await drawer.waitFor();
+  for (let index = 0; index < 12; index++) await page.keyboard.press('Tab');
+  assert.ok(await drawer.evaluate(element => element.contains(document.activeElement)), 'native workspace drawer keeps keyboard focus inside');
+  await page.screenshot({ path: path.join(directory, 'agent-workspace-mobile-acceptance.png'), fullPage: true });
+  await page.keyboard.press('Escape');
+  await drawer.waitFor({ state: 'hidden' });
+  assert.ok(await page.getByRole('button', { name: '任务工作区', exact: true }).evaluate(element => element === document.activeElement), 'closing the drawer restores focus to its trigger');
+  const conversationsTrigger = page.getByRole('button', { name: '打开聊天列表', exact: true });
+  await conversationsTrigger.click();
+  const conversationsDrawer = page.getByRole('dialog', { name: '聊天列表', exact: true });
+  await conversationsDrawer.waitFor();
+  const conversationActionsTrigger = conversationsDrawer.getByRole('button', { name: '更多操作', exact: true }).first();
+  await conversationActionsTrigger.click();
+  const conversationMenu = conversationsDrawer.getByRole('menu', { name: '会话操作', exact: true });
+  await conversationMenu.waitFor();
+  assert.ok(await conversationMenu.evaluate(element => element.closest('dialog')?.open), 'conversation actions remain in the native drawer top layer');
+  await page.keyboard.press('Escape');
+  await conversationMenu.waitFor({ state: 'hidden' });
+  assert.ok(await conversationsDrawer.isVisible(), 'the first Escape closes only the nested menu');
+  assert.ok(await conversationActionsTrigger.evaluate(element => element === document.activeElement), 'nested menu dismissal restores its trigger focus');
+  await page.keyboard.press('Escape');
+  await conversationsDrawer.waitFor({ state: 'hidden' });
+  assert.ok(await conversationsTrigger.evaluate(element => element === document.activeElement), 'closing the conversation drawer restores focus to its trigger');
+  await page.setViewportSize({ width: 320, height: 740 });
+  assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), '320px layout has no horizontal overflow');
+  const inputBounds = await composer().boundingBox();
+  const toolbarBounds = await page.locator('.chat-composer-toolbar').boundingBox();
+  assert.ok(inputBounds && toolbarBounds && toolbarBounds.x >= 0 && toolbarBounds.x + toolbarBounds.width <= 321, 'composer controls stay inside the narrow viewport');
+  assert.ok(await page.locator('.chat-composer-toolbar').evaluate(element => [...element.querySelectorAll('button')]
+    .filter(button => button.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true }))
+    .every(button => { const bounds = button.getBoundingClientRect(); return bounds.left >= 0 && bounds.right <= window.innerWidth + 1; })), 'every visible composer control fits at 320px');
+  const modelTrigger = page.getByRole('button', { name: /^选择模型：/ });
+  await modelTrigger.click();
+  const modelMenu = page.locator('.chat-model-menu');
+  await modelMenu.waitFor();
+  const modelMenuBounds = await modelMenu.boundingBox();
+  assert.ok(modelMenuBounds && modelMenuBounds.x >= 0 && modelMenuBounds.x + modelMenuBounds.width <= 321, 'model menu fits the 320px viewport');
+  await page.keyboard.press('Escape');
+  await modelMenu.waitFor({ state: 'hidden' });
+  assert.ok(await modelTrigger.evaluate(element => element === document.activeElement), 'closing the model menu restores its trigger focus');
+  await modelTrigger.click();
+  await modelMenu.getByRole('menuitemradio', { name: '本地离线演示', exact: true }).click();
   await page.setViewportSize({ width: 1440, height: 1100 });
   console.log("Agent 浏览器：等待补充、刷新后继续同一任务、移动端布局通过。");
 
@@ -299,6 +501,8 @@ try {
   const third = await send("Agent验收：补充信息，请先询问，等待时停止。");
   await waitForRun(third.run.id, "awaiting_input");
   await page.locator('[data-agent-status="awaiting_input"]').waitFor();
+  await page.getByRole('dialog', { name: '需要你的补充', exact: true }).waitFor();
+  await page.keyboard.press('Escape');
   const cancelResponse = page.waitForResponse(
     (response) =>
       new URL(response.url()).pathname ===
@@ -321,7 +525,7 @@ try {
 
   await newChat();
   const beforeCrash = await credits();
-  const crash = await send("Agent验收：崩溃恢复，请排盘并保存最终分析。");
+  const crash = await send("Agent验收：崩溃恢复，请排盘并在聊天中分析。");
   for (let attempt = 0; attempt < 120; attempt++) {
     const progress = await get(`/api/agent/runs/${crash.run.id}`);
     if (
@@ -373,8 +577,10 @@ try {
     recovered.message.agent.parts.filter(
       (part) => part.type === "artifact" && part.recordId,
     ).length,
-    1,
+    0,
+    'takeover does not create an analysis record',
   );
+  assert.equal(recovered.message.agent.parts.filter(part => part.type === 'artifact' && part.chartId).length, 1);
   assert.equal(
     await credits(),
     beforeCrash - 1,
@@ -405,6 +611,74 @@ try {
     null,
     "plain chat uses the existing route",
   );
+
+  // Exercise reading behavior with controlled long transcripts, without altering saved messages.
+  let transcriptCount = 6;
+  const transcriptMessages = Array.from({ length: 26 }, (_, index) => ({
+    id: randomUUID(),
+    role: index % 2 ? 'assistant' : 'user',
+    createdAt: '2026-10-07T00:00:00.000Z',
+    content: index % 2
+      ? Array.from({ length: 24 }, (_, paragraph) => `阅读位置验收第 ${index + 1} 条，第 ${paragraph + 1} 段。展开阅读已有内容时，新输出与页面尺寸变化不应把读者拉回底部。`).join('\n\n')
+      : `阅读位置验收第 ${index + 1} 条`,
+  }));
+  await page.route(`${config.APP_ORIGIN}/api/conversations/${conversation}*`, async route => {
+    if (route.request().method() !== 'GET') return route.continue();
+    const response = await route.fetch();
+    const payload = await response.json();
+    payload.conversation.messages = transcriptMessages.slice(0, transcriptCount);
+    if (payload.pagination) payload.pagination = { ...payload.pagination, total: transcriptCount, hasMore: false, offset: 0 };
+    return route.fulfill({ response, json: payload });
+  });
+  for (const count of [6, 26]) {
+    transcriptCount = count;
+    await page.reload();
+    const transcript = page.locator(count > 20 ? '.chat-virtual-scroller' : '.chat-transcript-scroll');
+    await transcript.waitFor();
+    await page.waitForFunction(() => {
+      const element = document.querySelector('.chat-transcript-scroll, .chat-virtual-scroller');
+      return element && element.scrollHeight - element.clientHeight > 900;
+    });
+    const activeTitle = await page.locator('[data-conversation-row] button[aria-current="page"]').first().innerText();
+    const readingTop = await transcript.evaluate(element => {
+      element.scrollTop = 200;
+      element.dispatchEvent(new Event('scroll'));
+      return element.scrollTop;
+    });
+    await page.getByRole('button', { name: '回到最新消息', exact: true }).waitFor();
+    await page.getByRole('button', { name: '新建对话', exact: true }).click();
+    await page.locator('.chat-empty-state').waitFor();
+    await page.locator('[data-conversation-row]').filter({ hasText: activeTitle }).first().getByRole('button').first().click();
+    await transcript.waitFor();
+    await page.getByRole('button', { name: '回到最新消息', exact: true }).waitFor();
+    await page.waitForFunction(({ expected, virtualized }) => {
+      const element = document.querySelector('.chat-transcript-scroll, .chat-virtual-scroller');
+      if (!element) return false;
+      return virtualized
+        ? element.scrollTop < element.scrollHeight - element.clientHeight - 100
+        : Math.abs(element.scrollTop - expected) <= 2;
+    }, { expected: readingTop, virtualized: count > 20 });
+    const renderedRows = await page.locator('[data-message-id]').count();
+    if (count > 20) assert.ok(renderedRows < count, 'virtual transcripts keep the DOM smaller than the whole history');
+    // Keep the target away from the tail: at the bottom the jump button rightly hides.
+    const targetIndex = count === 6 ? 2 : 4;
+    await page.getByRole('button', { name: `定位第 ${targetIndex + 1} 条提问`, exact: true }).click();
+    await page.waitForFunction(id => {
+      const element = document.querySelector('.chat-transcript-scroll, .chat-virtual-scroller');
+      const message = element?.querySelector(`[data-message-id="${id}"]`);
+      if (!element || !message) return false;
+      const viewport = element.getBoundingClientRect(), row = message.getBoundingClientRect();
+      return row.top < viewport.bottom - 10 && row.bottom > viewport.top + 4;
+    }, transcriptMessages[targetIndex].id);
+    const firstScreen = await page.evaluate(() => performance.getEntriesByType('navigation')[0]?.domContentLoadedEventEnd ?? 0);
+    console.log(`阅读夹具：消息=${count}，DOM 消息=${renderedRows}，DOMContentLoaded=${Math.round(firstScreen)}ms；小地图定位通过。`);
+    await page.getByRole('button', { name: '回到最新消息', exact: true }).click();
+    await page.waitForFunction(() => {
+      const element = document.querySelector('.chat-transcript-scroll, .chat-virtual-scroller');
+      return element && element.scrollHeight - element.clientHeight - element.scrollTop < 50;
+    });
+  }
+  console.log('聊天阅读：普通与虚拟列表的阅读位置恢复、回到最新通过。');
   assert.deepEqual(outside, []);
   assert.deepEqual(errors, []);
   assert.deepEqual(failures, []);

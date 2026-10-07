@@ -1,0 +1,117 @@
+import test, { type TestContext } from 'node:test';
+import assert from 'node:assert/strict';
+import { randomUUID, createHash } from 'node:crypto';
+import { NextRequest } from 'next/server';
+import sharp from 'sharp';
+import { createMockAuthContext } from './helpers/supabase-mock';
+import { GET as search } from '../app/api/search/route';
+import { POST as enhance } from '../app/api/chat/enhance/route';
+import { POST as upload } from '../app/api/agent/attachments/route';
+import { GET as attachment } from '../app/api/agent/attachments/[id]/route';
+import { POST as fork } from '../app/api/conversations/[id]/fork/route';
+import { PATCH as configuration } from '../app/api/conversations/[id]/configuration/route';
+
+function fixture(t: TestContext) {
+    const owner = randomUUID(), id = randomUUID();
+    const calls: { table: string; field: string; value: unknown }[] = [];
+    const rows: Record<string, unknown> = {};
+    const errors: Record<string, unknown> = {};
+    const inserts: Record<string, unknown> = {};
+    let rpcError: unknown = null, rpcData: unknown = [];
+    const db = {
+        from(table: string) {
+            const result = () => ({ data: rows[table] ?? null, error: errors[table] ?? null });
+            const query = {
+                select: () => query, in: (field: string,value: unknown) => { calls.push({table,field,value}); return query; },
+                eq: (field: string,value: unknown) => { calls.push({table,field,value}); return query; },
+                insert: (value: unknown) => { inserts[table] = value; return query; },
+                update: (value: unknown) => { inserts[table] = value; return query; },
+                maybeSingle: async () => result(), single: async () => result(),
+                then: (resolve: (value: unknown) => void) => resolve(result()),
+            }; return query;
+        },
+        rpc: (_name: string, args?: Record<string, unknown>) => {
+            calls.push({table:'rpc',field:_name,value:args});
+            const result = Promise.resolve({ data: rpcData, error: rpcError });
+            return Object.assign(result, { abortSignal: () => result });
+        },
+        storage: { from: () => ({ upload: async () => ({error:null}), download: async () => ({data:new Blob(['资料正文']),error:null}) }) },
+    };
+    const api = require('../lib/api-utils') as typeof import('../lib/api-utils');
+    t.mock.method(api,'requireUserContext',async () => createMockAuthContext(db,owner));
+    t.mock.method(api,'getSystemAdminClient',() => db as unknown as ReturnType<typeof api.getSystemAdminClient>);
+    return { owner,id,db,calls,rows,errors,inserts,api,rpc(data:unknown,error:unknown=null){rpcData=data;rpcError=error;} };
+}
+const request = (url: string, body?: unknown) => new NextRequest(`http://localhost${url}`, body === undefined ? {} : { method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body) });
+const params = (id:string) => ({params:Promise.resolve({id})});
+
+test('search validates literals, forwards request cancellation and reports bounded database timeouts',async t => {
+    const f=fixture(t); f.rpc([{conversationId:f.id,messageId:'visible',preview:'literal_%'}]);
+    const success=await search(request('/api/search?q=literal_%25')); assert.equal(success.status,200);
+    assert.deepEqual(f.calls[0].value,{p_query:'literal_%',p_limit:30});
+    assert.equal((await search(request('/api/search?q='))).status,400);
+    f.rpc(null,{code:'57014'}); assert.equal((await search(request('/api/search?q=query'))).status,504);
+    t.mock.method(f.api,'requireUserContext',async()=>({error:{message:'请登录',status:401}}));
+    assert.equal((await search(request('/api/search?q=query'))).status,401);
+});
+
+test('enhancement rejects free users and claims quota before every actual call without a debit',async t => {
+    const f=fixture(t); let membership:'free'|'plus'='free'; let attempts=0;
+    const credits=require('../lib/user/credits') as typeof import('../lib/user/credits');
+    const guard=require('../lib/api/ai-feature-guard') as typeof import('../lib/api/ai-feature-guard');
+    const configs=require('../lib/server/ai-config') as typeof import('../lib/server/ai-config');
+    const ai=require('../lib/ai/ai') as typeof import('../lib/ai/ai');
+    t.mock.method(guard,'getGlobalAIFeatureGuardResponse',async()=>null);
+    t.mock.method(credits,'getUserAuthInfo',async()=>({effectiveMembership:membership,credits:10,hasCredits:true}));
+    t.mock.method(configs,'getModelConfigAsync',async()=>({id:'fixture',name:'fixture',vendor:'other',apiKeyEnvVar:'KEY',requiredTier:'free'}));
+    t.mock.method(ai,'callAI',async (...args: Parameters<typeof ai.callAI>) => { await args[4]?.beforeModelAttempt?.(); attempts++; return '清晰的问题'; });
+    assert.equal((await enhance(request('/api/chat/enhance',{text:'问题',model:'fixture'}))).status,403); assert.equal(attempts,0);
+    membership='plus'; f.rpc(true);
+    assert.equal((await enhance(request('/api/chat/enhance',{text:'问题',model:'fixture'}))).status,200); assert.equal(attempts,1);
+    f.rpc(false); assert.equal((await enhance(request('/api/chat/enhance',{text:'问题',model:'fixture'}))).status,429); assert.equal(attempts,1);
+    assert.ok(f.calls.every(call=>call.field==='claim_prompt_enhancement'));
+});
+
+test('private upload validates real image bytes, downsamples and stores only an owned ID',async t => {
+    const f=fixture(t); const bytes=await sharp({create:{width:2200,height:1,channels:3,background:'#123456'}}).png().toBuffer();
+    const form=new FormData(); form.append('file',new File([bytes],'fixture.png',{type:'image/png'}));
+    f.rows.agent_attachments={id:f.id,user_id:f.owner,name:'fixture.png',kind:'image',mime_type:'image/jpeg',size:10,sha256:'digest',status:'ready',width:2048,height:1};
+    const response=await upload(new NextRequest('http://localhost/api/agent/attachments',{method:'POST',body:form}));
+    assert.equal(response.status,201);
+    const row=f.inserts.agent_attachments as {status:string}; assert.equal(row.status,'ready');
+    const body=await response.json(); assert.equal(body.attachment.id,f.id); assert.equal(body.attachment.width,2048); assert.ok(!JSON.stringify(body).includes('object_path'));
+    const invalid=new FormData(); invalid.append('file',new File(['not an image'],'bad.png',{type:'image/png'}));
+    assert.equal((await upload(new NextRequest('http://localhost/api/agent/attachments',{method:'POST',body:invalid}))).status,400);
+});
+
+test('private text reads verify ownership, hash and pagination; unavailable IDs stay private',async t => {
+    const f=fixture(t); const bytes=Buffer.from('资料正文');
+    f.rows.agent_attachments=[{id:f.id,user_id:f.owner,object_path:`${f.owner}/${f.id}`,name:'资料.txt',kind:'text',mime_type:'text/plain',size:bytes.length,sha256:createHash('sha256').update(bytes).digest('hex'),status:'ready'}];
+    const response=await attachment(request(`/api/agent/attachments/${f.id}?content=1&offset=1&length=2`),params(f.id));
+    assert.equal(response.status,200); assert.equal((await response.json()).text,'料正');
+    assert.ok(f.calls.some(call=>call.field==='user_id' && call.value===f.owner));
+    f.rows.agent_attachments=[]; assert.equal((await attachment(request(`/api/agent/attachments/${f.id}`),params(f.id))).status,404);
+    assert.equal((await attachment(request('/api/agent/attachments/invalid'),params('invalid'))).status,400);
+});
+
+test('fork API owner scopes its snapshot, discards active state and reports a branch race',async t => {
+    const f=fixture(t); const history=[{id:'u',role:'user',content:'问题',createdAt:'now'},{id:'a',role:'assistant',content:'回答',createdAt:'now'}];
+    const loader=require('../lib/server/conversation-messages') as typeof import('../lib/server/conversation-messages');
+    t.mock.method(loader,'loadAllConversationMessages',async()=>({messages:history,error:null}));
+    f.rows.conversations={id:f.id,title:'标题',messages:history}; f.rpc(randomUUID());
+    assert.equal((await fork(request('/fork',{messageId:'a'}),params(f.id))).status,200);
+    const value=f.calls.find(call=>call.field==='fork_conversation_snapshot')?.value as {p_messages:{id:string;metadata:{forkHistory:boolean}}[]} | undefined;
+    assert.ok(value);
+    assert.equal(value.p_messages.length,2); assert.ok(value.p_messages.every(message=>message.metadata.forkHistory)); assert.notEqual(value.p_messages[0].id,'u');
+    assert.ok(f.calls.some(call=>call.field==='user_id' && call.value===f.owner));
+    f.rpc(null,{code:'40001'}); assert.equal((await fork(request('/fork',{messageId:'a'}),params(f.id))).status,409);
+    f.rows.conversations=null; assert.equal((await fork(request('/fork',{messageId:'a'}),params(f.id))).status,404);
+});
+
+test('next-task preferences reject malformed values and strip keys from the stored preference',async t => {
+    const f=fixture(t); f.rows.conversations={id:f.id};
+    const saved=await configuration(request('/configuration',{model:'fixture',reasoning:false,webEnabled:false,apiKey:'private'}),params(f.id)); assert.equal(saved?.status,200);
+    assert.deepEqual(f.inserts.conversations,{next_task_config:{model:'fixture',reasoning:false,webEnabled:false}});
+    const malformed=await configuration(request('/configuration',{model:'fixture',reasoning:'yes',webEnabled:false}),params(f.id)); assert.equal(malformed?.status,400);
+    f.rows.conversations=null; const missing=await configuration(request('/configuration',{model:'fixture',reasoning:false,webEnabled:false}),params(f.id)); assert.equal(missing?.status,404);
+});

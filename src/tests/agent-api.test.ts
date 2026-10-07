@@ -34,6 +34,7 @@ function setup(t: TestContext) {
     writes: Array<{ name: string; args: Record<string, unknown> }> = [];
   const client = createMockSupabaseClient({
     tables: {
+      agent_run_commands: { data: null },
       conversations: {
         data: { id: conversation, messages: [], title: "fixture" },
       },
@@ -90,6 +91,11 @@ function setup(t: TestContext) {
   );
   t.mock.method(AgentStore.prototype, "workerReady", async () => true);
   t.mock.method(AgentStore.prototype, "currentRun", async () => null);
+  t.mock.method(AgentStore.prototype, 'commands', async (run: AgentRunRow, options?: { includeConsumed?: boolean }) => {
+    assert.equal(run.user_id, owner);
+    assert.equal(options?.includeConsumed, true);
+    return [];
+  });
   t.mock.method(
     AgentStore.prototype,
     "rpc",
@@ -268,6 +274,57 @@ test("Agent malformed inputs, private custom URLs, authentication and cross-user
     401,
   );
   assert.equal(fixture.writes.length, 0);
+});
+
+test('public task views include consumed input IDs while execution reads only pending inputs from that task', async () => {
+  const rows = [
+    { run_id: 'run', consumed: false, sequence: 1, message: { id: 'pending' } },
+    { run_id: 'run', consumed: true, sequence: 2, message: { id: 'consumed' } },
+    { run_id: 'other', consumed: true, sequence: 3, message: { id: 'foreign' } },
+  ];
+  const store = new AgentStore({
+    from: (table: string) => {
+      assert.equal(table, 'agent_run_commands');
+      const filters: Array<[string, unknown]> = [];
+      const query = {
+        select: () => query,
+        eq: (field: string, value: unknown) => { filters.push([field, value]); return query; },
+        order: (field: string) => { assert.ok(['sort_order','sequence'].includes(field)); return query; },
+        then: (resolve: (value: unknown) => void) => resolve({ data: rows.filter(row => filters.every(([key, value]) => row[key as keyof typeof row] === value)), error: null }),
+      };
+      return query;
+    },
+  } as unknown as ConstructorParameters<typeof AgentStore>[0]);
+  const run = { id: 'run', status: 'completed', input: { model:'fixture',reasoning:false,webEnabled:false }, public_message: { id: 'agent:run', role: 'assistant', content: '', createdAt: '' } } as AgentRunRow;
+  assert.deepEqual((await store.commands(run)).map(command => command.message.id), ['pending']);
+  assert.deepEqual((await store.view(run)).commandMessageIds, ['pending', 'consumed']);
+});
+
+test('Agent commands persist a server-owned task association and discard supplied metadata', async (t) => {
+  const fixture = setup(t), id = randomUUID();
+  const run = {
+    id, user_id: fixture.owner, conversation_id: fixture.conversation, input: { model:'fixture',reasoning:false,webEnabled:false }, checkpoint: {}, status: 'awaiting_input', event_cursor: 1,
+    created_at: '2026-01-01', public_message: {
+      id: `agent:${id}`, role: 'assistant', content: '', createdAt: '2026-01-01',
+      agent: { version: 1, runId: id, status: 'awaiting_input', parts: [] },
+    },
+  } as unknown as AgentRunRow;
+  t.mock.method(AgentStore.prototype, 'getRun', async (_id: string, owner: string) => {
+    assert.equal(_id, id);
+    assert.equal(owner, fixture.owner);
+    return run;
+  });
+  t.mock.method(AgentStore.prototype, 'rpc', async (name: string, args: Record<string, unknown>) => {
+    assert.equal(name, 'agent_submit_command');
+    const message = args.p_message as { metadata: unknown };
+    assert.deepEqual(JSON.parse(JSON.stringify(message.metadata)), { agentRunId: id, agentCommandMode: args.p_mode });
+    return { message };
+  });
+  for (const mode of ['reply', 'steer', 'follow_up']) {
+    const response = await agentEndpoint(() => controlAgentTask(fixture.request({ content: '补充回答', clientRequestId: randomUUID(), mode, metadata: { agentRunId: 'forged' } }), id, 'message'));
+    assert.equal(response.status, 200);
+    assert.deepEqual((await response.json()).message.metadata, { agentRunId: id, agentCommandMode: mode });
+  }
 });
 
 test("Agent SSE replays stored event IDs then one atomic public snapshot with a resumable cursor", async (t) => {
