@@ -50,6 +50,7 @@ export const almanacOutputSchema: OutputSchema = obj({
   }),
   时辰吉凶: arr(obj({
     时辰: str('时辰'),
+    时间范围: str('时间范围'),
     天神: str('天神'),
     天神类型: str('天神类型'),
     天神吉凶: str('天神吉凶'),

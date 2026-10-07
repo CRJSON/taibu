@@ -87,6 +87,33 @@ test('astrology renderers should keep full-only extensions opt-in', () => {
   assert.match(fullText, /## 黄道分界/u);
 });
 
+test('astrology keeps explicit timezone provenance when coordinates are omitted', () => {
+  const input = {
+    birthYear: sampleInput.birthYear,
+    birthMonth: sampleInput.birthMonth,
+    birthDay: sampleInput.birthDay,
+    birthHour: sampleInput.birthHour,
+    birthMinute: sampleInput.birthMinute,
+    birthPlace: sampleInput.birthPlace,
+    transitDateTime: sampleInput.transitDateTime,
+  };
+  const provided = calculateAstrology({ ...input, timezone: 'Asia/Shanghai' });
+  assert.equal(provided.chartMeta.calculationMode, 'approximate');
+  assert.equal(provided.natal.origin.timezoneSource, 'provided');
+  assert.equal(provided.natal.origin.utcDateTime, '1990-01-01T04:30:00.000Z');
+  assert.equal(provided.natal.houses.length, 0);
+  assert.equal(toAstrologyJson(provided).基础坐标.本命时区, 'Asia/Shanghai');
+  assert.match(toAstrologyText(provided), /本命时区: Asia\/Shanghai/);
+  const assumed = calculateAstrology(input);
+  assert.equal(assumed.natal.origin.timezoneSource, 'default');
+  assert.match(toAstrologyJson(assumed).基础坐标.本命时区, /未提供/);
+  const derived = calculateAstrology(sampleInput);
+  assert.equal(derived.natal.origin.timezoneSource, 'coordinates');
+  const legacy = structuredClone(provided);
+  delete legacy.natal.origin.timezoneSource;
+  assert.equal(toAstrologyJson(legacy).基础坐标.本命时区, 'Asia/Shanghai');
+});
+
 test('astrology should degrade to an approximate chart when coordinates are omitted in default/more mode', () => {
   const result = calculateAstrology({
     birthYear: 1990,
@@ -136,8 +163,8 @@ test('astrology should degrade to an approximate chart when coordinates are omit
 
 test('astrology should reject unsupported house systems and invalid coordinates', () => {
   assert.throws(
-    () => calculateAstrology({ ...sampleInput, houseSystem: 'whole-sign' }),
-    /placidus/u,
+    () => calculateAstrology({ ...sampleInput, houseSystem: 'unknown' }),
+    /houseSystem/u,
   );
   assert.throws(
     () => calculateAstrology({ ...sampleInput, latitude: 200 }),

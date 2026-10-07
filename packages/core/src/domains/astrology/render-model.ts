@@ -151,13 +151,13 @@ export function buildAstrologyRenderModel(
       coordinatesLabel: isApproximate
         ? `未提供（按 ${result.natal.origin.latitude}, ${result.natal.origin.longitude} 近似）`
         : `${result.natal.origin.latitude}, ${result.natal.origin.longitude}`,
-      natalTimeZoneLabel: isApproximate
+      natalTimeZoneLabel: result.natal.origin.timezoneSource === 'default'
         ? `未提供（按 ${result.natal.origin.derivedTimeZone} 近似）`
         : result.natal.origin.derivedTimeZone,
       natalDateTime: result.natal.origin.localDateTime,
       transitDateTime: result.transit.origin.localDateTime,
-      zodiacLabel: 'Tropical',
-      houseSystemLabel: 'Placidus',
+      zodiacLabel: result.chartMeta.zodiac === 'sidereal' ? `Sidereal（自定义固定偏移 ${result.chartMeta.ayanamsa}°）` : 'Tropical',
+      houseSystemLabel: ({ placidus: 'Placidus', 'equal-house': 'Equal House', 'whole-sign': 'Whole Sign', koch: 'Koch', campanus: 'Campanus', regiomontanus: 'Regiomontanus', topocentric: 'Topocentric' })[result.chartMeta.houseSystem],
     },
     anchors: {
       sun,

@@ -96,7 +96,7 @@ export async function POST(request: NextRequest) {
                 // 获取用户的八字命盘
                 const { data: chartData } = await db
                     .from('bazi_charts')
-                    .select('gender, birth_date, birth_time, birth_place, longitude, calendar_type, is_leap_month')
+                    .select('gender, birth_date, birth_time, birth_place, longitude, calendar_type, is_leap_month, timezone, disambiguation')
                     .eq('user_id', user.id)
                     .order('created_at', { ascending: false })
                     .limit(1)

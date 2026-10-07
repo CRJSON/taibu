@@ -115,6 +115,7 @@ export type LiuyaoAISafeTransitionJSON = LiuyaoTransitionJSON;
 export type LiuyaoAISafeResonanceJSON = LiuyaoResonanceJSON;
 
 export interface LiuyaoCanonicalJSON {
+  计算规则?: Record<string, unknown>;
   卦盘: {
     问题?: string;
     本卦: {

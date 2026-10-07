@@ -1,8 +1,11 @@
+import { withRulesText } from '../../shared/calculation-rules.js';
 import type {
   BaziPillarsResolveOutput
 } from './types.js';
 
-export function renderBaziPillarsResolveCanonicalText(result: BaziPillarsResolveOutput): string {
+export const renderBaziPillarsResolveCanonicalText = withRulesText(renderBaziPillarsResolveCanonicalTextBase);
+
+function renderBaziPillarsResolveCanonicalTextBase(result: BaziPillarsResolveOutput): string {
   const lines: string[] = [
     '# 四柱反推候选时间',
     '',
@@ -30,9 +33,10 @@ export function renderBaziPillarsResolveCanonicalText(result: BaziPillarsResolve
     lines.push(`### 候选 ${index + 1}`);
     lines.push(`- **农历**: ${candidate.lunarText}`);
     lines.push(`- **公历**: ${candidate.solarText}`);
+    if (candidate.timeWindow) lines.push(`- **时间区间**: [${candidate.timeWindow.start}, ${candidate.timeWindow.end}) ${candidate.timeWindow.timezone}（分钟精度，结束不含）`);
     lines.push(`- **出生时间**: ${candidate.birthHour}:${String(candidate.birthMinute).padStart(2, '0')}`);
     if (candidate.isLeapMonth) lines.push('- **闰月**: 是');
-    lines.push('- **下一步**: 使用 `bazi` 并补充 gender');
+    lines.push(`- **下一步**: 使用 \`bazi\` 并补充 gender${candidate.nextCall.arguments.calendarType === 'solar' ? '（该候选使用公历出生参数）' : ''}`);
   }
 
   return lines.join('\n');

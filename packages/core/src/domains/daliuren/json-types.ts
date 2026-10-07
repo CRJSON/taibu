@@ -1,4 +1,5 @@
 export interface DaliurenCanonicalJSON {
+  计算规则?: Record<string, unknown>;
   基本信息: {
     占事?: string;
     占测时间: string;
@@ -17,6 +18,7 @@ export interface DaliurenCanonicalJSON {
     本命?: string;
     行年?: string;
     附加课体?: string[];
+    细分课体?: string[];
   };
   四课: Array<{
     课别: string;
@@ -41,4 +43,5 @@ export interface DaliurenCanonicalJSON {
     长生十二神: string;
     建除?: string;
   }>;
+  神煞?: { 名称: string; 落点: string; 说明?: string; }[];
 }

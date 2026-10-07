@@ -18,6 +18,7 @@ export interface BaziInput extends BirthTimeInput {
   gender: Gender;
   birthPlace?: string;
   longitude?: number;
+  dayBoundary?: 'midnight' | 'zi';
 }
 
 export interface BaziOutput {
@@ -39,6 +40,7 @@ export interface BaziOutput {
   taiYuan?: string;
   mingGong?: string;
   trueSolarTimeInfo?: TrueSolarTimeInfo;
+  calculationOptions?: { dayBoundary: 'midnight' | 'zi'; timezone: string; solarTermBasis: 'instant'; disambiguation?: BirthTimeInput['disambiguation']; ruleVersion?: string; };
 }
 
 export interface BaziFiveElementsStats {
@@ -70,6 +72,10 @@ export interface BaziLiuYueInfo {
   jieQi: string;
   startDate: string;
   endDate: string;
+  startDateTime?: string;
+  endDateTime?: string;
+  endExclusive?: boolean;
+  timezone?: string;
   gan?: string;
   zhi?: string;
   tenGod?: string;

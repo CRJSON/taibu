@@ -1,3 +1,4 @@
+import { withRulesJSON } from '../../shared/calculation-rules.js';
 import type {
   MeihuaCanonicalJSON
 } from './json-types.js';
@@ -67,7 +68,8 @@ function findInteractionReading(result: MeihuaOutput, stage: MeihuaInteractionRe
   return result.interactionReadings.find((item) => item.stage === stage);
 }
 
-export function renderMeihuaCanonicalJSON(
+export const renderMeihuaCanonicalJSON = withRulesJSON(renderMeihuaCanonicalJSONBase);
+function renderMeihuaCanonicalJSONBase(
   result: MeihuaOutput,
   options: MeihuaCanonicalTextOptions = {},
 ): MeihuaCanonicalJSON {

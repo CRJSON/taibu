@@ -19,6 +19,8 @@ export interface BirthTimeInput {
   birthMinute?: number;
   calendarType?: CalendarType;
   isLeapMonth?: boolean;
+  timezone?: string;
+  disambiguation?: 'reject' | 'earlier' | 'later' | 'compatible';
 }
 
 export interface HiddenStemInfo {
@@ -99,6 +101,10 @@ export interface TrueSolarTimeInfo {
   trueTimeIndex: number;
   /** 跨日偏移（-1=前一天, 0=当天, 1=后一天） */
   dayOffset: number;
+  timezone?: string;
+  utcOffsetMinutes?: number;
+  equationOfTimeMinutes?: number;
+  ruleVersion?: string;
 }
 
 export interface PalaceInfo {
@@ -358,6 +364,8 @@ export interface DirectionsInfo {
 
 export interface HourlyFortuneInfo {
   ganZhi: string;       // 时辰干支
+  startTime?: string;
+  endTime?: string;
   tianShen: string;     // 时辰天神
   tianShenType: string; // 黄道/黑道
   tianShenLuck: string; // 吉/凶

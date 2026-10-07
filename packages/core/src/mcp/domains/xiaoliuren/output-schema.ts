@@ -2,6 +2,7 @@ import{
   obj,
   str,
   num,
+  bool,
   type OutputSchema,
 } from '../../schema-builders.js';
 
@@ -12,6 +13,10 @@ export const xiaoliurenOutputSchema: OutputSchema = obj({
     农历日: num('农历日'),
     时辰: str('时辰名称'),
     时辰序号: num('时辰序号'),
+    公历日期: str('公历日期'),
+    闰月: bool('闰月标记'),
+    闰月取法: str('闰月计数策略'),
+    小时输入口径: str('小时输入口径'),
   }),
   推演链: obj({
     月上起: str('月上起落点'),

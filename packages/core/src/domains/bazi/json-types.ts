@@ -5,6 +5,7 @@ import type {
 } from '../shared/json-types.js';
 
 export interface BaziCanonicalJSON {
+  计算规则?: Record<string, unknown>;
   基本信息: {
     性别: string;
     日主: string;

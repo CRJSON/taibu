@@ -150,6 +150,30 @@ const routeSpecs: RouteBindingSpec[] = [
         },
     },
     {
+        name: 'hepan-time-rules',
+        routeModulePath: '../app/api/hepan/route',
+        url: 'http://localhost/api/hepan',
+        buildBody: () => ({
+            action: 'analyze', stream: true,
+            result: {
+                type: 'love',
+                person1: { name: 'A', year: 1990, month: 1, day: 1, hour: 1, minute: 47, timezone: 'America/New_York', disambiguation: 'later' },
+                person2: { name: 'B', year: 1991, month: 2, day: 2, hour: 2, minute: 30, calendarType: 'lunar', isLeapMonth: false, longitude: 73 },
+                overallScore: 80, dimensions: [{ name: '测试', score: 80, description: 'ok' }], conflicts: [], createdAt: new Date(),
+            },
+        }),
+        assertCreateArgs: (createArgs) => {
+            const payload = createArgs.historyBinding?.payload;
+            const first = payload?.person1_birth as Record<string, unknown>;
+            const second = payload?.person2_birth as Record<string, unknown>;
+            assert.equal(first.timezone, 'America/New_York');
+            assert.equal(first.disambiguation, 'later');
+            assert.equal(first.minute, 47);
+            assert.equal(second.calendarType, 'lunar');
+            assert.equal(second.longitude, 73);
+        },
+    },
+    {
         name: 'daliuren',
         routeModulePath: '../app/api/daliuren/route',
         url: 'http://localhost/api/daliuren',

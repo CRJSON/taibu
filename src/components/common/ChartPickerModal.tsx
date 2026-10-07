@@ -11,8 +11,10 @@ import { X, Search, Star } from 'lucide-react';
 import { YinYangIcon } from '@phosphor-icons/react';
 import { useToast } from '@/components/ui/Toast';
 import { useUserCharts } from '@/lib/hooks/useUserCharts';
+import type { UserChartRecord } from '@/lib/user/charts-client';
+import { parseBirthTimeString } from '@/lib/divination/birth-time';
 
-export interface ChartItem {
+export interface ChartItem extends Pick<UserChartRecord, 'timezone' | 'disambiguation' | 'longitude' | 'calendar_type' | 'is_leap_month'> {
     id: string;
     name: string;
     gender: 'male' | 'female' | null;
@@ -22,6 +24,7 @@ export interface ChartItem {
     birth_month?: number;
     birth_day?: number;
     birth_hour?: number;
+    birth_minute?: number;
     type: 'bazi' | 'ziwei';
 }
 
@@ -67,15 +70,15 @@ export function ChartPickerModal({
         ...(query.data?.baziCharts ?? []).map(chart => ({ ...chart, type: 'bazi' as const })),
         ...(query.data?.ziweiCharts ?? []).map(chart => ({ ...chart, type: 'ziwei' as const })),
     ].filter(chart => !filterType || chart.type === filterType).map(chart => {
-        const date = new Date(`${chart.birth_date}T00:00:00`);
-        const rawHour = chart.birth_time?.split(':')[0];
-        const hour = rawHour === undefined ? NaN : parseInt(rawHour, 10);
+        const [year, month, day] = chart.birth_date.split('-').map(Number);
+        const time = chart.birth_time ? parseBirthTimeString(chart.birth_time) : null;
         return {
             ...chart,
-            birth_year: date.getFullYear(),
-            birth_month: date.getMonth() + 1,
-            birth_day: date.getDate(),
-            birth_hour: Number.isNaN(hour) ? undefined : hour,
+            birth_year: year,
+            birth_month: month,
+            birth_day: day,
+            birth_hour: time?.hour,
+            birth_minute: time?.minute,
         };
     }), [filterType, query.data]);
 

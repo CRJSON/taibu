@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { CoreInputError } from './validation.js';
 
 const UINT32_MAX_PLUS_ONE = 0x1_0000_0000;
 
@@ -29,6 +30,8 @@ export function resolveSeed(
   fallback: string,
   scope?: string
 ): string {
+  if (inputSeed !== undefined && typeof inputSeed !== 'string') throw new CoreInputError('seed', '必须是字符串');
+  if (scope !== undefined && typeof scope !== 'string') throw new CoreInputError('seedScope', '必须是字符串');
   const normalized = inputSeed?.trim();
   const base = normalized || hashSeed(fallback);
   const scoped = scope?.trim();

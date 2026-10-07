@@ -21,6 +21,7 @@ import { buildVisualizationPreferencePrompts } from '@/lib/visualization/prompt'
 import { SOURCE_CHART_TYPE_MAP, type ChartType } from '@/lib/visualization/chart-types';
 import { checkRateLimit, getClientIP } from '@/lib/rate-limit';
 import { generateBaziAnalysisTitle } from '@/lib/ai/ai-analysis';
+import type { BirthTimeResolution } from '@/lib/divination/birth-time';
 
 const RATE_LIMIT_CONFIG = {
     maxRequests: 10,
@@ -84,7 +85,7 @@ interface BaziAnalysisInput extends InterpretInput {
     type: BaziAnalysisType;
 }
 
-type LoadedBaziChart = {
+type LoadedBaziChart = BirthTimeResolution & {
     id: string;
     name: string | null;
     user_id: string;
@@ -148,7 +149,7 @@ const baziAnalysisConfig: DivinationRouteConfig<BaziAnalysisInput, BaziAnalysisC
         const supabase = db;
         const { data: chart, error: chartError } = await supabase
             .from('bazi_charts')
-            .select('id, name, user_id, gender, birth_date, birth_time, birth_place, longitude, calendar_type, is_leap_month')
+            .select('id, name, user_id, gender, birth_date, birth_time, birth_place, longitude, calendar_type, is_leap_month, timezone, disambiguation')
             .eq('id', input.chartId)
             .eq('user_id', userId)
             .single();
@@ -172,6 +173,8 @@ const baziAnalysisConfig: DivinationRouteConfig<BaziAnalysisInput, BaziAnalysisC
             longitude: resolvedChart.longitude ?? undefined,
             calendarType: (resolvedChart.calendar_type as 'solar' | 'lunar' | undefined) || 'solar',
             isLeapMonth: resolvedChart.is_leap_month || false,
+            timezone: resolvedChart.timezone,
+            disambiguation: resolvedChart.disambiguation,
         }, caseProfile, chartPromptDetailLevel);
 
         const { data: userSettingsRow } = await supabase

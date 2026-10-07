@@ -20,7 +20,9 @@ declare module 'lunar-javascript' {
     getDay(): number;
     getHour(): number;
     getMinute(): number;
+    getSecond(): number;
     toYmd(): string;
+    toYmdHms(): string;
     next(days: number, onlyWorkday?: boolean): Solar;
   }
 
@@ -48,6 +50,7 @@ declare module 'lunar-javascript' {
     getDayShengXiao(): string;
     getJieQi(): string | null;
     getPrevJieQi(): JieQi | null;
+    getPrevQi(wholeDay?: boolean): JieQi;
     getNextJieQi(): JieQi | null;
     getCurrentJie(): JieQi | null;
     getCurrentQi(): JieQi | null;
@@ -197,13 +200,16 @@ declare module 'lunar-javascript' {
     getMonthShiShenZhi(): string[];
     getDayShiShenZhi(): string[];
     getTimeShiShenZhi(): string[];
-    getYun(gender: number): Yun;
+    setSect(sect: number): void;
+    getYun(gender: number, sect?: number): Yun;
   }
 
   export class Yun {
     getStartYear(): number;
     getStartMonth(): number;
     getStartDay(): number;
+    getStartHour(): number;
+    isForward(): boolean;
     getStartSolar(): Solar;
     getDaYun(): DaYun[];
   }

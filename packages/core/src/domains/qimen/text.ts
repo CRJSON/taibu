@@ -1,3 +1,4 @@
+import { withRulesText } from '../../shared/calculation-rules.js';
 import {
   normalizeDetailLevelBinary
 } from '../../shared/render-utils.js';
@@ -9,13 +10,15 @@ import type {
   QimenCanonicalTextOptions
 } from '../shared/text-options.js';
 
-function formatQimenPalaceStateText(palace: QimenOutput['palaces'][number], dayKongPalaces: Set<number>, hourKongPalaces: Set<number>): string {
-  if (palace.palaceIndex === 5) return '(寄宫参看对应宫位)';
+function formatQimenPalaceStateText(palace: QimenOutput['palaces'][number], dayKongPalaces: Set<number>, hourKongPalaces: Set<number>, panType: QimenOutput['panType']): string {
+  if (palace.palaceIndex === 5 && panType !== 'fei' && panType !== '飞盘') return '(寄宫参看对应宫位)';
   const states = [
     dayKongPalaces.has(palace.palaceIndex) ? '日空' : null,
     hourKongPalaces.has(palace.palaceIndex) ? '时空' : null,
     palace.isYiMa ? '驿马' : null,
     palace.isRuMu ? '入墓' : null,
+    palace.isMenPo ? '门迫' : null,
+    palace.isJiXing ? '六仪击刑' : null,
   ].filter(Boolean).join('、');
   return states || '-';
 }
@@ -40,7 +43,9 @@ function formatQimenPalaceName(palace: QimenOutput['palaces'][number]): string {
   return `${palace.palaceName}${palace.palaceIndex}(${palace.element || '-'})`;
 }
 
-export function renderQimenCanonicalText(result: QimenOutput, options: QimenCanonicalTextOptions = {}): string {
+export const renderQimenCanonicalText = withRulesText(renderQimenCanonicalTextBase);
+
+function renderQimenCanonicalTextBase(result: QimenOutput, options: QimenCanonicalTextOptions = {}): string {
   const detailLevel = normalizeDetailLevelBinary(options.detailLevel);
   const dunText = result.dunType === 'yang' ? '阳遁' : '阴遁';
   const juLabel = `${dunText}${result.juNumber}局`;
@@ -76,16 +81,16 @@ export function renderQimenCanonicalText(result: QimenOutput, options: QimenCano
   }
 
   for (const palace of result.palaces) {
-    const starLabel = palace.star ? `${palace.star}(${palace.starElement || ''})` : '-';
+    const starLabel = [palace.star ? `${palace.star}(${palace.starElement || ''})` : '-', ...(palace.hostedStars ?? []).map(star => `${star}(寄)`)].join('、');
     const gateLabel = palace.gate ? `${palace.gate}(${palace.gateElement || ''})` : '-';
     const row = [
       formatQimenPalaceName(palace),
       palace.deity || '-',
       starLabel,
       gateLabel,
-      palace.heavenStem || '-',
-      palace.earthStem || '-',
-      formatQimenPalaceStateText(palace, dayKongPalaces, hourKongPalaces),
+      [palace.heavenStem || '-', ...(palace.hostedHeavenStems ?? []).map(stem => `${stem}(寄)`)].join('、'),
+      [palace.earthStem || '-', ...(palace.hostedEarthStems ?? []).map(stem => `${stem}(寄)`)].join('、'),
+      formatQimenPalaceStateText(palace, dayKongPalaces, hourKongPalaces, result.panType),
     ];
     if (detailLevel === 'full') {
       row.push(palace.direction || '-');

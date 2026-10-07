@@ -2,8 +2,9 @@ import type { CalendarType, Gender } from '@/types';
 import { calculateBaziChartBundle, generateBaziChartText } from '@/lib/divination/bazi';
 import { formatBaziCaseProfileForAI, type BaziCaseProfile } from '@/lib/bazi-case-profile';
 import { resolveChartTextDetailLevel, type ChartTextDetailLevel } from '@/lib/divination/detail-level';
+import { resolveBirthTimeOptions, type BirthTimeResolution } from '@/lib/divination/birth-time';
 
-export type BaziPromptInput = {
+export type BaziPromptInput = BirthTimeResolution & {
     id?: string;
     name?: string;
     gender?: Gender | string;
@@ -46,6 +47,7 @@ function rebuildBaziChart(chart: BaziPromptInput): ResolvedBaziPromptData | null
             longitude: chart.longitude,
             calendarType: chart.calendarType === 'lunar' ? 'lunar' : 'solar',
             isLeapMonth: chart.isLeapMonth ?? false,
+            ...resolveBirthTimeOptions(chart),
         });
     } catch {
         return null;

@@ -1,9 +1,11 @@
+import { withRulesJSON } from '../../shared/calculation-rules.js';
 import type { XiaoliurenCanonicalJSON } from './json-types.js';
 import type { XiaoliurenOutput } from './types.js';
 import type { XiaoliurenCanonicalTextOptions } from './text.js';
 import { normalizeDetailLevelBinary } from '../../shared/render-utils.js';
 
-export function toXiaoliurenJson(
+export const toXiaoliurenJson = withRulesJSON(toXiaoliurenJsonBase);
+function toXiaoliurenJsonBase(
   output: XiaoliurenOutput,
   options: XiaoliurenCanonicalTextOptions = {},
 ): XiaoliurenCanonicalJSON {
@@ -17,6 +19,9 @@ export function toXiaoliurenJson(
       农历日: output.input.lunarDay,
       时辰: output.input.shichen,
       时辰序号: output.input.hour,
+      ...(output.input.date ? { 公历日期: output.input.date } : {}),
+      ...(output.input.isLeapMonth ? { 闰月: true, 闰月取法: output.input.leapMonthStrategy === 'advance' ? '闰月递进一月' : '闰月沿用同月' } : {}),
+      ...(detailLevel === 'full' && output.input.hourType ? { 小时输入口径: output.input.hourType } : {}),
     },
     推演链: {
       月上起: output.monthStatus,

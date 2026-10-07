@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
   "baselineRevision": "5725dde",
-  "sourceFingerprint": "3596cd84b87ab036c3adb04dcc48b0d4801d6e3ee8ebc27366547d35bb524eb8",
+  "sourceFingerprint": "2d796f8d381f05f96b98abf630affd6635d677a4397dad073288d05801852c58",
   "target": "empty local self-hosted application schema; NOT production parity or a migration replay",
   "bootstrapOrder": [
     "platform roles/extensions",
@@ -18,7 +18,7 @@
   "sources": [
     {
       "file": "supabase/tabel_export_from_supabase.sql",
-      "sha256": "5d420944bc351747370bda6cffbe0d29d131ef64e4ee4145fcbd7554106fdf3a"
+      "sha256": "6096cdbce0acd356a875e76e0294a396e5d2a1d232adc3a643aa98eadf426b9e"
     },
     {
       "file": "supabase/migrations/20260118_create_gamification_tables.sql",
@@ -121,16 +121,20 @@
       "sha256": "cdb0ac0a501806356814d7eb08819fde0fd53d32d4e68e7eaf3086178216d56e"
     },
     {
+      "file": "supabase/migrations/20261005_110000_chart_time_resolution.sql",
+      "sha256": "ba985d4cdbdda899a935dea2bf870a312c26412958c1305bcb9a5d46148db9fd"
+    },
+    {
       "file": "supabase/selfhost/source-views.sql",
       "sha256": "3ec59bffedd43530835e728dd9e9fac580ed09bbacb23e64fe460cb2775c6342"
     },
     {
       "file": "src/lib/history/registry.ts",
-      "sha256": "7b80fe60fdcf75cedef3a3e9713162f3399bd5c2c6a7f3246892cd2682e9fdff"
+      "sha256": "c968f35a136f56c9d6661f28ee99dc69f52e9d8843fdfceb9384311b9427f13d"
     },
     {
       "file": "src/app/api/user/charts/route.ts",
-      "sha256": "5ad51538e36334b259aef16ad34c6bf949bd7e30d37673738356c0f168ad0511"
+      "sha256": "7c5a11f64d227d311431904f7be64644254899e5d6c288a76a5358a34e49f46c"
     },
     {
       "file": "supabase/selfhost/002-storage.sql",
@@ -142,7 +146,7 @@
     },
     {
       "file": "scripts/selfhost-schema.mjs",
-      "sha256": "a2a205f4213c662f97c8f9fdc7c5d3b6a389d58c4030673be61681398cec80d2"
+      "sha256": "c99060bc7b250674b44d51b42f97ff14e0ee7056db4e8b6a119bb9c98db3810b"
     },
     {
       "file": "src/app/api/supabase/storage/route.ts",
@@ -979,11 +983,7 @@
         },
         {
           "file": "src/lib/api/chart-crud.ts",
-          "kind": "literal-from"
-        },
-        {
-          "file": "src/lib/chat/chat-context.ts",
-          "kind": "literal-from"
+          "kind": "tableName-catalog"
         },
         {
           "file": "src/lib/chat/chat-context.ts",
@@ -1958,6 +1958,11 @@
     },
     {
       "file": "src/lib/api/chart-crud.ts",
+      "expression": "tableName",
+      "contract": "typed birth-update chart table catalog"
+    },
+    {
+      "file": "src/lib/api/chart-crud.ts",
       "expression": "config.tableName",
       "contract": "tableName catalog"
     },
@@ -2002,7 +2007,7 @@
   "artifacts": [
     {
       "file": "supabase/selfhost/001-application.sql",
-      "sha256": "9305af48896d7d9bd12b428027625cbef2488c79542759be99fdc07a446f541d"
+      "sha256": "93bdd5564925a39d3bd9c9b346c58c504a19412ca65ce757137268c449db8c4a"
     },
     {
       "file": "supabase/selfhost/002-storage.sql",

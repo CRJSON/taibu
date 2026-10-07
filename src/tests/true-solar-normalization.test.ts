@@ -18,7 +18,8 @@ test('true solar correction should normalize rounded minutes instead of returnin
   const info = result.trueSolarTimeInfo;
 
   assert.ok(info);
-  assert.equal(info.trueSolarTime, '04:00');
+  // Apparent-Sun EOT replaces the old day-of-year approximation at this rounding boundary.
+  assert.equal(info.trueSolarTime, '04:01');
   assert.equal(info.dayOffset, -1);
 });
 

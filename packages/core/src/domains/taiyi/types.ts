@@ -7,6 +7,10 @@ export interface TaiyiInput {
   minute?: number;
   timezone?: string;
   question?: string;
+  system?: 'nine-star' | 'traditional';
+  tradition?: 'jinjing' | 'tongzong';
+  accumulatedNumber?: number;
+  dunType?: 'yang' | 'yin';
 }
 
 export interface TaiyiStarSnapshot {
@@ -38,12 +42,14 @@ export interface TaiyiMinuteRefinement {
 }
 
 export interface TaiyiBoardMeta {
-  system: 'taiyi_nine_star';
+  system: 'taiyi_nine_star' | 'taiyi_traditional';
   systemLabel: string;
   mode: TaiyiMode;
   modeLabel: string;
   minuteSlot?: number;
   minuteStrategy?: string;
+  timezone?: string;
+  ruleVersion?: string;
 }
 
 export interface TaiyiDatetimeContext {
@@ -78,7 +84,8 @@ export interface TaiyiOutput {
   question?: string;
   boardMeta: TaiyiBoardMeta;
   datetimeContext: TaiyiDatetimeContext;
-  coreBoard: {
+  /** Present only for the nine-star system. Traditional results contain traditionalBoard. */
+  coreBoard?: {
     primaryStar: TaiyiStarSnapshot;
     yearStar: TaiyiStarSnapshot;
     monthStar: TaiyiStarSnapshot;
@@ -88,4 +95,24 @@ export interface TaiyiOutput {
   };
   derivedIndicators: TaiyiDerivedIndicators;
   judgementAnchors: TaiyiJudgementAnchors;
+  traditionalBoard?: TaiyiTraditionalBoard;
+}
+
+export interface TaiyiTraditionalBoard {
+  profile: 'jinjing' | 'tongzong';
+  accumulatedNumber: number;
+  accumulationSource: 'calendar-epoch' | 'manual';
+  bureau: number;
+  dun: 'yang' | 'yin';
+  ruleVersion: string;
+  yearEpoch: number;
+  taiyi: { palace: number; position: string; };
+  wenChang: string;
+  shiJi: string;
+  jiShen: string;
+  heShen: string;
+  taiSui: string;
+  home: { count: number; general: number; assistant: number; };
+  away: { count: number; general: number; assistant: number; };
+  palaces: { position: string; deity: string; stars: string[]; }[];
 }

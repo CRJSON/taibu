@@ -1,4 +1,5 @@
 import type { ToolDefinition } from '../../contract.js';
+import { baziRuleInputs } from '../../rule-input-schemas.js';
 
 export const baziCalculateDefinition: ToolDefinition = {
   name: 'bazi',
@@ -6,29 +7,30 @@ export const baziCalculateDefinition: ToolDefinition = {
   inputSchema: {
     type: 'object',
     properties: {
+      ...baziRuleInputs,
       gender: {
         type: 'string',
         enum: ['male', 'female'],
         description: '性别',
       },
       birthYear: {
-        type: 'number',
-        description: '出生年 (1900-2100)',
+        type: 'integer', minimum: 1, maximum: 9999,
+        description: '出生年 (1-9999；公元纪年)',
       },
       birthMonth: {
-        type: 'number',
+        type: 'integer', minimum: 1, maximum: 12,
         description: '出生月 (1-12)',
       },
       birthDay: {
-        type: 'number',
+        type: 'integer', minimum: 1, maximum: 31,
         description: '出生日',
       },
       birthHour: {
-        type: 'number',
+        type: 'integer', minimum: 0, maximum: 23,
         description: '出生时 (0-23)',
       },
       birthMinute: {
-        type: 'number',
+        type: 'integer', minimum: 0, maximum: 59,
         description: '出生分 (0-59)',
         default: 0,
       },
@@ -48,7 +50,7 @@ export const baziCalculateDefinition: ToolDefinition = {
         description: '出生地点文本',
       },
       longitude: {
-        type: 'number',
+        type: 'number', minimum: -180, maximum: 180,
         description: '出生地经度',
       },
       detailLevel: {

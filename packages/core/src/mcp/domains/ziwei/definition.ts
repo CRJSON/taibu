@@ -1,4 +1,5 @@
 import type { ToolDefinition } from '../../contract.js';
+import { ziweiRuleInputs } from '../../rule-input-schemas.js';
 
 export const ziweiCalculateDefinition: ToolDefinition = {
   name: 'ziwei',
@@ -6,29 +7,30 @@ export const ziweiCalculateDefinition: ToolDefinition = {
   inputSchema: {
     type: 'object',
     properties: {
+      ...ziweiRuleInputs,
       gender: {
         type: 'string',
         enum: ['male', 'female'],
         description: '性别',
       },
       birthYear: {
-        type: 'number',
+        type: 'integer', minimum: 1900, maximum: 2100,
         description: '出生年 (1900-2100)',
       },
       birthMonth: {
-        type: 'number',
+        type: 'integer', minimum: 1, maximum: 12,
         description: '出生月 (1-12)',
       },
       birthDay: {
-        type: 'number',
+        type: 'integer', minimum: 1, maximum: 31,
         description: '出生日 (1-31)',
       },
       birthHour: {
-        type: 'number',
+        type: 'integer', minimum: 0, maximum: 23,
         description: '出生时 (0-23)',
       },
       birthMinute: {
-        type: 'number',
+        type: 'integer', minimum: 0, maximum: 59,
         description: '出生分 (0-59)',
         default: 0,
       },
@@ -44,7 +46,7 @@ export const ziweiCalculateDefinition: ToolDefinition = {
         default: false,
       },
       longitude: {
-        type: 'number',
+        type: 'number', minimum: -180, maximum: 180,
         description: '出生地经度',
       },
       detailLevel: {

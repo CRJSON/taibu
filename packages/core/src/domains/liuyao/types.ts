@@ -23,7 +23,10 @@ import type {
 export interface LiuyaoInput {
   question: string;
   yongShenTargets: LiuQinType[];
-  method?: 'auto' | 'select' | 'time' | 'number';
+  method?: 'auto' | 'select' | 'time' | 'number' | 'coins' | 'yarrow';
+  /** Six cast sums (6–9), ordered from the bottom line to the top. */
+  yaoValues?: number[];
+  timezone?: string;
   hexagramName?: string;
   changedHexagramName?: string;
   numbers?: number[];
@@ -37,6 +40,7 @@ export interface LiuyaoOutput {
   question: string;
   seed?: string;
   // 本卦信息
+  calculationOptions?: { method: string; timezone: string; date: string; dayBoundary: string; yaoValues?: number[]; distribution?: string; ruleVersion: string; };
   hexagramName: string;
   hexagramGong: string;
   hexagramElement: string;

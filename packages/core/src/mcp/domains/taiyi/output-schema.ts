@@ -1,6 +1,11 @@
-import { arr, obj, str, type OutputSchema } from '../../schema-builders.js';
+import { arr, num, obj, str, type OutputSchema } from '../../schema-builders.js';
 
 export const taiyiOutputSchema: OutputSchema = obj({
+  太乙七十二局: obj({
+    流派: str(), 积数: num(), 积数来源: str(), 局式: str(), 太乙: str(), 太乙宫: num(),
+    文昌: str(), 始击: str(), 计神: str(), 合神: str(), 太岁: str(), 主算: num(), 主大将: num(), 主参将: num(), 客算: num(), 客大将: num(), 客参将: num(),
+    十六宫: arr(obj({ 宫位: str(), 宫神: str(), 星将: arr(str()) })), 采用口径: arr(str()),
+  }),
   问卜与时空底盘: obj({
     占问: str('占问事项'),
     时间: str('时间'),

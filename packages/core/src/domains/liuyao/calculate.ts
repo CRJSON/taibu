@@ -2,6 +2,8 @@ import { Solar } from 'lunar-javascript';
 import { GUA_CI, HEXAGRAMS, XIANG_CI, YAO_CI, type Hexagram } from '../../data/hexagrams.js';
 import { XUN_KONG_TABLE as RAW_XUN_KONG_TABLE } from '../../data/shensha.js';
 import { createSeededRng, resolveSeed } from '../../shared/seeded-rng.js';
+import { CoreInputError, assertInteger, resolveEnum, validateCivilDateTime } from '../../shared/validation.js';
+import { CALENDAR_TIMEZONE, DEFAULT_DIVINATION_TIMEZONE, getZonedDateTimeParts, zonedTimeToUtc, zonedInstantToSystemDate } from '../../shared/timezone-utils.js';
 import { calculateBranchShenSha, calculateGlobalShenSha } from '../shared/shensha.js';
 import type {
   LiuyaoInput, LiuyaoOutput,
@@ -911,18 +913,20 @@ export function calculateGanZhiTime(date: Date): GanZhiTime {
     getTimeZhi: () => string;
   };
   eightChar.setSect?.(1);
+  const beijing = getZonedDateTimeParts(date, CALENDAR_TIMEZONE);
+  const termEightChar = Solar.fromYmdHms(beijing.year, beijing.month, beijing.day, beijing.hour, beijing.minute, beijing.second).getLunar().getEightChar();
 
   const dayGan = eightChar.getDayGan() as TianGan;
   const dayZhi = eightChar.getDayZhi() as DiZhi;
 
   return {
     year: {
-      gan: eightChar.getYearGan() as TianGan,
-      zhi: eightChar.getYearZhi() as DiZhi,
+      gan: termEightChar.getYearGan() as TianGan,
+      zhi: termEightChar.getYearZhi() as DiZhi,
     },
     month: {
-      gan: eightChar.getMonthGan() as TianGan,
-      zhi: eightChar.getMonthZhi() as DiZhi,
+      gan: termEightChar.getMonthGan() as TianGan,
+      zhi: termEightChar.getMonthZhi() as DiZhi,
     },
     day: {
       gan: dayGan,
@@ -1168,13 +1172,14 @@ export function calculateFullYaoInfo(yaos: YaoInput[], hexagramCode: string, day
   const { shi, ying } = getShiYingPosition(hexagramCode);
   const liuShenList = getLiuShen(dayStem);
 
-  return yaos.map((yao, index) => {
+  return yaos.map((yao) => {
+    assertInteger(yao.position, 'yao.position', 1, 6);
     const naJia = getNaJiaByHexagram(hexagramCode, yao.position);
     const wuXing = DIZHI_WUXING[naJia];
     return {
       ...yao,
       liuQin: getLiuQin(gongElement, wuXing),
-      liuShen: liuShenList[index] || liuShenList[0],
+      liuShen: liuShenList[yao.position - 1],
       naJia,
       wuXing,
       isShiYao: yao.position === shi,
@@ -2197,49 +2202,27 @@ function calculateChangedHexagram(code: string, changedLines: number[]): string 
   return chars.join('');
 }
 
-function divine(rng: () => number): { yaos: YaoInput[]; hexagramCode: string; changedLines: number[]; } {
-  const yaos: YaoInput[] = [];
-  const changedLines: number[] = [];
+function divineFromValues(values: number[]): { yaos: YaoInput[]; hexagramCode: string; changedLines: number[]; } {
+  if (values.length !== 6) throw new CoreInputError('yaoValues', '必须按初爻至上爻提供六个爻值');
+  const yaos: YaoInput[] = values.map((value, index) => {
+    assertInteger(value, 'yaoValues[' + index + ']', 6, 9);
+    return { position: index + 1, type: (value % 2) as YaoType,
+      change: value === 6 || value === 9 ? 'changing' : 'stable' };
+  });
+  return { yaos, hexagramCode: yaos.map(yao => yao.type).join(''),
+    changedLines: yaos.filter(yao => yao.change === 'changing').map(yao => yao.position) };
+}
 
-  for (let index = 0; index < 6; index += 1) {
-    const coins = [
-      rng() > 0.5 ? 3 : 2,
-      rng() > 0.5 ? 3 : 2,
-      rng() > 0.5 ? 3 : 2,
-    ];
-    const sum = coins.reduce((left, right) => left + right, 0);
+/** Classical yarrow probability model: 6/7/8/9 have weights 1/5/7/3 out of 16. */
+export function sampleYarrowValue(rng: () => number): number {
+  const bucket = Math.floor(rng() * 16);
+  return bucket === 0 ? 6 : bucket < 6 ? 7 : bucket < 13 ? 8 : 9;
+}
 
-    let type: YaoType;
-    let change: 'stable' | 'changing' = 'stable';
-
-    if (sum === 6) {
-      type = 0;
-      change = 'changing';
-    } else if (sum === 7) {
-      type = 1;
-    } else if (sum === 8) {
-      type = 0;
-    } else {
-      type = 1;
-      change = 'changing';
-    }
-
-    if (change === 'changing') {
-      changedLines.push(index + 1);
-    }
-
-    yaos.push({
-      type,
-      change,
-      position: index + 1,
-    });
-  }
-
-  return {
-    yaos,
-    hexagramCode: yaos.map((item) => item.type).join(''),
-    changedLines,
-  };
+function divine(rng: () => number, yarrow = false): { yaos: YaoInput[]; hexagramCode: string; changedLines: number[]; } {
+  const values = Array.from({ length: 6 }, () => yarrow ? sampleYarrowValue(rng) :
+    [rng(), rng(), rng()].reduce((sum, value) => sum + (value > 0.5 ? 3 : 2), 0));
+  return divineFromValues(values);
 }
 
 function divineByTime(date: Date): { yaos: YaoInput[]; hexagramCode: string; changedLines: number[]; } {
@@ -2289,7 +2272,7 @@ function divineByNumber(numbers: number[]): { yaos: YaoInput[]; hexagramCode: st
   if (numbers.length < 2 || numbers.length > 3) {
     throw new Error('数字起卦需要提供2或3个数字');
   }
-  if (!numbers.every((value) => Number.isInteger(value) && value > 0)) {
+  if (!numbers.every((value) => Number.isSafeInteger(value) && value > 0)) {
     throw new Error('数字起卦的 numbers 必须是正整数');
   }
 
@@ -2302,7 +2285,7 @@ function divineByNumber(numbers: number[]): { yaos: YaoInput[]; hexagramCode: st
     if (upperNum === 0) upperNum = 8;
     lowerNum = numbers[1] % 8;
     if (lowerNum === 0) lowerNum = 8;
-    movingLine = (numbers[0] + numbers[1]) % 6;
+    movingLine = (numbers[0] % 6 + numbers[1] % 6) % 6;
     if (movingLine === 0) movingLine = 6;
   } else {
     upperNum = numbers[0] % 8;
@@ -2406,6 +2389,7 @@ function toLiuyaoOutput(params: {
 }
 
 export async function calculateLiuyaoData(input: LiuyaoInput): Promise<LiuyaoOutput> {
+  resolveEnum(input.method, ['auto', 'select', 'time', 'number', 'coins', 'yarrow'], 'auto', 'method');
   const question = typeof input.question === 'string' ? input.question.trim() : '';
   if (!question) {
     throw new Error('请先明确问题后再解卦');
@@ -2428,17 +2412,26 @@ export async function calculateLiuyaoData(input: LiuyaoInput): Promise<LiuyaoOut
   if (!date) {
     throw new Error('date 为必填项，请提供占卜日期时间（格式：YYYY-MM-DDTHH:MM 或 YYYY-MM-DD HH:MM:SS）');
   }
+  if (typeof date !== 'string') throw new CoreInputError('date', '必须是日期时间字符串');
   const trimmedDate = date.trim();
-  const DATE_TIME_RE = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2})?(\.\d{1,3})?([zZ]|[+-]\d{2}:\d{2})?$/;
+  const DATE_TIME_RE = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?([zZ]|[+-]\d{2}:\d{2})?$/;
   if (!DATE_TIME_RE.test(trimmedDate)) {
     throw new Error('date 格式无效，必须包含时间，请使用 YYYY-MM-DDTHH:MM[:SS] 或带时区偏移的 ISO 时间');
   }
 
   const normalizedDateInput = trimmedDate.replace(' ', 'T');
-  const analysisDate = new Date(normalizedDateInput);
-  if (Number.isNaN(analysisDate.getTime())) {
+  const datePart = normalizedDateInput.slice(0, 10);
+  const [year, month, day] = datePart.split('-').map(Number);
+  const civil = { year, month, day, hour: Number(normalizedDateInput.slice(11, 13)), minute: Number(normalizedDateInput.slice(14, 16)),
+    second: normalizedDateInput[16] === ':' ? Number(normalizedDateInput.slice(17, 19)) : 0 };
+  validateCivilDateTime(civil);
+  const timezone = input.timezone ?? DEFAULT_DIVINATION_TIMEZONE;
+  const instant = /(?:[zZ]|[+-]\d{2}:\d{2})$/.test(normalizedDateInput)
+    ? new Date(normalizedDateInput) : zonedTimeToUtc(civil, timezone);
+  if (Number.isNaN(instant.getTime())) {
     throw new Error('date 日期无效，请检查年月日时分是否合理');
   }
+  const analysisDate = zonedInstantToSystemDate(instant, timezone);
 
   const dateKey = `${analysisDate.getFullYear()}-${String(analysisDate.getMonth() + 1).padStart(2, '0')}-${String(analysisDate.getDate()).padStart(2, '0')}T${String(analysisDate.getHours()).padStart(2, '0')}`;
   const seed = resolveSeed(
@@ -2453,7 +2446,14 @@ export async function calculateLiuyaoData(input: LiuyaoInput): Promise<LiuyaoOut
   let changedCode: string | undefined;
   let changedLines: number[] = [];
 
-  if (method === 'select') {
+  if (method === 'coins') {
+    if (!Array.isArray(input.yaoValues)) throw new CoreInputError('yaoValues', '手工爻值模式必须提供 yaoValues');
+    const result = divineFromValues(input.yaoValues);
+    yaos = result.yaos;
+    hexagramCode = result.hexagramCode;
+    changedLines = result.changedLines;
+    if (changedLines.length > 0) changedCode = calculateChangedHexagram(hexagramCode, changedLines);
+  } else if (method === 'select') {
     if (!hexagramName) {
       throw new Error('select 模式必须提供 hexagramName');
     }
@@ -2495,7 +2495,7 @@ export async function calculateLiuyaoData(input: LiuyaoInput): Promise<LiuyaoOut
       changedCode = calculateChangedHexagram(hexagramCode, changedLines);
     }
   } else {
-    const result = divine(rng);
+    const result = divine(rng, method === 'yarrow');
     yaos = result.yaos;
     hexagramCode = result.hexagramCode;
     changedLines = result.changedLines;
@@ -2516,6 +2516,7 @@ export async function calculateLiuyaoData(input: LiuyaoInput): Promise<LiuyaoOut
 
   return {
     ...output,
-    seed: method === 'auto' || input.seed || input.seedScope ? seed : undefined,
+    seed: method === 'auto' || method === 'yarrow' || input.seed || input.seedScope ? seed : undefined,
+    calculationOptions: { method, timezone: input.timezone ?? DEFAULT_DIVINATION_TIMEZONE, date: input.date, dayBoundary: 'zi', ...(method === 'coins' ? { yaoValues: [...input.yaoValues!] } : {}), ...(method === 'yarrow' ? { distribution: '6:1/16,7:5/16,8:7/16,9:3/16' } : {}), ruleVersion: 'liuyao-2026.10' },
   };
 }

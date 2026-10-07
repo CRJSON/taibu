@@ -1,3 +1,4 @@
+import { withRulesJSON } from '../../shared/calculation-rules.js';
 import type {
   QimenCanonicalJSON
 } from './json-types.js';
@@ -11,13 +12,15 @@ import type {
   QimenCanonicalTextOptions
 } from '../shared/text-options.js';
 
-function buildQimenPalaceStatusList(palace: QimenOutput['palaces'][number], dayKongPalaces: Set<number>, hourKongPalaces: Set<number>): string[] {
-  if (palace.palaceIndex === 5) return ['寄宫参看对应宫位'];
+function buildQimenPalaceStatusList(palace: QimenOutput['palaces'][number], dayKongPalaces: Set<number>, hourKongPalaces: Set<number>, panType: QimenOutput['panType']): string[] {
+  if (palace.palaceIndex === 5 && panType !== 'fei' && panType !== '飞盘') return ['寄宫参看对应宫位'];
   return [
     dayKongPalaces.has(palace.palaceIndex) ? '日空' : null,
     hourKongPalaces.has(palace.palaceIndex) ? '时空' : null,
     palace.isYiMa ? '驿马' : null,
     palace.isRuMu ? '入墓' : null,
+    palace.isMenPo ? '门迫' : null,
+    palace.isJiXing ? '六仪击刑' : null,
   ].filter((value): value is string => !!value);
 }
 
@@ -26,7 +29,9 @@ function buildQimenPalaceRef(result: QimenOutput, index: number): string {
   return palace ? `${palace.palaceName}${index}` : String(index);
 }
 
-export function renderQimenCanonicalJSON(result: QimenOutput, options: { detailLevel?: QimenCanonicalTextOptions['detailLevel']; } = {}): QimenCanonicalJSON {
+export const renderQimenCanonicalJSON = withRulesJSON(renderQimenCanonicalJSONBase);
+
+function renderQimenCanonicalJSONBase(result: QimenOutput, options: { detailLevel?: QimenCanonicalTextOptions['detailLevel']; } = {}): QimenCanonicalJSON {
   const detailLevel = normalizeDetailLevelBinary(options.detailLevel);
   const dunText = result.dunType === 'yang' ? '阳遁' : '阴遁';
   const basicInfo: QimenCanonicalJSON['基本信息'] = {
@@ -63,7 +68,10 @@ export function renderQimenCanonicalJSON(result: QimenOutput, options: { detailL
       ...(palace.gateElement ? { 八门五行: palace.gateElement } : {}),
       天盘天干: palace.heavenStem || '-',
       地盘天干: palace.earthStem || '-',
-      宫位状态: buildQimenPalaceStatusList(palace, dayKongPalaces, hourKongPalaces),
+      ...(palace.hostedStars?.length ? { 寄星: [...palace.hostedStars] } : {}),
+      ...(palace.hostedHeavenStems?.length ? { 寄天盘干: [...palace.hostedHeavenStems] } : {}),
+      ...(palace.hostedEarthStems?.length ? { 寄地盘干: [...palace.hostedEarthStems] } : {}),
+      宫位状态: buildQimenPalaceStatusList(palace, dayKongPalaces, hourKongPalaces, result.panType),
     };
     if (detailLevel === 'full') {
       item.方位 = palace.direction || '-';

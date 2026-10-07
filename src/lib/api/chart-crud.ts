@@ -3,8 +3,10 @@
  */
 
 import { type NextRequest } from 'next/server';
-import { calculateBaziOutputFromStoredFields } from '@/lib/divination/bazi-record';
-import { isValidBirthTimeString } from '@/lib/divination/birth-time';
+import { calculateBazi } from 'taibu-core/bazi';
+import { calculateZiwei } from 'taibu-core/ziwei';
+import { buildBaziInputFromStoredFields } from '@/lib/divination/bazi-record';
+import { isValidBirthTimeString, resolveBirthTimeOptions } from '@/lib/divination/birth-time';
 import { jsonError, jsonOk, requireUserContext, resolveRequestDbClient } from '@/lib/api-utils';
 import { isValidUUID } from '@/lib/validation';
 
@@ -41,9 +43,12 @@ const DEFAULT_ALLOWED_UPDATE_FIELDS = [
     'longitude',
     'is_leap_month',
     'calendar_type',
+    'timezone',
+    'disambiguation',
 ] as const;
 
-const BAZI_RECALCULATION_FIELDS = 'id, user_id, gender, birth_date, birth_time, birth_place, longitude, calendar_type, is_leap_month';
+const BIRTH_RECALCULATION_FIELDS = 'id, user_id, gender, birth_date, birth_time, birth_place, longitude, calendar_type, is_leap_month, timezone, disambiguation';
+const BIRTH_UPDATE_FIELDS = DEFAULT_ALLOWED_UPDATE_FIELDS.filter(field => field !== 'name' && field !== 'birth_place');
 
 export function validateRequiredBirthTime(payload: Record<string, unknown>): string | null {
     return isValidBirthTimeString(payload.birth_time)
@@ -68,46 +73,48 @@ export function createOptionalBirthTimeValidator(message: string) {
     };
 }
 
-export async function prepareBaziChartUpdatePayload(
-    context: ChartUpdateContext,
-): Promise<ChartPreparedUpdate> {
+function calculateChartBirthFields(payload: Record<string, unknown>, tableName: string): Record<string, unknown> {
+    const input = buildBaziInputFromStoredFields(payload);
+    const options = resolveBirthTimeOptions(payload);
+    if (tableName === 'bazi_charts') {
+        const output = calculateBazi(input);
+        return { ...options, day_master: output.dayMaster, day_branch: output.fourPillars.day.branch };
+    }
+    calculateZiwei(input);
+    return options;
+}
+
+async function prepareChartBirthUpdate(context: ChartUpdateContext, tableName: 'bazi_charts' | 'ziwei_charts'): Promise<ChartPreparedUpdate> {
     const { auth, chartId, payload, db } = context;
+    const needsRecalculation = BIRTH_UPDATE_FIELDS.some(field => Object.hasOwn(payload, field));
+    if (!needsRecalculation && tableName === 'ziwei_charts') return { payload };
     const { data, error } = await db
-        .from('bazi_charts')
-        .select(BAZI_RECALCULATION_FIELDS)
+        .from(tableName)
+        .select(BIRTH_RECALCULATION_FIELDS)
         .eq('id', chartId)
         .eq('user_id', auth.user.id)
         .maybeSingle();
+    if (error) return { error: error.message, status: 500 };
+    if (!data) return { error: '未找到可更新的命盘', status: 404 };
 
-    if (error) {
-        return { error: error.message, status: 500 };
+    const merged = { ...data, ...payload };
+    if (!isValidBirthTimeString(merged.birth_time)) {
+        return { error: `${tableName === 'bazi_charts' ? '八字' : '紫微'}命盘必须提供有效的出生时辰`, status: 400 };
     }
-
-    if (!data) {
-        return { error: '未找到可更新的命盘', status: 404 };
+    if (!needsRecalculation) return { payload };
+    try {
+        return { payload: { ...payload, ...calculateChartBirthFields(merged, tableName) } };
+    } catch (error) {
+        return { error: error instanceof Error ? error.message : '命盘出生参数无效', status: 400 };
     }
+}
 
-    const recalculationInput = {
-        ...data,
-        ...payload,
-    };
+export function prepareBaziChartUpdatePayload(context: ChartUpdateContext): Promise<ChartPreparedUpdate> {
+    return prepareChartBirthUpdate(context, 'bazi_charts');
+}
 
-    if (!isValidBirthTimeString(recalculationInput.birth_time)) {
-        return { error: '八字命盘必须提供有效的出生时辰', status: 400 };
-    }
-
-    const output = calculateBaziOutputFromStoredFields(recalculationInput);
-    if (!output) {
-        return { payload };
-    }
-
-    return {
-        payload: {
-            ...payload,
-            day_master: output.dayMaster,
-            day_branch: output.fourPillars.day.branch,
-        },
-    };
+export function prepareZiweiChartUpdatePayload(context: ChartUpdateContext): Promise<ChartPreparedUpdate> {
+    return prepareChartBirthUpdate(context, 'ziwei_charts');
 }
 
 function sanitizeUpdatePayload(
@@ -175,7 +182,7 @@ export function createChartPostHandler(config: ChartCrudConfig) {
             return jsonError('请求体不是合法 JSON', 400);
         }
 
-        if (!body.payload || typeof body.payload !== 'object' || Array.isArray(body.payload)) {
+        if (!body || typeof body !== 'object' || !body.payload || typeof body.payload !== 'object' || Array.isArray(body.payload)) {
             return jsonError('缺少有效的命盘数据', 400);
         }
 
@@ -189,13 +196,10 @@ export function createChartPostHandler(config: ChartCrudConfig) {
             user_id: auth.user.id,
         };
 
-        // bazi_charts: 基于基础字段重算 day_master / day_branch
-        if (config.tableName === 'bazi_charts') {
-            const output = calculateBaziOutputFromStoredFields(payload);
-            if (output) {
-                payload.day_master = output.dayMaster;
-                payload.day_branch = output.fourPillars.day.branch;
-            }
+        try {
+            Object.assign(payload, calculateChartBirthFields(payload, config.tableName));
+        } catch (error) {
+            return jsonError(error instanceof Error ? error.message : '命盘出生参数无效', 400);
         }
 
         const { data, error } = await db
@@ -230,7 +234,7 @@ export function createChartUpdateHandler(config: ChartCrudConfig) {
             return jsonError('请求体不是合法 JSON', 400);
         }
 
-        if (typeof body.chartId !== 'string' || !body.chartId.trim()) {
+        if (!body || typeof body !== 'object' || typeof body.chartId !== 'string' || !body.chartId.trim()) {
             return jsonError('缺少必要参数', 400);
         }
 
@@ -238,7 +242,7 @@ export function createChartUpdateHandler(config: ChartCrudConfig) {
             return jsonError('chartId 格式不合法', 400);
         }
 
-        if (!body.payload || typeof body.payload !== 'object' || Array.isArray(body.payload)) {
+        if (!body || typeof body !== 'object' || !body.payload || typeof body.payload !== 'object' || Array.isArray(body.payload)) {
             return jsonError('缺少有效的命盘数据', 400);
         }
 

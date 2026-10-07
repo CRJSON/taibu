@@ -4,6 +4,10 @@
  */
 
 import * as liurenLib from 'liuren-ts-lib';
+import { Body, Observer, Equator, Horizon } from 'astronomy-engine';
+import { Solar } from 'lunar-javascript';
+import { assertFiniteNumber, assertInteger, CoreInputError, parseCivilDate, resolveEnum } from '../../shared/validation.js';
+import { resolveBaziCalendarContext } from '../bazi/calculate.js';
 import { DEFAULT_DIVINATION_TIMEZONE, zonedWallClockToSystemDate } from '../../shared/timezone-utils.js';
 import {
   DI_ZHI,
@@ -32,7 +36,18 @@ import type {
 // These helpers are exported by liuren-ts-lib at runtime but omitted from its
 // package-level declaration surface. Keep the adapter typed locally so the
 // correction reuses the library's own pan lookup and filling logic.
+type RawLiuRen = ReturnType<typeof liurenLib.getLiuRenByDate>;
+type RawDate = NonNullable<RawLiuRen['dateInfo']>;
+type RawPan = NonNullable<RawLiuRen['tiandipan']>;
 type LiuRenInternalApi = {
+  getDateByObj: (date: Date) => RawDate;
+  getTianDiPan: (date: RawDate) => RawPan;
+  getYinYangGuiRen: (date: RawDate, pan: RawPan) => { 阳贵人: RawPan['天将']; 阴贵人: RawPan['天将']; };
+  getSiKe: (date: RawDate, pan: RawPan) => NonNullable<RawLiuRen['siKe']>;
+  getDunGan: (date: RawDate, pan: RawPan) => NonNullable<RawLiuRen['dunGan']>;
+  getJianChu: (date: RawDate, pan: RawPan) => NonNullable<RawLiuRen['jianChu']>;
+  getSanChuan: (lessons: NonNullable<RawLiuRen['siKe']>, pan: RawPan) => NonNullable<RawLiuRen['sanChuan']>;
+  getShenSha: (date: RawDate) => DaliurenShenSha[];
   getShangShen: (tianDiPan: unknown, zhi: string) => string;
   fillSanChuan: (
     sanChuan: { 初传: string[]; 中传: string[]; 末传: string[]; 课体: string },
@@ -49,14 +64,56 @@ const liurenInternal = liurenLib as unknown as LiuRenInternalApi;
  */
 export function calculateDaliurenData(input: DaliurenInput): DaliurenOutput {
   const { date, hour, minute = 0, question, birthYear, gender } = input;
-  const timezone = input.timezone || DEFAULT_DIVINATION_TIMEZONE;
+  const timezone = input.timezone ?? DEFAULT_DIVINATION_TIMEZONE;
 
   // 1. 构造 Date 对象
-  const [y, m, d] = date.split('-').map(Number);
+  const { year: y, month: m, day: d } = parseCivilDate(date);
+  assertInteger(hour, 'hour', 0, 23);
+  assertInteger(minute, 'minute', 0, 59);
+  if ((birthYear === undefined) !== (gender === undefined)) throw new CoreInputError('birthYear/gender', '必须同时提供');
+  if (birthYear !== undefined) assertInteger(birthYear, 'birthYear', 1, y);
+  if (gender !== undefined) resolveEnum(gender, ['male', 'female'], 'male', 'gender');
+  const dayNight = resolveEnum(input.dayNight, ['shichen', 'day', 'night', 'sunrise'] as const, 'shichen', 'dayNight');
+  if (input.monthGeneral !== undefined && !(DI_ZHI as readonly string[]).includes(input.monthGeneral)) throw new CoreInputError('monthGeneral', '必须是十二地支之一');
   const dateObj = zonedWallClockToSystemDate({ year: y, month: m, day: d, hour, minute }, timezone);
 
   // 2. 调用 liuren-ts-lib 核心排盘
-  const raw = liurenLib.getLiuRenByDate(dateObj);
+  const calendar = resolveBaziCalendarContext({ birthYear: y, birthMonth: m, birthDay: d, birthHour: hour, birthMinute: minute, gender: 'male', timezone });
+  const sourceDate = liurenInternal.getDateByObj(dateObj);
+  const termEightChar = calendar.termLunar.getEightChar();
+  const pillars = sourceDate.bazi.split(' ');
+  pillars[0] = termEightChar.getYear();
+  pillars[1] = termEightChar.getMonth();
+  sourceDate.bazi = pillars.join(' ');
+  const computedShenSha = liurenInternal.getShenSha(sourceDate);
+  const tianMa = computedShenSha?.find(star => star.name === '天马')?.value;
+  if (!tianMa) throw new Error('无法计算月支天马');
+  sourceDate.tianma = tianMa;
+  const generals: Record<string, string> = { 大寒: '子', 雨水: '亥', 春分: '戌', 谷雨: '酉', 小满: '申', 夏至: '未', 大暑: '午', 处暑: '巳', 秋分: '辰', 霜降: '卯', 小雪: '寅', 冬至: '丑' };
+  sourceDate.yuejiang = input.monthGeneral ?? generals[calendar.termLunar.getPrevQi().getName()];
+  if (!sourceDate.yuejiang) throw new Error('无法确定当前中气月将');
+  let diurnal = dayNight === 'day' || (dayNight === 'shichen' && hour >= 5 && hour < 17);
+  if (dayNight === 'sunrise') {
+    assertFiniteNumber(input.latitude, 'latitude', -90, 90);
+    assertFiniteNumber(input.longitude, 'longitude', -180, 180);
+    const observer = new Observer(input.latitude, input.longitude, 0);
+    const sun = Equator(Body.Sun, dateObj, observer, true, true);
+    diurnal = Horizon(dateObj, observer, sun.ra, sun.dec).altitude >= -0.833;
+  }
+  const pan = liurenInternal.getTianDiPan(sourceDate);
+  const guiRen = liurenInternal.getYinYangGuiRen(sourceDate, pan);
+  pan.天将 = diurnal ? guiRen.阳贵人 : guiRen.阴贵人;
+  const lessons = liurenInternal.getSiKe(sourceDate, pan);
+  const dunGan = liurenInternal.getDunGan(sourceDate, pan);
+  const raw = {
+    dateInfo: sourceDate,
+    tiandipan: pan,
+    siKe: lessons,
+    dunGan,
+    jianChu: liurenInternal.getJianChu(sourceDate, pan),
+    sanChuan: liurenInternal.fillSanChuan(liurenInternal.getSanChuan(lessons, pan), pan, dunGan, pillars[2][0]),
+    shenSha: computedShenSha,
+  };
 
   // 3. 解析基础信息
   const bazi = raw.dateInfo?.bazi || '';
@@ -67,9 +124,6 @@ export function calculateDaliurenData(input: DaliurenInput): DaliurenOutput {
   const yueGanZhi = baziParts[1] || '';
   const yueZhi = yueGanZhi[1] || '子';
   const yueJiang = raw.dateInfo?.yuejiang || '亥';
-
-  // 判断昼夜：卯时(05:00)起为昼，酉时末(19:00)为夜
-  const diurnal = hour >= 5 && hour < 19;
 
   // 4. 构建 dateInfo
   const dateInfo: DaliurenDateInfo = {
@@ -89,6 +143,7 @@ export function calculateDaliurenData(input: DaliurenInput): DaliurenOutput {
     dingMa: raw.dateInfo?.dingma || '',
     tianMa: raw.dateInfo?.tianma || '',
     diurnal,
+    lunarDate: Solar.fromYmdHms(y, m, d, hour, minute, 0).getLunar().toString(),
   };
 
   // 5. 天地盘
@@ -223,6 +278,7 @@ export function calculateDaliurenData(input: DaliurenInput): DaliurenOutput {
     benMing,
     xingNian,
     question,
+    calculationOptions: { timezone, monthGeneral: yueJiang, monthGeneralSource: input.monthGeneral === undefined ? 'solar-term' : 'manual', dayNight, ...(dayNight === 'sunrise' ? { latitude: input.latitude, longitude: input.longitude } : {}), ruleVersion: 'daliuren-2026.10' },
   };
 }
 

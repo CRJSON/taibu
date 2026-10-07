@@ -31,16 +31,24 @@ const fixAstrologyRequire = {
   setup(buildApi) {
     buildApi.onLoad({ filter: /domains[\\/]astrology[\\/]calculate\.js$/ }, (args) => {
       const source = readFileSync(args.path, 'utf8');
-      const preamble = [
+      // createRequire 依赖真实模块解析，必须改写为静态 import。三条语句可能被
+      // 其它静态 import 分隔，因此按行定位而不是要求连续前缀。
+      const statements = [
         "import { createRequire } from 'node:module';",
         'const require = createRequire(import.meta.url);',
         "const horoscopePackage = require('circular-natal-horoscope-js');",
-      ].join('\n');
-      if (!source.startsWith(preamble)) {
-        throw new Error('astrology/calculate.js 的 createRequire 前导代码发生变化，请更新 build-skill-bundle.mjs 的改写逻辑');
+      ];
+      let rewritten = source;
+      for (const statement of statements) {
+        const lines = rewritten.split('\n');
+        const index = lines.indexOf(statement);
+        if (index === -1) {
+          throw new Error('astrology/calculate.js 的 createRequire 语句发生变化，请更新 build-skill-bundle.mjs 的改写逻辑');
+        }
+        lines.splice(index, 1);
+        rewritten = lines.join('\n');
       }
-      const rewritten = "import horoscopePackage from 'circular-natal-horoscope-js';" + source.slice(preamble.length);
-      return { contents: rewritten, loader: 'js' };
+      return { contents: "import horoscopePackage from 'circular-natal-horoscope-js';\n" + rewritten, loader: 'js' };
     });
   },
 };

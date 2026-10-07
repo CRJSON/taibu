@@ -54,11 +54,19 @@ function setupChartAdmission(t: import('node:test').TestContext, route: 'bazi' |
     const chart = {
         id: '11111111-1111-1111-1111-111111111111', user_id: 'user-1', name: 'Chart',
         gender: 'male', birth_date: '1990-01-01', birth_time: '08:00', calendar_type: 'solar', is_leap_month: false,
+        timezone: undefined as string | undefined,
+        disambiguation: undefined as 'later' | undefined,
     };
+    const reconstructedInputs: Array<{ timezone?: string; disambiguation?: string }> = [];
     mockBaziUserContext(t, {
         from(table: string) {
             assert.ok(table === `${route}_charts` || table === 'user_settings');
-            return { select() { return { eq() { return {
+            return { select(columns: string) {
+                if (table === `${route}_charts`) {
+                    assert.ok(columns.split(', ').includes('timezone'));
+                    assert.ok(columns.split(', ').includes('disambiguation'));
+                }
+                return { eq() { return {
                 eq(column: string, userId: string) {
                     assert.equal(column, 'user_id');
                     assert.equal(userId, 'user-1');
@@ -81,10 +89,16 @@ function setupChartAdmission(t: import('node:test').TestContext, route: 'bazi' |
     t.mock.method(detail, 'loadResolvedChartPromptDetailLevel', async () => 'full');
     if (route === 'bazi') {
         t.mock.method(require('../lib/server/bazi-case-profile'), 'getBaziCaseProfileByChartId', async () => null);
-        t.mock.method(require('../lib/bazi-prompt'), 'formatBaziPromptText', () => 'authorized chart');
+        t.mock.method(require('../lib/bazi-prompt'), 'formatBaziPromptText', (input: { timezone?: string; disambiguation?: string }) => {
+            reconstructedInputs.push(input);
+            return 'authorized chart';
+        });
     } else {
         const ziwei = require('../lib/divination/ziwei');
-        t.mock.method(ziwei, 'calculateZiweiChartBundle', () => ({ output: {}, astrolabe: {} }));
+        t.mock.method(ziwei, 'calculateZiweiChartBundle', (input: { timezone?: string; disambiguation?: string }) => {
+            reconstructedInputs.push(input);
+            return { output: {}, astrolabe: {} };
+        });
         t.mock.method(ziwei, 'generateZiweiChartText', () => 'authorized chart');
     }
     t.mock.method(credits, 'getUserAuthInfo', async () => {
@@ -117,7 +131,7 @@ function setupChartAdmission(t: import('node:test').TestContext, route: 'bazi' |
     const modulePath = route === 'bazi' ? '../app/api/bazi/analysis/route' : '../app/api/ziwei/analysis/route';
     const { POST } = require(modulePath) as { POST: (request: NextRequest) => Promise<Response> };
     return {
-        events, control,
+        events, control, chart, reconstructedInputs,
         request: (body: Record<string, unknown> = {}) => POST(new NextRequest(`http://localhost/api/${route}/analysis`, {
             method: 'POST', headers: { 'Content-Type': 'application/json', 'x-forwarded-for': '198.51.100.10' },
             body: JSON.stringify({ chartId: chart.id, type: 'wuxing', modelId: 'test-model', ...body }),
@@ -146,6 +160,36 @@ for (const route of ['bazi', 'ziwei'] as const) {
         });
     }
 }
+
+for (const route of ['bazi', 'ziwei'] as const) {
+    test(`${route} analysis reconstructs saved time options and ignores client overrides`, async (t) => {
+        const state = setupChartAdmission(t, route);
+        state.chart.timezone = 'America/New_York';
+        state.chart.disambiguation = 'later';
+        const response = await state.request({ timezone: 'Asia/Shanghai', disambiguation: 'earlier' });
+        assert.equal(response.status, 200);
+        assert.equal(state.reconstructedInputs.length, 1);
+        assert.equal(state.reconstructedInputs[0].timezone, 'America/New_York');
+        assert.equal(state.reconstructedInputs[0].disambiguation, 'later');
+    });
+
+    test(`${route} analysis remains compatible with charts lacking saved time options`, async (t) => {
+        const state = setupChartAdmission(t, route);
+        const response = await state.request();
+        assert.equal(response.status, 200);
+        assert.equal(state.reconstructedInputs.length, 1);
+        assert.equal(state.reconstructedInputs[0].timezone, route === 'ziwei' ? 'Asia/Shanghai' : undefined);
+        assert.equal(state.reconstructedInputs[0].disambiguation, route === 'ziwei' ? 'reject' : undefined);
+    });
+}
+
+test('ziwei analysis rejects malformed saved birth time instead of reinterpreting it', async (t) => {
+    const state = setupChartAdmission(t, 'ziwei');
+    state.chart.birth_time = '8:0';
+    const response = await state.request();
+    assert.equal(response.status, 400);
+    assert.equal(state.reconstructedInputs.length, 0);
+});
 
 for (const limited of [false, true]) {
     test(`bazi direct prepare ${limited ? 'denied' : 'allowed'} retains IP quota after account and never debits`, async (t) => {

@@ -6,13 +6,18 @@
 
 import { getConflictTriggers } from '@/lib/communication-templates';
 import { DI_ZHI, STEM_ELEMENTS, TIAN_GAN, ZHI_WUXING } from 'taibu-core/utils';
-import { Solar } from 'lunar-javascript';
+import { calculateBazi } from 'taibu-core/bazi';
+import { resolveBirthTimeOptions, type BirthTimeResolution } from '@/lib/divination/birth-time';
 
 // 合盘类型
 export type HepanType = 'love' | 'business' | 'family';
 
 // 出生信息
-export interface BirthInfo {
+export interface BirthInfo extends BirthTimeResolution {
+    minute?: number;
+    calendarType?: 'solar' | 'lunar';
+    isLeapMonth?: boolean;
+    longitude?: number;
     name: string;
     year: number;
     month: number;
@@ -140,20 +145,22 @@ function getMonthPillar(year: number, month: number): { gan: string; zhi: string
  * 计算八字
  */
 export function calculateBaZi(birth: BirthInfo): BaZiInfo {
-    const solar = Solar.fromYmdHms(
-        birth.year,
-        birth.month,
-        birth.day,
-        birth.hour,
-        0,
-        0,
-    );
-    const eightChar = solar.getLunar().getEightChar();
-
-    const yearPillar = { gan: eightChar.getYearGan(), zhi: eightChar.getYearZhi() };
-    const monthPillar = { gan: eightChar.getMonthGan(), zhi: eightChar.getMonthZhi() };
-    const dayPillar = { gan: eightChar.getDayGan(), zhi: eightChar.getDayZhi() };
-    const hourPillar = { gan: eightChar.getTimeGan(), zhi: eightChar.getTimeZhi() };
+    const { fourPillars } = calculateBazi({
+        gender: birth.gender ?? 'male',
+        birthYear: birth.year,
+        birthMonth: birth.month,
+        birthDay: birth.day,
+        birthHour: birth.hour ?? 0,
+        birthMinute: birth.minute ?? 0,
+        calendarType: birth.calendarType ?? 'solar',
+        isLeapMonth: birth.isLeapMonth,
+        longitude: birth.longitude,
+        ...resolveBirthTimeOptions(birth),
+    });
+    const yearPillar = { gan: fourPillars.year.stem, zhi: fourPillars.year.branch };
+    const monthPillar = { gan: fourPillars.month.stem, zhi: fourPillars.month.branch };
+    const dayPillar = { gan: fourPillars.day.stem, zhi: fourPillars.day.branch };
+    const hourPillar = { gan: fourPillars.hour.stem, zhi: fourPillars.hour.branch };
 
     // 统计五行
     const wuxingCount: Record<WuXing, number> = { '金': 0, '木': 0, '水': 0, '火': 0, '土': 0 };

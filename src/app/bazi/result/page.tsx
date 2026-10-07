@@ -30,9 +30,10 @@ import { useToast } from '@/components/ui/Toast';
 import { useHeaderMenu } from '@/components/layout/HeaderMenuContext';
 import { CaseNotesSection } from '@/components/bazi/result/CaseNotesSection';
 import { loadLatestConversationAnalysisSnapshot } from '@/lib/chat/conversation-analysis';
-import { createSavedChart, loadSavedChart } from '@/lib/user/charts-client';
+import { createSavedChart, loadSavedChart, updateSavedChart } from '@/lib/user/charts-client';
+import { useChartMutation } from '@/lib/hooks/useUserCharts';
 import { useSessionMembership } from '@/lib/hooks/useSessionMembership';
-import { parseBirthTimeString } from '@/lib/divination/birth-time';
+import { parseBirthTimeString, readBirthTimeOptions, resolveBirthTimeOptions, writeBirthTimeOptions, type BirthTimeResolution } from '@/lib/divination/birth-time';
 import { parseNumberParam } from '@/lib/divination/bazi-form-utils';
 import { parseLongitude } from '@/lib/divination/place-resolution';
 import { useAdminJsonCopy } from '@/lib/admin/useAdminJsonCopy';
@@ -50,8 +51,8 @@ function BaziResultContent() {
         return params.some((key) => searchParams.has(key));
     }, [searchParams]);
     const [activeTab, setActiveTab] = useState<ResultTab>('professional');
-    const [saving, setSaving] = useState(false);
-    const [saved, setSaved] = useState(false);
+    const [savedState, setSaved] = useState(false);
+    const saved = savedState && !searchParams.has('timezone') && !searchParams.has('disambiguation');
     const [loading, setLoading] = useState(() => Boolean(chartId) && !hasFormParams);
     const [notFound, setNotFound] = useState(false);
     const [loadError, setLoadError] = useState<string | null>(null);
@@ -67,10 +68,12 @@ function BaziResultContent() {
     const [copyDetailLevel, setCopyDetailLevel] = useState<ChartTextDetailLevel>('default');
     const [showCopyModal, setShowCopyModal] = useState(false);
     const { showToast } = useToast();
-    const { session, userId, membershipInfo, membershipResolved } = useSessionMembership();
+    const { session, userId, sessionLoading, membershipInfo, membershipResolved } = useSessionMembership();
+    const { pending: saving, run: runSave } = useChartMutation(userId);
+    const [loadedForUserId, setLoadedForUserId] = useState<string | null | undefined>(undefined);
     const credits = membershipResolved ? (membershipInfo?.aiChatCount ?? null) : null;
 
-    type SavedBaziChartRow = {
+    type SavedBaziChartRow = BirthTimeResolution & {
         name: string;
         gender: Gender;
         birth_date: string;
@@ -108,13 +111,19 @@ function BaziResultContent() {
         }
     }, [hasFormParams]);
 
+    useEffect(() => {
+        setSaved(false);
+        setChartFromDb(null);
+    }, [userId]);
+
     // 从数据库加载命盘（仅查看已保存命盘时）
     useEffect(() => {
-        if (!chartId || hasFormParams) {
+        if (sessionLoading || !chartId || hasFormParams) {
             return;
         }
 
         let cancelled = false;
+        const controller = new AbortController();
 
         const loadChart = async () => {
             setLoading(true);
@@ -123,7 +132,7 @@ function BaziResultContent() {
 
             try {
                 const [chartData, wuxingAnalysis, personalityAnalysis] = await Promise.all([
-                    loadSavedChart('bazi', chartId),
+                    loadSavedChart('bazi', chartId, { expectedUserId: userId ?? undefined, signal: controller.signal }),
                     loadLatestConversationAnalysisSnapshot({
                         sourceType: 'bazi_wuxing',
                         chartId,
@@ -165,6 +174,7 @@ function BaziResultContent() {
                     isLeapMonth: data.is_leap_month || false,
                     birthPlace: data.birth_place || undefined,
                     longitude: parseLongitude(data.longitude),
+                    ...resolveBirthTimeOptions(data),
                 });
 
                 setSavedWuxingAnalysis(wuxingAnalysis?.analysis ?? null);
@@ -181,6 +191,7 @@ function BaziResultContent() {
                 }
             } finally {
                 if (!cancelled) {
+                    setLoadedForUserId(userId);
                     setLoading(false);
                 }
             }
@@ -189,12 +200,13 @@ function BaziResultContent() {
         void loadChart();
         return () => {
             cancelled = true;
+            controller.abort();
         };
-    }, [chartId, hasFormParams]);
+    }, [chartId, hasFormParams, sessionLoading, userId]);
 
     // 表单数据
     const formData: BaziFormData = useMemo(() => {
-        if (chartFromDb) return chartFromDb;
+        if (chartFromDb && loadedForUserId === userId) return { ...chartFromDb, ...readBirthTimeOptions(searchParams) };
 
         const hourParam = searchParams.get('hour');
         const isUnknownTime = hourParam === '-1';
@@ -211,9 +223,10 @@ function BaziResultContent() {
             isLeapMonth: searchParams.get('leap') === '1',
             birthPlace: searchParams.get('place') || undefined,
             longitude: parseLongitude(searchParams.get('longitude')),
+            ...readBirthTimeOptions(searchParams),
             isUnknownTime,
         };
-    }, [searchParams, chartFromDb]);
+    }, [searchParams, chartFromDb, loadedForUserId, userId]);
 
     // 是否不确定时辰
     const isUnknownTime = formData.isUnknownTime ?? false;
@@ -327,8 +340,7 @@ function BaziResultContent() {
             return;
         }
 
-        setSaving(true);
-        try {
+        await runSave(async (scope) => {
             const payload = {
                 name: formData.name,
                 gender: formData.gender,
@@ -336,43 +348,24 @@ function BaziResultContent() {
                 birth_time: `${String(formData.birthHour).padStart(2, '0')}:${String(formData.birthMinute).padStart(2, '0')}`,
                 birth_place: formData.birthPlace || null,
                 longitude: formData.longitude ?? null,
+                ...resolveBirthTimeOptions(formData),
                 calendar_type: formData.calendarType,
                 is_leap_month: formData.isLeapMonth || false,
             };
-            let error = null;
             if (chartId) {
-                const response = await fetch('/api/bazi/charts/update', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ chartId, payload }),
-                });
-                if (!response.ok) {
-                    const result = await response.json().catch(() => null);
-                    throw new Error(result?.error || '更新失败');
-                }
-            } else {
-                const insertedId = await createSavedChart('bazi', payload);
-                if (insertedId) {
-                    router.replace(`/bazi/result?chart=${insertedId}`);
-                } else {
-                    error = new Error('保存失败');
-                }
+                await updateSavedChart('bazi', chartId, payload, scope);
+                return chartId;
             }
-
-            if (error) throw error;
+            return createSavedChart('bazi', payload, scope);
+        }, (savedId) => {
             setSaved(true);
             setChartFromDb(formData);
-            if (chartId) {
-                router.replace(`/bazi/result?chart=${chartId}`);
-            }
-        } catch (error) {
+            setLoadedForUserId(userId);
+            router.replace(`/bazi/result?chart=${savedId}`);
+        }, (error) => {
             console.error('保存失败:', error);
             showToast('error', '保存失败，请重试');
-        } finally {
-            setSaving(false);
-        }
+        });
     };
 
     // 分享
@@ -428,6 +421,7 @@ function BaziResultContent() {
             minute: formData.isUnknownTime ? '0' : String(formData.birthMinute),
             calendar: formData.calendarType,
         });
+        writeBirthTimeOptions(params, formData);
         if (formData.isLeapMonth) {
             params.set('leap', '1');
         }
@@ -534,7 +528,7 @@ function BaziResultContent() {
         }
     };
 
-    if (loading) {
+    if (loading || (chartId && !hasFormParams && (sessionLoading || loadedForUserId !== userId))) {
         return <SoundWaveLoader variant="block" text="" />;
     }
 

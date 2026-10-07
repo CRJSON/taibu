@@ -1,3 +1,4 @@
+import { withRulesText } from '../../shared/calculation-rules.js';
 import {
   normalizeDetailLevelBinary
 } from '../../shared/render-utils.js';
@@ -8,7 +9,8 @@ import type {
   AlmanacCanonicalTextOptions
 } from '../shared/text-options.js';
 
-export function renderAlmanacCanonicalText(result: AlmanacOutput, options: AlmanacCanonicalTextOptions = {}): string {
+export const renderAlmanacCanonicalText = withRulesText(renderAlmanacCanonicalTextBase);
+function renderAlmanacCanonicalTextBase(result: AlmanacOutput, options: AlmanacCanonicalTextOptions = {}): string {
   const detailLevel = normalizeDetailLevelBinary(options.detailLevel);
   const { date, dayInfo, tenGod, almanac } = result;
   const lines: string[] = [
@@ -68,7 +70,8 @@ export function renderAlmanacCanonicalText(result: AlmanacOutput, options: Alman
         lines.push('| 时辰 | 天神 | 类型 | 吉凶 | 冲煞 | 宜 | 忌 |');
         lines.push('|------|------|------|------|------|------|------|');
         for (const hour of almanac.hourlyFortune) {
-          lines.push(`| ${hour.ganZhi || '-'} | ${hour.tianShen || '-'} | ${hour.tianShenType || '-'} | ${hour.tianShenLuck || '-'} | ${[hour.chong, hour.sha].filter(Boolean).join(' / ') || '-'} | ${hour.suitable.join('、') || '-'} | ${hour.avoid.join('、') || '-'} |`);
+          const period = hour.startTime && hour.endTime ? ` ${hour.startTime}–${hour.endTime}` : '';
+          lines.push(`| ${hour.ganZhi || '-'}${period} | ${hour.tianShen || '-'} | ${hour.tianShenType || '-'} | ${hour.tianShenLuck || '-'} | ${[hour.chong, hour.sha].filter(Boolean).join(' / ') || '-'} | ${hour.suitable.join('、') || '-'} | ${hour.avoid.join('、') || '-'} |`);
         }
       }
     }

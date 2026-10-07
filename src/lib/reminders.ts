@@ -458,7 +458,7 @@ async function getUserPrimaryBaziChart(userId: string): Promise<CoreBaziOutput |
     // 查找用户最近保存的八字命盘
     const { data } = await serviceClient
         .from('bazi_charts')
-        .select('gender, birth_date, birth_time, birth_place, longitude, calendar_type, is_leap_month')
+        .select('gender, birth_date, birth_time, birth_place, longitude, calendar_type, is_leap_month, timezone, disambiguation')
         .eq('user_id', userId)
         .order('created_at', { ascending: false })
         .limit(1)

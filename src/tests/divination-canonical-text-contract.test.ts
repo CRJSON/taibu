@@ -14,7 +14,19 @@ import {
   type DaliurenOutput,
 } from 'taibu-core';
 import { calculateBaziChartBundle, generateBaziChartText } from '@/lib/divination/bazi';
-import { calculateZiweiChartBundle, generateZiweiChartText } from '@/lib/divination/ziwei';
+import { calculateZiweiChartBundle, generateZiweiChartText, getHoroscope } from '@/lib/divination/ziwei';
+import { calculateZiwei } from 'taibu-core/ziwei';
+
+test('web Ziwei forwards timezone and DST resolution to calculation and flow helpers', () => {
+  const input = { name: 'DST', gender: 'male' as const, calendarType: 'solar' as const, birthYear: 2024, birthMonth: 3, birthDay: 10, birthHour: 2, birthMinute: 30, timezone: 'America/New_York', disambiguation: 'later' as const };
+  const { output, astrolabe } = calculateZiweiChartBundle(input);
+  assert.deepEqual(output, calculateZiwei(input));
+  assert.throws(() => calculateZiweiChartBundle({ ...input, disambiguation: 'reject' }));
+  const flow = getHoroscope(output, astrolabe, new Date('2024-06-01T02:00:00Z'));
+  assert.ok(flow);
+  assert.equal(flow.monthly.period, '5');
+  assert.equal(flow.daily.period, '2024-05-31');
+});
 
 const renderToolText = (
   toolName: string,
@@ -403,7 +415,7 @@ test('daliuren canonical text should keep default focused while full only append
   assert.doesNotMatch(defaultText, /建除/u);
   assert.match(fullText, /本命: 癸未/u);
   assert.match(fullText, /附加课体: 自任/u);
-  assert.match(fullText, /\| 地盘 \(五行·状态\) \| 天盘 \(月将\) \| 天将 \| 遁干 \| 长生十二神 \| 建除 \|/u);
+  assert.match(fullText, /\| 地盘 \| 天盘 \(五行·状态\) \| 天将 \| 遁干 \| 长生十二神 \| 建除 \|/u);
 });
 
 test('almanac canonical text should keep default compact while full appends calendrical details', () => {

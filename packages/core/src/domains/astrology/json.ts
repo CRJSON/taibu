@@ -1,3 +1,4 @@
+import { withRulesJSON } from '../../shared/calculation-rules.js';
 import type { AstrologyCanonicalTextOptions } from '../shared/text-options.js';
 import type {
   AstrologyCanonicalJSON,
@@ -43,7 +44,9 @@ function houseToJson(item: AstrologyHouse): AstrologyHouseJSON {
   };
 }
 
-export function renderAstrologyCanonicalJSON(
+export const renderAstrologyCanonicalJSON = withRulesJSON(renderAstrologyCanonicalJSONBase);
+
+function renderAstrologyCanonicalJSONBase(
   result: AstrologyOutput,
   options: { detailLevel?: AstrologyCanonicalTextOptions['detailLevel']; } = {},
 ): AstrologyCanonicalJSON {

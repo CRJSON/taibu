@@ -23,6 +23,7 @@ export const ziweiHoroscopeOutputSchema: OutputSchema = obj({
     落入本命宫位: str('落入本命宫位'),
     运限四化: arr(str(), '运限四化'),
     十二宫重排: arr(str(), '十二宫重排'),
+    流曜: arr(obj({ 宫位索引: num(), 星曜: str(), 类型: str(), 亮度: str(), 四化: str() })),
   })),
   流年星曜: obj({
     吉星分布: arr(str(), '吉星分布'),

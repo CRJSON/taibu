@@ -5,6 +5,7 @@
 
 import type { DetailLevel } from '../domains/shared/types.js';
 import type { ZiweiOutput } from '../domains/ziwei/types.js';
+import { DI_ZHI, TIAN_GAN } from '../data/ganzhi.js';
 
 // ===== DetailLevel 归一化 =====
 
@@ -51,17 +52,18 @@ export function mapLiuyaoRelationLabel(label: string | undefined): string | unde
   return label;
 }
 
-/**
- * 格式化紫微规范农历日期：用干支年替换原始文本中的年份部分
- */
+/** Preserve the actual lunar year; the selected year pillar may switch at Li Chun. */
 export function formatZiweiCanonicalLunarDate(result: ZiweiOutput): string {
   const raw = result.lunarDate?.trim();
   if (!raw) return '';
-  const yearLabel = `${result.fourPillars.year.gan}${result.fourPillars.year.zhi}年`;
-  if (!raw.includes('年')) return raw;
-  const [, ...rest] = raw.split('年');
-  const suffix = rest.join('年').trim();
-  return suffix ? `${yearLabel}${suffix}` : yearLabel;
+  const match = /^([0-9〇零一二三四五六七八九]+)年(.*)$/u.exec(raw);
+  if (!match) return raw;
+  const year = Number(match[1].replace(/[〇零一二三四五六七八九]/gu,
+    digit => String('〇一二三四五六七八九'.indexOf(digit === '零' ? '〇' : digit))));
+  if (!Number.isInteger(year) || year < 1 || year > 9999) return raw;
+  const stem = TIAN_GAN[((year - 4) % 10 + 10) % 10];
+  const branch = DI_ZHI[((year - 4) % 12 + 12) % 12];
+  return `${stem}${branch}年${match[2].trim()}`;
 }
 
 /**

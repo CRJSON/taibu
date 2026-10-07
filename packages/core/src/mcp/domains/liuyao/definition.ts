@@ -22,8 +22,8 @@ export const liuyaoDefinition: ToolDefinition = {
       },
       method: {
         type: 'string',
-        enum: ['auto', 'select', 'time', 'number'],
-        description: '起卦方式（auto=自动，select=指定卦，time=时间，number=数字）',
+        enum: ['auto', 'select', 'time', 'number', 'coins', 'yarrow'],
+        description: '起卦方式（auto=三钱，select=指定卦，time=时间，number=数字，coins=手工六个爻值，yarrow=蓍草概率模型）',
         default: 'auto',
       },
       numbers: {
@@ -33,6 +33,8 @@ export const liuyaoDefinition: ToolDefinition = {
         maxItems: 3,
         description: '数字起卦使用的数字序列',
       },
+      yaoValues: { type: 'array', minItems: 6, maxItems: 6, items: { type: 'integer', minimum: 6, maximum: 9 }, description: '初爻至上爻的六个爻值：6老阴、7少阳、8少阴、9老阳' },
+      timezone: { type: 'string', default: 'Asia/Shanghai', description: '不带偏移日期的壁钟时区，以及干支排盘的民用时区' },
       hexagramName: {
         type: 'string',
         description: '选卦模式下的本卦卦名或卦码',
@@ -54,6 +56,7 @@ export const liuyaoDefinition: ToolDefinition = {
     },
     required: ['question', 'yongShenTargets', 'date'],
     allOf: [
+      { if: { properties: { method: { const: 'coins' } }, required: ['method'] }, then: { required: ['yaoValues'] } },
       {
         if: {
           properties: {

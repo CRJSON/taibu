@@ -24,6 +24,7 @@ export const daliurenOutputSchema: OutputSchema = obj({
     本命: str('本命'),
     行年: str('行年'),
     附加课体: arr(str(), '附加课体'),
+    细分课体: arr(str(), '细分课体'),
   }),
   四课: arr(obj({
     课别: str('课别'),
@@ -48,4 +49,5 @@ export const daliurenOutputSchema: OutputSchema = obj({
     长生十二神: str('长生十二神'),
     建除: str('建除'),
   })),
+  神煞: arr(obj({ 名称: str(), 落点: str(), 说明: str() })),
 });

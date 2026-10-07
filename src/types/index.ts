@@ -8,6 +8,7 @@
 import type { Mention } from '@/types/mentions';
 import type { ConversationSourceType } from '@/lib/source-contracts';
 import type { InjectedSource } from '@/lib/source-tracker';
+import type { BirthTimeResolution } from '@/lib/divination/birth-time';
 import type {
     DiZhi,
     HiddenStemInfo,
@@ -50,7 +51,7 @@ export interface PillarData {
 export type HiddenStemDetail = HiddenStemInfo;
 
 /** 八字输入表单数据 */
-export interface BaziFormData {
+export interface BaziFormData extends BirthTimeResolution {
     name: string;
     gender: Gender;
     birthYear: number;

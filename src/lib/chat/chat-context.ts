@@ -50,24 +50,24 @@ function pruneDreamContextCache(now = Date.now()) {
     }
 }
 
-async function loadPreferredBaziChartMeta(
+async function loadPreferredBaziChart(
     supabase: ReturnType<typeof getSystemAdminClient>,
     userId: string,
     defaultBaziId: string | null,
 ) {
-    const baseQuery = supabase
+    const createQuery = () => supabase
         .from('bazi_charts')
-        .select('id, updated_at')
+        .select('id, user_id, name, gender, birth_date, birth_time, birth_place, longitude, calendar_type, is_leap_month, timezone, disambiguation, created_at')
         .eq('user_id', userId);
 
     if (defaultBaziId) {
-        const preferred = await baseQuery.eq('id', defaultBaziId).maybeSingle();
+        const preferred = await createQuery().eq('id', defaultBaziId).maybeSingle();
         if (preferred.data) {
             return preferred;
         }
     }
 
-    return await baseQuery
+    return await createQuery()
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -105,10 +105,22 @@ export async function buildDreamContextPayload(userId: string): Promise<DreamCon
     ]);
 
     const defaultBaziId = settings.defaultBaziChartId;
-    const resolvedChartMeta = await loadPreferredBaziChartMeta(supabase, userId, defaultBaziId);
-
-    const resolvedChartId = (resolvedChartMeta.data as { id?: string | null } | null)?.id ?? null;
-    const chartUpdatedAt = (resolvedChartMeta.data as { updated_at?: string | null } | null)?.updated_at ?? null;
+    const resolvedChart = await loadPreferredBaziChart(supabase, userId, defaultBaziId);
+    const baziChart = resolvedChart.data as Parameters<typeof baziProvider.formatForAI>[0] | null;
+    const resolvedChartId = baziChart?.id ?? null;
+    // bazi_charts 没有 updated_at；用同一行的出生字段和时间选项标识缓存版本。
+    const chartFingerprint = JSON.stringify(baziChart ? [
+        baziChart.name,
+        baziChart.gender,
+        baziChart.birth_date,
+        baziChart.birth_time,
+        baziChart.birth_place,
+        baziChart.longitude,
+        baziChart.calendar_type,
+        baziChart.is_leap_month,
+        baziChart.timezone,
+        baziChart.disambiguation,
+    ] : null);
 
     const caseProfileMeta = resolvedChartId
         ? await supabase
@@ -120,32 +132,21 @@ export async function buildDreamContextPayload(userId: string): Promise<DreamCon
         : { data: null };
     const caseProfileUpdatedAt = (caseProfileMeta.data as { updated_at?: string | null } | null)?.updated_at ?? null;
 
-    const cacheKey = `${userId}:${resolvedChartId ?? 'none'}:${chartUpdatedAt ?? 'none'}:${caseProfileUpdatedAt ?? 'none'}:${dayKey}`;
+    const cacheKey = `${userId}:${resolvedChartId ?? 'none'}:${chartFingerprint}:${caseProfileUpdatedAt ?? 'none'}:${dayKey}`;
     const cached = dreamContextCache.get(cacheKey);
     if (cached && cached.expiresAt > Date.now()) {
         return cached.result;
     }
 
-    const [baziChartResult, fortune] = await Promise.all([
-        resolvedChartId
-            ? supabase
-                .from('bazi_charts')
-                .select('id, user_id, name, gender, birth_date, birth_time, birth_place, longitude, calendar_type, is_leap_month, created_at, updated_at')
-                .eq('user_id', userId)
-                .eq('id', resolvedChartId)
-                .maybeSingle()
-            : Promise.resolve({ data: null }),
-        dailyFortuneProvider.get('today', userId, { client: supabase }),
-    ]);
+    const fortune = await dailyFortuneProvider.get('today', userId, { client: supabase });
 
-    const baziChart = baziChartResult.data;
     const caseProfile = baziChart?.id
         ? await getBaziCaseProfileByChartId(supabase, baziChart.id, userId)
         : null;
 
     let baziText = baziChart
         ? await baziProvider.formatForAI({
-            ...(baziChart as Parameters<typeof baziProvider.formatForAI>[0]),
+            ...baziChart,
             caseProfile,
         })
         : '';

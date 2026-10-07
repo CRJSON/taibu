@@ -3,6 +3,7 @@ import { GAN_WUXING } from '../../shared/utils.js';
 
 import type { TaiyiCanonicalTextOptions } from '../shared/text-options.js';
 import type { TaiyiOutput, TaiyiStarSnapshot } from './types.js';
+import { renderTaiyiCanonicalJSON } from './json.js';
 
 function formatMappingReference(star: TaiyiStarSnapshot): string {
   return `${star.qimenName} / ${star.xuankongName}`;
@@ -13,6 +14,7 @@ function formatScaleLabel(star: TaiyiStarSnapshot): string {
 }
 
 function buildEnergyInteraction(result: TaiyiOutput): string {
+  if (!result.coreBoard) throw new Error('太乙九星结果缺少 coreBoard');
   const dayStem = result.datetimeContext.dayGanZhi.charAt(0);
   const dayElement = GAN_WUXING[dayStem] || '';
   const dayStemLabel = dayElement ? `${dayStem}(${dayElement})` : dayStem;
@@ -24,6 +26,22 @@ export function renderTaiyiCanonicalText(
   options: TaiyiCanonicalTextOptions = {},
 ): string {
   normalizeDetailLevelBinary(options.detailLevel);
+  if (result.traditionalBoard) {
+    const json = renderTaiyiCanonicalJSON(result, options);
+    const board = json.太乙七十二局!;
+    return [
+      '# 太乙七十二局', '', `- 时间: ${json.问卜与时空底盘.时间}`, `- 农历: ${json.问卜与时空底盘.农历}`,
+      ...(result.question ? [`- 占问: ${result.question}`] : []),
+      `- 流派: ${board.流派}`, `- 积数: ${board.积数}（${board.积数来源}）`, `- 局式: ${board.局式}`, `- 太乙: ${board.太乙}（${board.太乙宫}宫）`,
+      `- 文昌: ${board.文昌}；始击: ${board.始击}；计神: ${board.计神}；合神: ${board.合神}；太岁: ${board.太岁}`,
+      `- 主算: ${board.主算}；主大将: ${board.主大将}；主参将: ${board.主参将}`,
+      `- 客算: ${board.客算}；客大将: ${board.客大将}；客参将: ${board.客参将}`, '',
+      '| 宫位 | 宫神 | 星将 |', '|---|---|---|', ...board.十六宫.map(palace => `| ${palace.宫位} | ${palace.宫神} | ${palace.星将.join('、') || '-'} |`), '',
+      ...board.采用口径.map(note => `- ${note}`), '', '## 计算规则', '',
+      ...Object.entries(json.计算规则 ?? {}).filter(([, value]) => value !== undefined).map(([key, value]) => `- ${key}: ${value}`),
+    ].join('\n');
+  }
+  if (!result.coreBoard) throw new Error('太乙九星结果缺少 coreBoard');
   const timeLabel = `${result.datetimeContext.solarDateTime}（${result.datetimeContext.yearGanZhi}年 ${result.datetimeContext.monthGanZhi}月 ${result.datetimeContext.dayGanZhi}日 ${result.datetimeContext.hourGanZhi}时）`;
   const lines: string[] = [
     '# 太乙九星主证据',
@@ -66,6 +84,10 @@ export function renderTaiyiCanonicalText(
   lines.push('## 古典参考');
   lines.push(`- 主诀原文: ${result.judgementAnchors.primarySong}`);
   lines.push('- 使用提示: 原文仅供意象联想，需结合前述时空底盘与九星阵列辩证解读。');
+  lines.push('', '## 计算规则', '');
+  for (const [key, value] of Object.entries(renderTaiyiCanonicalJSON(result, options).计算规则 ?? {})) {
+    if (value !== undefined) lines.push(`- ${key}: ${value}`);
+  }
 
   return lines.join('\n');
 }

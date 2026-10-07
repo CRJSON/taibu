@@ -1,4 +1,7 @@
 import { createRequire } from 'node:module';
+import { Body, Ecliptic, GeoVector, SiderealTime } from 'astronomy-engine';
+import { assertFiniteNumber, CoreInputError, resolveEnum, validateCivilDateTime } from '../../shared/validation.js';
+import { getZonedDateTimeParts, zonedTimeToUtc } from '../../shared/timezone-utils.js';
 
 import type { AstrologyAspect, AstrologyAspectType, AstrologyChartSnapshot, AstrologyDegreeInfo, AstrologyFactor, AstrologyFactorCategory, AstrologyHouse, AstrologyInput, AstrologyOutput, AstrologySignInfo, AstrologyZodiacCusp } from './types.js';
 
@@ -80,8 +83,6 @@ const APPROXIMATE_COORDINATE_FALLBACK = {
   longitude: 0,
 } as const;
 
-const APPROXIMATE_CALCULATION_NOTE = '未提供完整经纬度，已按 0°N, 0°E 与 Etc/GMT 近似计算；上升、天顶、宫位不作为默认输出。';
-
 type AstrologyLocationContext = {
   latitude: number;
   longitude: number;
@@ -143,15 +144,6 @@ type HoroscopeZodiacCuspLike = {
   };
 };
 
-type HoroscopeAspectLike = {
-  aspectKey: string;
-  point1Key: string;
-  point1Label?: string;
-  point2Key: string;
-  point2Label?: string;
-  orb?: number;
-};
-
 function ensureRange(value: number, min: number, max: number, label: string): void {
   if (!Number.isFinite(value) || value < min || value > max) {
     throw new Error(`${label} 必须在 ${min} 到 ${max} 之间`);
@@ -165,15 +157,7 @@ function ensureInteger(value: number, min: number, max: number, label: string): 
 }
 
 function ensureValidCivilDate(year: number, month: number, day: number, label: string): void {
-  const date = new Date(Date.UTC(year, month - 1, day));
-  if (
-    Number.isNaN(date.getTime()) ||
-    date.getUTCFullYear() !== year ||
-    date.getUTCMonth() !== month - 1 ||
-    date.getUTCDate() !== day
-  ) {
-    throw new Error(`${label} 日期无效，请检查年月日是否存在`);
-  }
+  validateCivilDateTime({ year, month, day }, label);
 }
 
 function normalizeBirthInput(input: AstrologyInput) {
@@ -184,9 +168,6 @@ function normalizeBirthInput(input: AstrologyInput) {
   const birthMinute = input.birthMinute ?? 0;
   ensureInteger(birthMinute, 0, 59, 'birthMinute');
   ensureValidCivilDate(input.birthYear, input.birthMonth, input.birthDay, 'birth');
-  if (input.houseSystem && input.houseSystem !== 'placidus') {
-    throw new Error('houseSystem 当前仅支持 placidus');
-  }
   return {
     birthYear: input.birthYear,
     birthMonth: input.birthMonth,
@@ -219,7 +200,7 @@ function resolveLocationContext(input: AstrologyInput): AstrologyLocationContext
     ...APPROXIMATE_COORDINATE_FALLBACK,
     calculationMode: 'approximate',
     coordinateSource: 'assumed_zero',
-    calculationNote: APPROXIMATE_CALCULATION_NOTE,
+    calculationNote: `未提供完整经纬度，已按 0°N, 0°E 与 ${input.timezone ?? 'Etc/GMT'} 近似计算；上升、天顶、宫位不作为默认输出。`,
   };
 }
 
@@ -232,30 +213,7 @@ function formatDateTimeParts(parts: { year: number; month: number; day: number; 
 }
 
 function getTimeZoneParts(date: Date, timeZone: string): { year: number; month: number; day: number; hour: number; minute: number; second: number; } {
-  const formatter = new Intl.DateTimeFormat('en-US', {
-    timeZone,
-    hour12: false,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  });
-  const values: Record<string, number> = {};
-  for (const part of formatter.formatToParts(date)) {
-    if (part.type !== 'literal') {
-      values[part.type] = Number(part.value);
-    }
-  }
-  return {
-    year: values.year ?? 1970,
-    month: values.month ?? 1,
-    day: values.day ?? 1,
-    hour: values.hour ?? 0,
-    minute: values.minute ?? 0,
-    second: values.second ?? 0,
-  };
+  return getZonedDateTimeParts(date, timeZone);
 }
 
 function validateDateTimeParts(parts: DateTimeParts, label: string): DateTimeParts {
@@ -299,8 +257,8 @@ function parseTransitDateTime(value: string | undefined, derivedTimeZone: string
     }, 'transitDateTime');
 
     if (zoned[7] !== 'Z') {
-      ensureInteger(Number(zoned[8]), 0, 23, 'transitDateTime.offsetHour');
-      ensureInteger(Number(zoned[9]), 0, 59, 'transitDateTime.offsetMinute');
+      ensureInteger(Number(zoned[9]), 0, 23, 'transitDateTime.offsetHour');
+      ensureInteger(Number(zoned[10]), 0, 59, 'transitDateTime.offsetMinute');
     }
 
     const parsed = new Date(trimmed);
@@ -367,57 +325,19 @@ function buildZodiacCusp(entity: HoroscopeZodiacCuspLike): AstrologyZodiacCusp {
   };
 }
 
-function classifyFactorCategory(key: string): AstrologyFactorCategory {
-  if ((ANGLE_KEYS as readonly string[]).includes(key)) return 'angle';
-  if ((POINT_KEYS as readonly string[]).includes(key)) return 'point';
-  return 'body';
-}
-
-function normalizeAspectType(value: string): AstrologyAspectType | null {
-  return (MAJOR_ASPECT_TYPES as readonly string[]).includes(value)
-    ? value as AstrologyAspectType
-    : null;
-}
-
 function computeAngularDistance(left: number, right: number): number {
   const diffRaw = Math.abs(left - right);
   const diff = diffRaw > 180 ? 360 - diffRaw : diffRaw;
   return Number(diff.toFixed(4));
 }
 
-function buildAspectFromLibrary(aspect: HoroscopeAspectLike, factorPositionByKey: Map<string, number>): AstrologyAspect | null {
-  const type = normalizeAspectType(aspect.aspectKey);
-  if (!type) return null;
-  const fromPosition = factorPositionByKey.get(aspect.point1Key);
-  const toPosition = factorPositionByKey.get(aspect.point2Key);
-  if (typeof fromPosition !== 'number' || typeof toPosition !== 'number') {
-    throw new Error(`astrology 相位点缺少位置数据: ${aspect.point1Key} / ${aspect.point2Key}`);
-  }
-  return {
-    type,
-    label: ASPECT_LABELS[type],
-    from: {
-      key: aspect.point1Key,
-      label: BODY_LABELS[aspect.point1Key] || aspect.point1Label || aspect.point1Key,
-      category: classifyFactorCategory(aspect.point1Key),
-    },
-    to: {
-      key: aspect.point2Key,
-      label: BODY_LABELS[aspect.point2Key] || aspect.point2Label || aspect.point2Key,
-      category: classifyFactorCategory(aspect.point2Key),
-    },
-    orb: Number(Number(aspect.orb ?? 0).toFixed(4)),
-    actualAngle: computeAngularDistance(fromPosition, toPosition),
-  };
-}
-
-function computeMajorAspect(from: AstrologyFactor, to: AstrologyFactor): AstrologyAspect | null {
+function computeMajorAspect(from: AstrologyFactor, to: AstrologyFactor, orbs: NonNullable<AstrologyInput['aspectOrbs']>): AstrologyAspect | null {
   const diff = computeAngularDistance(from.position.decimal, to.position.decimal);
 
   for (const type of MAJOR_ASPECT_TYPES) {
     const target = ASPECT_ANGLES[type];
     const orb = Math.abs(diff - target.angle);
-    if (orb <= target.orb) {
+    if (orb <= (orbs[type] ?? target.orb)) {
       return {
         type,
         label: ASPECT_LABELS[type],
@@ -432,13 +352,13 @@ function computeMajorAspect(from: AstrologyFactor, to: AstrologyFactor): Astrolo
   return null;
 }
 
-function createHoroscope(origin: InstanceType<typeof Origin>, includeAngles: boolean) {
+function createHoroscope(origin: InstanceType<typeof Origin>, includeAngles: boolean, input: AstrologyInput) {
   const aspectKeys = includeAngles
     ? [...SUPPORTED_ASPECT_KEYS]
     : [...BODY_KEYS, ...POINT_KEYS];
   return new Horoscope({
     origin,
-    houseSystem: 'placidus',
+    houseSystem: input.houseSystem ?? 'placidus',
     zodiac: 'tropical',
     aspectPoints: aspectKeys,
     aspectWithPoints: aspectKeys,
@@ -451,9 +371,10 @@ function buildHoroscopeSnapshot(
   origin: InstanceType<typeof Origin>,
   locationContext: AstrologyLocationContext,
   birthPlace?: string,
+  input: AstrologyInput = {} as AstrologyInput,
 ): AstrologyChartSnapshot {
   const includeAngles = locationContext.calculationMode === 'exact';
-  const horoscope = createHoroscope(origin, includeAngles);
+  const horoscope = createHoroscope(origin, includeAngles, input);
 
   const bodies = BODY_KEYS.map((key) => buildFactor(horoscope.CelestialBodies[key] as HoroscopeFactorLike, 'body'));
   const points = POINT_KEYS.map((key) => buildFactor(horoscope.CelestialPoints[key] as HoroscopeFactorLike, 'point'));
@@ -465,23 +386,62 @@ function buildHoroscopeSnapshot(
     : [];
   const zodiacCusps = (horoscope.ZodiacCusps as HoroscopeZodiacCuspLike[]).map((cusp) => buildZodiacCusp(cusp));
 
+  const instant = new Date(origin.utcTime.valueOf());
+  const astronomicalBodies: Record<string, Body> = { sun: Body.Sun, moon: Body.Moon, mercury: Body.Mercury, venus: Body.Venus, mars: Body.Mars, jupiter: Body.Jupiter, saturn: Body.Saturn, uranus: Body.Uranus, neptune: Body.Neptune, pluto: Body.Pluto };
+  const longitude = (key: string, date: Date) => Ecliptic(GeoVector(astronomicalBodies[key], date, true)).elon;
+  for (const body of bodies) {
+    body.position = formatDegrees(longitude(body.key, instant));
+    const before = longitude(body.key, new Date(instant.getTime() - 3600000));
+    const after = longitude(body.key, new Date(instant.getTime() + 3600000));
+    body.retrograde = ((after - before + 540) % 360) - 180 < 0;
+  }
+  const offset = input.zodiac === 'sidereal' ? input.ayanamsa! : 0;
+  const signAt = (degrees: number) => buildSignInfo({ key: Object.keys(SIGN_LABELS)[Math.floor(((degrees % 360) + 360) % 360 / 30)] });
+  for (const factor of [...bodies, ...points, ...angles]) {
+    factor.position = formatDegrees(factor.position.decimal - offset);
+    factor.sign = signAt(factor.position.decimal);
+  }
+  for (const house of houses) {
+    house.start = formatDegrees(house.start.decimal - offset);
+    house.end = formatDegrees(house.end.decimal - offset);
+    house.sign = signAt(house.start.decimal);
+  }
+  // The upstream backend sets the twelfth end to zero. Every house ends at the next house's cusp.
+  houses.forEach((house, index) => { house.end = { ...houses[(index + 1) % houses.length].start }; });
+  // Whole-sign house boundaries are aligned to the selected zodiac, not the tropical zodiac.
+  if (includeAngles && input.houseSystem === 'whole-sign') {
+    const start = Math.floor(angles[0].position.decimal / 30) * 30;
+    houses.forEach((house, index) => {
+      house.start = formatDegrees(start + index * 30);
+      house.end = formatDegrees(start + (index + 1) * 30);
+      house.sign = signAt(house.start.decimal);
+    });
+  }
+  if (houses.length) {
+    const widths = houses.map(house => (house.end.decimal - house.start.decimal + 360) % 360);
+    if (houses.length !== 12 || widths.some(width => !Number.isFinite(width) || width < 0.0001 || width >= 180) || Math.abs(widths.reduce((a, b) => a + b, 0) - 360) > 0.01) {
+      throw new CoreInputError('houseSystem', '该地点无法生成有效宫头，请选择 equal-house 或 whole-sign', 'UNDEFINED_HOUSES');
+    }
+  }
+  for (const factor of [...bodies, ...points, ...angles]) {
+    const house = houses.find(house => ((factor.position.decimal - house.start.decimal + 360) % 360) < ((house.end.decimal - house.start.decimal + 360) % 360));
+    if (house) factor.house = house.id;
+    else delete factor.house;
+  }
+  zodiacCusps.forEach((cusp, index) => { cusp.start = formatDegrees(index * 30); cusp.sign = signAt(index * 30); });
+
   return {
     origin: {
-      localDateTime: formatDateTimeParts({
-        year: origin.localTime.year(),
-        month: origin.localTime.month() + 1,
-        day: origin.localTime.date(),
-        hour: origin.localTime.hour(),
-        minute: origin.localTime.minute(),
-        second: origin.localTime.second(),
-      }),
-      derivedTimeZone: origin.timezone?.name || 'unknown',
+      localDateTime: formatDateTimeParts(getZonedDateTimeParts(instant, input.timezone ?? origin.timezone.name)),
+      derivedTimeZone: input.timezone ?? origin.timezone?.name ?? 'unknown',
+      timezoneSource: input.timezone !== undefined ? 'provided' : locationContext.coordinateSource === 'provided' ? 'coordinates' : 'default',
+      utcDateTime: instant.toISOString(),
       latitude: origin.latitude,
       longitude: origin.longitude,
       coordinateSource: locationContext.coordinateSource,
       ...(birthPlace ? { birthPlace } : {}),
     },
-    sunSign: buildSignInfo(horoscope.SunSign),
+    sunSign: bodies[0].sign,
     bodies,
     points,
     angles,
@@ -492,7 +452,7 @@ function buildHoroscopeSnapshot(
 
 function createNatalOrigin(input: AstrologyInput, locationContext: AstrologyLocationContext) {
   const birth = normalizeBirthInput(input);
-  return new Origin({
+  const origin = new Origin({
     year: birth.birthYear,
     month: birth.birthMonth - 1,
     date: birth.birthDay,
@@ -502,6 +462,16 @@ function createNatalOrigin(input: AstrologyInput, locationContext: AstrologyLoca
     latitude: locationContext.latitude,
     longitude: locationContext.longitude,
   });
+  return alignOrigin(origin, { year: birth.birthYear, month: birth.birthMonth, day: birth.birthDay, hour: birth.birthHour, minute: birth.birthMinute, second: 0 }, input);
+}
+
+function alignOrigin(origin: InstanceType<typeof Origin>, parts: DateTimeParts, input: AstrologyInput, explicitInstant?: Date) {
+  const instant = explicitInstant ?? zonedTimeToUtc(parts, input.timezone ?? origin.timezone.name, input.disambiguation ?? 'reject');
+  // The house backend infers timezones from coordinates. Override its time basis with the resolved instant.
+  origin.utcTime = origin.utcTime.clone().add(instant.getTime() - origin.utcTime.valueOf(), 'milliseconds');
+  origin.julianDate = instant.getTime() / 86400000 + 2440587.5;
+  origin.localSiderealTime = ((SiderealTime(instant) * 15 + origin.longitude) % 360 + 360) % 360;
+  return origin;
 }
 
 function createTransitOrigin(
@@ -516,7 +486,7 @@ function createTransitOrigin(
   ensureInteger(transit.minute, 0, 59, 'transitDateTime.minute');
   ensureInteger(transit.second, 0, 59, 'transitDateTime.second');
 
-  return new Origin({
+  const origin = new Origin({
     year: transit.year,
     month: transit.month - 1,
     date: transit.day,
@@ -526,6 +496,10 @@ function createTransitOrigin(
     latitude: locationContext.latitude,
     longitude: locationContext.longitude,
   });
+  const explicitInstant = input.transitDateTime && /(Z|[+-]\d{2}:\d{2})$/.test(input.transitDateTime.trim())
+    ? new Date(input.transitDateTime.trim())
+    : input.transitDateTime === undefined ? new Date() : undefined;
+  return alignOrigin(origin, transit, input, explicitInstant);
 }
 
 function sortAspects(aspects: AstrologyAspect[]): AstrologyAspect[] {
@@ -537,42 +511,55 @@ function sortAspects(aspects: AstrologyAspect[]): AstrologyAspect[] {
 }
 
 export function calculateAstrology(input: AstrologyInput): AstrologyOutput {
+  const houseSystem = resolveEnum(input.houseSystem, ['placidus', 'equal-house', 'whole-sign', 'koch', 'campanus', 'regiomontanus', 'topocentric'] as const, 'placidus', 'houseSystem');
+  const zodiac = resolveEnum(input.zodiac, ['tropical', 'sidereal'] as const, 'tropical', 'zodiac');
+  resolveEnum(input.disambiguation, ['reject', 'earlier', 'later', 'compatible'], 'reject', 'disambiguation');
+  if (zodiac === 'sidereal') assertFiniteNumber(input.ayanamsa, 'ayanamsa', 0, 360);
+  else if (input.ayanamsa !== undefined) throw new CoreInputError('ayanamsa', '仅用于 sidereal');
+  const aspectOrbs = { ...Object.fromEntries(MAJOR_ASPECT_TYPES.map(type => [type, ASPECT_ANGLES[type].orb])) } as NonNullable<AstrologyInput['aspectOrbs']>;
+  if (input.aspectOrbs !== undefined && (!input.aspectOrbs || typeof input.aspectOrbs !== 'object' || Array.isArray(input.aspectOrbs))) throw new CoreInputError('aspectOrbs', '必须是相位容许度对象');
+  for (const [type, orb] of Object.entries(input.aspectOrbs ?? {})) {
+    if (!(MAJOR_ASPECT_TYPES as readonly string[]).includes(type)) throw new CoreInputError(`aspectOrbs.${type}`, '未知相位');
+    assertFiniteNumber(orb, `aspectOrbs.${type}`, 0, 15);
+    aspectOrbs[type as AstrologyAspectType] = orb;
+  }
+  input = { ...input, houseSystem, zodiac };
   const locationContext = resolveLocationContext(input);
+  if (locationContext.calculationMode === 'exact' && Math.abs(locationContext.latitude) === 90) throw new CoreInputError('latitude', '极点无法定义上升点和宫位', 'UNDEFINED_HOUSES');
+  if (locationContext.calculationMode === 'exact' && ['placidus', 'koch', 'topocentric'].includes(houseSystem) && Math.abs(locationContext.latitude) >= 66.5) throw new CoreInputError('houseSystem', '高纬度下该宫制不完整，请选择 equal-house 或 whole-sign', 'UNDEFINED_HOUSES');
   const natalOrigin = createNatalOrigin(input, locationContext);
-  const natal = buildHoroscopeSnapshot(natalOrigin, locationContext, input.birthPlace);
+  const natal = buildHoroscopeSnapshot(natalOrigin, locationContext, input.birthPlace, input);
   const transitOrigin = createTransitOrigin(input, natal.origin.derivedTimeZone, locationContext);
-  const transit = buildHoroscopeSnapshot(transitOrigin, locationContext, input.birthPlace);
+  const transit = buildHoroscopeSnapshot(transitOrigin, locationContext, input.birthPlace, input);
 
-  const includeAngles = locationContext.calculationMode === 'exact';
-  const natalHoroscope = createHoroscope(natalOrigin, includeAngles);
-  const natalFactorPositionByKey = new Map(
-    [...natal.bodies, ...natal.points, ...natal.angles].map((factor) => [factor.key, factor.position.decimal]),
-  );
-
-  const majorAspects = sortAspects(
-    (natalHoroscope.Aspects.all as HoroscopeAspectLike[])
-      .map((aspect) => buildAspectFromLibrary(aspect, natalFactorPositionByKey))
-      .filter((aspect: AstrologyAspect | null): aspect is AstrologyAspect => !!aspect),
-  );
+  const natalFactors = [...natal.bodies, ...natal.points, ...natal.angles];
+  const majorAspects = sortAspects(natalFactors.flatMap((from, index) => natalFactors.slice(index + 1).flatMap(to => {
+    const aspect = computeMajorAspect(from, to, aspectOrbs);
+    return aspect ? [aspect] : [];
+  })));
 
   const transitFactors = [...transit.bodies, ...transit.points];
   const natalTargets = [...natal.bodies, ...natal.points, ...natal.angles];
   const transitToNatalAspects = sortAspects(
     transitFactors.flatMap((from) =>
       natalTargets.flatMap((to) => {
-        if (from.key === to.key && from.category === to.category) return [];
-        const aspect = computeMajorAspect(from, to);
+        const aspect = computeMajorAspect(from, to, aspectOrbs);
         return aspect ? [aspect] : [];
       })),
   );
 
   return {
     chartMeta: {
-      zodiac: 'tropical',
-      houseSystem: 'placidus',
+      zodiac,
+      houseSystem,
       supportedBodies: [...BODY_KEYS],
       supportedAspectTypes: [...MAJOR_ASPECT_TYPES],
       calculationMode: locationContext.calculationMode,
+      ephemeris: 'astronomy-engine@2.1.19',
+      ruleVersion: 'astrology-2026.10',
+      coordinateFrame: 'geocentric apparent true ecliptic of date (light time and aberration)',
+      ...(zodiac === 'sidereal' ? { ayanamsa: input.ayanamsa } : {}),
+      aspectOrbs,
       ...(locationContext.calculationNote ? { calculationNote: locationContext.calculationNote } : {}),
     },
     natal,

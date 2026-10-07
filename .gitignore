@@ -90,6 +90,7 @@ supabase/migrations/*
 !supabase/migrations/20261002_101000_restrict_credit_ledger_rpc.sql
 !supabase/migrations/20261002_102000_protect_account_and_ledger_writes.sql
 !supabase/migrations/20261003_100000_fix_rate_limit_admission.sql
+!supabase/migrations/20261005_110000_chart_time_resolution.sql
 # Additional explicit inputs for isolated Auth/PostgREST acceptance only.
 !supabase/migrations/20260110_add_user_settings_and_fix_notifications_rls.sql
 !supabase/migrations/20260113_add_app_settings.sql

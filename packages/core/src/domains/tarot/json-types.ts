@@ -1,5 +1,6 @@
 
 export interface TarotCanonicalJSON {
+  计算规则?: Record<string, unknown>;
   问卜设定: {
     牌阵: string;
     问题?: string;
