@@ -13,6 +13,7 @@ Web 继续使用 Next.js/React；计算内核、stdio MCP 和 HTTP MCP 保持现
 | 页面和交互 | `src/app`、`src/components` | 负责展示、输入和交互；业务规则不应继续堆入页面 |
 | HTTP/身份装配 | `src/lib/api-utils.ts`、`src/lib/api/divination-pipeline.ts`、`src/lib/server/chat/request.ts` | 解析、鉴权、受控客户端装配、JSON/SSE 映射；旧工厂仍有 SDK 和准入装配职责 |
 | 聊天准备用例 | `src/lib/server/chat/contracts.ts`、`use-case.ts` | 普通身份/输入与窄操作；不接收 NextRequest、Response 或 Supabase 查询构造器 |
+| Agent 后台任务 | `src/lib/agent`、`src/app/api/agent` | Web 管理鉴权与业务任务；worker 使用 Pi Durable Harness 和现有模型适配；原生提交日志受数据库租约保护，业务事务负责原子结算，见 [Agent 说明](Agent.md) |
 | 占术分析用例 | `src/lib/server/analysis.ts` | 提示词准备、完成分类、保存与退款结果；不承担所有路由鉴权或模型 SDK 调用 |
 | 业务来源与数据 | `src/lib/source-contracts.ts`、`src/lib/data-sources`、`src/lib/history` | 三者各自负责来源契约、加载/格式化和历史回放，不合成万能注册中心 |
 | 知识库 | `src/lib/knowledge-base` | 入库/检索、纯来源替换用例、受控持久化适配 |

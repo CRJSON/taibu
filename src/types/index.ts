@@ -97,16 +97,20 @@ export type MessageRole = 'user' | 'assistant' | 'system';
 
 /** 消息版本（用于编辑历史） */
 export interface MessageVersion {
+    attachments?: MessageAttachment;
     userContent: string;
     mentions?: Mention[];
     aiContent: string;
     createdAt: string;
     // 编辑时被截断的后续消息（用于保留分支历史）
     subsequentMessages?: ChatMessage[];
+    aiAgent?: import('@/lib/agent/types').AgentMessageData;
+    aiMetadata?: Record<string, unknown>;
 }
 
 /** 消息附件信息（仅用户消息） */
 export interface MessageAttachment {
+    ids?: string[];
     fileName: string;              // 文件名（含后缀）
     webSearchEnabled?: boolean;    // 是否启用了网络搜索
 }
@@ -133,6 +137,7 @@ export interface ChatMessage {
     reasoningStartTime?: number;      // 推理开始时间戳（ms）（仅AI消息，流式时使用）
     reasoningDuration?: number;       // 推理用时（秒）（仅AI消息，流式结束后设置）
     metadata?: Record<string, unknown>;
+    agent?: import('@/lib/agent/types').AgentMessageData;
     // 版本支持（仅用户消息有效）
     versions?: MessageVersion[];      // 所有版本历史
     currentVersionIndex?: number;     // 当前显示的版本索引
@@ -354,9 +359,11 @@ export type DifyMode = 'file' | 'web' | 'all';
 
 /** 附件选择状态（前端使用） */
 export interface AttachmentState {
+    uploaded?: PrivateAttachment[];
     file?: File;
     webSearchEnabled: boolean;
 }
+export interface PrivateAttachment { id: string; name: string; kind: 'image' | 'text'; mimeType: string; size: number; sha256: string; width?: number; height?: number }
 
 /** Dify API 响应数据 */
 export interface DifyResponse {

@@ -15,6 +15,7 @@ export interface Notification {
   is_read: boolean;
   link: string | null;
   created_at: string;
+  popup_claimed_at?: string | null;
 }
 
 interface NotificationPagination {

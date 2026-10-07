@@ -14,8 +14,11 @@ import { MentionPopover } from '@/components/chat/MentionPopover';
 import type { DataSourceSummary, DataSourceLoadError } from '@/lib/data-sources/types';
 import type { KnowledgeBaseSummary } from '@/components/chat/composer/useComposerState';
 import type { DataSourceType } from '@/lib/data-sources/types';
+import { Modal } from '@/components/ui/Modal';
+import { useId, type RefObject } from 'react';
 
 interface MentionManagerProps {
+    textareaRef: RefObject<HTMLTextAreaElement | null>;
     userId?: string | null;
     // Mention popover
     mentionOpen: boolean;
@@ -40,6 +43,7 @@ interface MentionManagerProps {
 }
 
 export function MentionManager({
+    textareaRef,
     userId,
     mentionOpen, setMentionOpen,
     mentionQuery,
@@ -52,20 +56,15 @@ export function MentionManager({
     knowledgeBaseSavingId, promptKbIdSet,
     toggleKnowledgeBaseSearch,
 }: MentionManagerProps) {
+    const id = useId();
     return (
         <>
             {/* 知识库弹窗 */}
-            {knowledgeBaseOpen && userId && (
-                <>
-                    <div
-                        className="fixed inset-0 z-[70] bg-background/20 backdrop-blur-[1px]"
-                        onClick={() => setKnowledgeBaseOpen(false)}
-                    />
-                    <div className="absolute bottom-full left-0 right-0 mb-4 z-[80] px-4 md:px-0">
-                        <div className="bg-background border border-border shadow-2xl rounded-2xl overflow-hidden flex flex-col max-h-[60vh] w-full animate-in slide-in-from-bottom-2 fade-in duration-200">
+            <Modal open={knowledgeBaseOpen && Boolean(userId)} onClose={() => setKnowledgeBaseOpen(false)} returnFocusRef={textareaRef} labelledBy={id}>
+                        <div className="flex flex-col max-h-[75dvh]">
                             <div className="flex items-center justify-between p-3 px-4 border-b border-border/50 bg-muted/30">
                                 <div className="flex items-center gap-2">
-                                    <div className="text-sm font-semibold">启用知识库搜索</div>
+                                    <h2 id={id} className="text-sm font-semibold">启用知识库搜索</h2>
                                     <SettingsCenterLink
                                         tab="knowledge-base"
                                         className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
@@ -76,6 +75,8 @@ export function MentionManager({
                                     </SettingsCenterLink>
                                 </div>
                                 <button
+                                    type="button"
+                                    aria-label="关闭知识库选择"
                                     onClick={() => setKnowledgeBaseOpen(false)}
                                     className="p-1.5 rounded-full hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
                                 >
@@ -99,11 +100,14 @@ export function MentionManager({
                                     mentionKnowledgeBases.map((kb) => {
                                         const enabled = promptKbIdSet.has(kb.id);
                                         return (
-                                            <div
+                                            <button
+                                                type="button"
+                                                aria-pressed={enabled}
+                                                disabled={Boolean(knowledgeBaseSavingId)}
                                                 key={kb.id}
                                                 onClick={() => toggleKnowledgeBaseSearch(kb.id)}
                                                 className={`
-                                                    group flex items-center justify-between p-3 rounded-xl border transition-all cursor-pointer
+                                                    group w-full text-left flex items-center justify-between p-3 rounded-xl border transition-all cursor-pointer disabled:opacity-60
                                                     ${enabled
                                                         ? 'bg-primary/5 border-primary/20 hover:bg-primary/10'
                                                         : 'bg-card border-border hover:border-primary/30 hover:shadow-sm'
@@ -128,15 +132,13 @@ export function MentionManager({
                                                     {enabled && !knowledgeBaseSavingId && <Check className="w-3 h-3" strokeWidth={3} />}
                                                     {knowledgeBaseSavingId === kb.id && <SoundWaveLoader variant="inline" />}
                                                 </div>
-                                            </div>
+                                            </button>
                                         );
                                     })
                                 )}
                             </div>
                         </div>
-                    </div>
-                </>
-            )}
+            </Modal>
 
             {/* Mention 弹出层 */}
             {mentionOpen && userId && (

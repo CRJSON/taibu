@@ -24,19 +24,27 @@ test('generated artifacts and caller inventory are deterministic and source-pinn
   assert.match(sql, new RegExp(`COMMENT ON SCHEMA public IS 'taibu-selfhost-v1:${manifest.sourceFingerprint}'`));
 });
 
-test('all 42 application tables retain the complete snapshot column inventory', () => {
+test('all 53 application tables retain the reviewed snapshot column inventory', () => {
   const snapshot = read('supabase/tabel_export_from_supabase.sql');
-  assert.equal(names(sql).length, 42);
+  assert.equal(names(sql).length, 53);
   assert.deepEqual(names(sql), names(snapshot));
   for (const match of snapshot.matchAll(/^CREATE TABLE public\.(\w+) \(([\s\S]*?)^\);/gm)) {
     const actual = new RegExp(`CREATE TABLE public\\.${match[1]} \\(([\\s\\S]*?)\\n\\);`).exec(sql)?.[1];
     assert.ok(actual, match[1]);
     for (const column of match[2].matchAll(/^  ([a-z_]+) /gm)) {
-      assert.match(actual, new RegExp(`^  ${column[1]} `, 'm'));
+      if (match[1] === 'agent_workers' && column[1] === 'engine')
+        assert.match(sql, /ALTER TABLE public.agent_workers ADD COLUMN engine text NOT NULL/);
+      else if (match[1] === 'agent_run_commands' && column[1] === 'durable_admitted')
+        assert.match(sql, /ALTER TABLE public.agent_run_commands ADD COLUMN durable_admitted boolean NOT NULL/);
+      else if (match[1] === 'agent_run_commands' && ['revision','sort_order','delivery_state','original_message','original_mode'].includes(column[1])) assert.match(sql,new RegExp(`ADD COLUMN ${column[1]} `));
+      else assert.match(actual, new RegExp(`^\\s+${column[1]} `, 'm'));
     }
   }
   assert.doesNotMatch(sql, /\bUSER-DEFINED\b|\b(?:tags|yongshen_targets) ARRAY\b|\) NOT VALID,/);
   assert.match(sql, /content_vector extensions\.vector/);
+  const agentStart=sql.indexOf('CREATE TABLE public.agent_runs');
+  assert.ok(sql.slice(0,agentStart).lastIndexOf('CREATE TABLE public.') < sql.indexOf('ADD CONSTRAINT activation_keys_'));
+  assert.ok(agentStart>sql.indexOf('ADD CONSTRAINT activation_keys_'));
 });
 
 test('platform tables are never fabricated and transaction ownership belongs to caller', () => {
@@ -88,7 +96,7 @@ test('restored transactional uniqueness and message cascade are present', () => 
 });
 
 test('all current literal application RPC references have definitions or explicit blockers', () => {
-  assert.equal(manifest.rpcReferences.length, 35);
+  assert.equal(manifest.rpcReferences.length, 57);
   assert.deepEqual(manifest.rpcReferences.filter(r => r.status === 'missing-source'), []);
   for (const rpc of manifest.rpcReferences) assert.ok(definition(rpc.name) || ['check_login_attempts', 'record_login_attempt'].includes(rpc.name), rpc.name);
   assert.deepEqual(manifest.requiredPostBaselineMigrations, ['supabase/migrations/20261003_100000_fix_rate_limit_admission.sql']);
@@ -104,6 +112,19 @@ test('local graph deletion and vector compatibility repairs preserve tenant isol
     assert.ok(body.includes("v_elem_text !~ '^-?[0-9]+[.]?[0-9]*([eE][+-]?[0-9]+)?$'"));
     assert.match(body, /kb.user_id = (?:v|p)_user_id/);
   }
+});
+
+test('Agent lifecycle repair is included after Durable without adding tables or changing settlement', () => {
+  const migration = 'supabase/migrations/20261006_110000_agent_lifecycle_fixes.sql';
+  assert.ok(manifest.sources.some(source => source.file === migration));
+  assert.match(definition('agent_create_run'), /versions:=jsonb_set\(versions,ARRAY\[version_index::text\],version_snapshot\)/);
+  assert.match(definition('agent_protect_conversation_delete'), /status IN \('queued','running','awaiting_input','cancelling'\)/);
+  assert.match(sql, /CREATE TRIGGER agent_conversation_delete_guard BEFORE DELETE ON public.conversations/);
+  assert.ok(sql.indexOf('CREATE TRIGGER agent_conversation_delete_guard') > sql.indexOf('CREATE TABLE public.agent_durable_commits'));
+  // The Durable migration amends the catalog body with pg_get_functiondef;
+  // the generated source's last literal definition precedes that amendment.
+  assert.match(sql, /new_guard text := .*durable_admitted/);
+  assert.equal(names(sql).length, 53);
 });
 
 test('storage uses actual flat UID naming, bounded MIME/size and owner-only writes', () => {

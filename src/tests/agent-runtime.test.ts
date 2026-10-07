@@ -1,0 +1,1101 @@
+import { test, beforeEach } from "node:test";
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  createAssistantMessageEventStream,
+  getCurrentTools,
+  type AssistantMessage,
+} from "@earendil-works/pi-ai";
+import type { PiStreamFn as StreamFn } from "../lib/agent/types";
+import type { StorageWrite } from "@earendil-works/pi-durable";
+import {
+  AgentStore,
+  type AgentRunRow,
+  type AgentArtifactRow,
+  type AgentCommandRow,
+} from "../lib/agent/store.server";
+import {
+  executeAgentRun,
+} from "../lib/agent/runtime.server";
+import { emptyPiAssistant } from "../lib/agent/pi-stream.server";
+import {
+  chartPayloadForAgent,
+  stableAgentSeed,
+  createAgentTools,
+  searchAgentWeb,
+} from "../lib/agent/tools.server";
+import type { AIModelConfig } from "../types";
+import { MockLanguageModelV3 } from "ai/test";
+import { countTokens } from "../lib/token-utils";
+
+const config: AIModelConfig = {
+  id: "fixture",
+  name: "fixture",
+  vendor: "other",
+  modelId: "fixture",
+  apiUrl: "https://model.example/v1",
+  apiKeyEnvVar: "FIXTURE_KEY",
+  supportsReasoning: false,
+  requiredTier: "free",
+};
+const row = (): AgentRunRow => {
+  const id = randomUUID();
+  return {
+    id,
+    user_id: randomUUID(),
+    conversation_id: randomUUID(),
+    request_id: randomUUID(),
+    request_hash: "hash",
+    status: "running",
+    checkpoint: {
+      version: 1,
+      messages: [
+        { role: "user", content: "请用工具分析", timestamp: Date.now() },
+      ],
+      parts: [],
+      finalArtifacts: [],
+    },
+    public_message: {
+      id: `agent:${id}`,
+      role: "assistant",
+      content: "",
+      createdAt: new Date().toISOString(),
+      agent: { version: 1, runId: id, status: "running", parts: [] },
+    },
+    input: {
+      model: "fixture",
+      reasoning: false,
+      webEnabled: false,
+      systemPrompt: "fixture",
+      title: "fixture",
+      userMessage: {
+        id: "user",
+        role: "user",
+        content: "请用工具分析",
+        createdAt: new Date().toISOString(),
+      },
+    },
+    billing: "charged",
+    worker_id: "test-worker",
+    fence: 1,
+    cancel_requested: false,
+    record_id: null,
+    created_at: new Date().toISOString(),
+    event_cursor: 1,
+  };
+};
+class MemoryStore extends AgentStore {
+  readonly drafts = new Map<string, AgentArtifactRow>();
+  readonly writes: Array<{ name: string; args: Record<string, unknown> }> = [];
+  pending: AgentCommandRow[] = [];
+  log: Array<{ sequence: number; writes: StorageWrite[] }> = [];
+  draft(callId: string) {
+    return [...this.drafts.values()].find(d => d.call_id === callId || d.call_id.endsWith(`:${callId}`));
+  }
+  nativeEntries() {
+    return this.log.flatMap(c => c.writes).filter(w => w.type === "entry").map(w => w.value);
+  }
+  constructor() {
+    super({} as SupabaseClient);
+  }
+  override async artifact(_run: AgentRunRow, callId: string) {
+    return this.drafts.get(callId) ?? null;
+  }
+  override async artifacts() {
+    return [...this.drafts.values()].filter((a) => a.kind === "calculation");
+  }
+  override async commands() {
+    return this.pending;
+  }
+  override async rpc<T>(
+    name: string,
+    args: Record<string, unknown>,
+  ): Promise<T> {
+    this.writes.push({ name, args: structuredClone(args) });
+    if (name === "agent_durable_read") return this.log.filter(c => c.sequence > Number(args.p_after)).slice(0, 200) as T;
+    if (name === "agent_durable_commit") {
+      const sequence = Number(args.p_sequence);
+      const writes = structuredClone(args.p_writes) as StorageWrite[];
+      const existing = this.log.find(c => c.sequence === sequence);
+      if (existing) assert.deepEqual(existing.writes, writes);
+      else {
+        assert.equal(sequence, this.log.length + 1);
+        this.log.push({ sequence, writes });
+      }
+      for (const write of writes) {
+        if (write.type === "submission" && ["placed", "done"].includes(write.value.status)) {
+          const match = /^command:(\d+)$/.exec(write.value.requestId ?? "");
+          if (match) this.pending = this.pending.filter(c => c.sequence !== Number(match[1]));
+        }
+      }
+      return sequence as T;
+    }
+    if (name === "agent_cache_tool") {
+      const data = {
+        id: randomUUID(),
+        call_id: args.p_call_id,
+        tool_name: args.p_tool_name,
+        kind: args.p_kind,
+        args: args.p_args,
+        result: args.p_result,
+      } as AgentArtifactRow;
+      this.drafts.set(data.call_id, data);
+      return data as T;
+    }
+    if (name === "agent_checkpoint" && args.p_command)
+      this.pending = this.pending.filter((c) => c.sequence !== args.p_command);
+    return false as T;
+  }
+}
+function scripted(
+  build: (index: number) => AssistantMessage["content"],
+  onContext?: (messages: Parameters<StreamFn>[1]["messages"]) => void,
+): StreamFn {
+  let round = 0;
+  return (model, context) => {
+    assert.ok(getCurrentTools(context.messages).some((t) => t.name === "bazi"));
+    onContext?.(context.messages);
+    const output = createAssistantMessageEventStream(),
+      message = emptyPiAssistant(model);
+    message.content = build(round++);
+    message.usage.input = countTokens(JSON.stringify(context.messages));
+    message.usage.totalTokens = message.usage.input;
+    message.stopReason = message.content.some((p) => p.type === "toolCall")
+      ? "toolUse"
+      : "stop";
+    output.push({ type: "start", partial: message });
+    output.push({ type: "done", reason: message.stopReason, message });
+    output.end(message);
+    return output;
+  };
+}
+beforeEach((t) => {
+  assert.ok("mock" in t);
+  const credits =
+    require("../lib/user/credits") as typeof import("../lib/user/credits");
+  const settings =
+    require("../lib/app-settings") as typeof import("../lib/app-settings");
+  const sdk =
+    require("../lib/ai/providers/ai-sdk-provider") as typeof import("../lib/ai/providers/ai-sdk-provider");
+  t.mock.method(credits, "getUserCreditInfo", async () => ({
+    membership: "plus",
+    credits: 10,
+    expiresAt: null,
+  }));
+  t.mock.method(settings, "readFeatureModuleStateFresh", async () => ({ status: "enabled" as const }));
+  t.mock.method(sdk, "isModelAvailable", () => true);
+  t.mock.method(sdk, "createModelFromConfig", () => new MockLanguageModelV3());
+  t.mock.method(sdk, "callWithAISDK", async () => ({
+    text: "用户要求八字分析；计算记录、最终成果ID和来源保留在最近回合。",
+  }));
+});
+
+test("Pi completes more than common loop defaults using real core tools with no per-task cap", async () => {
+  const store = new MemoryStore(),
+    run = row();
+  let rounds = 0;
+  const streamFn = scripted((index) => {
+    rounds++;
+    if (index < 35)
+      return [
+        {
+          type: "toolCall",
+          id: `calculation-${index}`,
+          name: "bazi",
+          arguments: {
+            gender: "male",
+            birthYear: 1990,
+            birthMonth: 1,
+            birthDay: 15,
+            birthHour: 9,
+          },
+        },
+      ];
+    if (index === 35)
+      return [
+        {
+          type: "toolCall",
+          id: "select",
+          name: "select_final_artifacts",
+          arguments: { artifactIds: [store.draft("calculation-34")!.id] },
+        },
+      ];
+    return [{ type: "text", text: "最终八字分析" }];
+  });
+  await executeAgentRun(store, run, undefined, { config: { ...config, id: "deepseek-v3.2" }, streamFn });
+  const finish = store.writes.find((w) => w.name === "agent_finish_run")!;
+  assert.equal(
+    finish.args.p_status,
+    "completed",
+    (finish.args.p_message as AgentRunRow["public_message"]).agent?.error,
+  );
+  assert.equal(rounds, 37);
+  assert.equal((await store.artifacts()).length, 35);
+  const cp = finish.args.p_checkpoint as AgentRunRow["checkpoint"];
+  assert.equal(cp.finalArtifacts.length, 1);
+  assert.equal(cp.version, 2);
+  assert.equal(store.nativeEntries().flatMap(e => e.model ?? []).filter(m => m.role === "toolResult").length, 36);
+  assert.ok(JSON.stringify(store.log).includes("日主"));
+  assert.ok(
+    store.nativeEntries().some(e => e.kind === "pi.compaction"),
+  );
+  assert.ok(
+    store.writes.every((w) => w.name !== "agent_create_run"),
+    "runtime never recharges",
+  );
+});
+
+test("ask_user pauses and a reply is consumed in the same checkpoint before continuation", async () => {
+  const store = new MemoryStore(),
+    run = row();
+  await executeAgentRun(store, run, undefined, {
+    config,
+    streamFn: scripted(() => [
+      {
+        type: "toolCall",
+        id: "question",
+        name: "ask_user",
+        arguments: { question: "出生年月日和时辰？" },
+      },
+    ]),
+  });
+  const first = store.writes.find((w) => w.name === "agent_finish_run")!;
+  assert.equal(
+    first.args.p_status,
+    "awaiting_input",
+    JSON.stringify(first.args.p_message),
+  );
+  run.checkpoint = first.args.p_checkpoint as AgentRunRow["checkpoint"];
+  store.pending = [
+    {
+      sequence: 7,
+      mode: "reply",
+      message: {
+        id: "reply",
+        role: "user",
+        content: "1990年1月15日9点",
+        createdAt: new Date().toISOString(),
+      },
+    },
+  ];
+  let sawReply = false;
+  await executeAgentRun(store, run, undefined, {
+    config,
+    streamFn: scripted(
+      () => [{ type: "text", text: "根据补充信息完成分析" }],
+      (messages) => {
+        sawReply = messages.some(
+          (m) =>
+            m.role === "user" &&
+            typeof m.content === "string" &&
+            m.content.includes("1990年"),
+        );
+      },
+    ),
+  });
+  assert.equal(sawReply, true);
+  assert.equal(store.pending.length, 0);
+  assert.equal(
+    store.writes.filter((w) => w.name === "agent_finish_run").at(-1)!.args
+      .p_status,
+    "completed",
+  );
+  assert.ok(
+    store.writes.some(
+      (w) => w.name === "agent_durable_commit" &&
+        (w.args.p_writes as StorageWrite[]).some(s => s.type === "submission" && s.value.requestId === "command:7" && s.value.status === "placed"),
+    ),
+  );
+});
+
+test("a committed native tool result with a lost receipt is recovered without recaching or recharging", async () => {
+  class LostReceiptStore extends MemoryStore {
+    lossRemaining = 2;
+    failedSequence = 0;
+    override async rpc<T>(name: string, args: Record<string, unknown>): Promise<T> {
+      const result = await super.rpc<T>(name, args);
+      if (name === "agent_durable_commit") {
+        const writes = args.p_writes as StorageWrite[];
+        if (!this.failedSequence && writes.some(w => w.type === "entry" && w.value.model?.some(m => m.role === "toolResult" && m.toolName === "bazi")))
+          this.failedSequence = Number(args.p_sequence);
+        if (Number(args.p_sequence) === this.failedSequence && this.lossRemaining-- > 0)
+          throw new Error("native receipt lost");
+      }
+      return result;
+    }
+  }
+  const store = new LostReceiptStore(), run = row();
+  run.checkpoint.version = 2;
+  await executeAgentRun(store, run, undefined, { config, streamFn: scripted(() => [{
+    type: "toolCall", id: "cached-before-loss", name: "bazi",
+    arguments: { gender: "male", birthYear: 1990, birthMonth: 1, birthDay: 15, birthHour: 9 },
+  }]) });
+  assert.equal(store.drafts.size, 1);
+  assert.ok(!store.writes.some(w => w.name === "agent_finish_run"), "ambiguous storage must retain credentials and charge for takeover");
+  run.checkpoint = store.writes.filter(w => w.name === "agent_durable_commit").at(-1)!.args.p_checkpoint as AgentRunRow["checkpoint"];
+  run.fence++;
+  await executeAgentRun(store, run, undefined, {
+    config, streamFn: scripted(index => index === 0 ? [{
+      type: "toolCall", id: "select-recovered", name: "select_final_artifacts",
+      arguments: { artifactIds: [store.draft("cached-before-loss")!.id] },
+    }] : [{ type: "text", text: "工具结果接管后完成" }]),
+  });
+  const finish = store.writes.find(w => w.name === "agent_finish_run")!;
+  assert.equal(finish.args.p_status, "completed");
+  assert.equal(store.writes.filter(w => w.name === "agent_cache_tool" && w.args.p_tool_name === "bazi").length, 1);
+  assert.equal(store.writes.filter(w => w.name === "agent_create_run").length, 0);
+});
+
+test("two pending questions use separate human replies without consuming a queued reply twice", async () => {
+  const store = new MemoryStore(), run = row();
+  const input = (sequence: number, content: string): AgentCommandRow => ({
+    sequence, mode: "reply", message: { id: String(sequence), role: "user", content, createdAt: new Date().toISOString() },
+  });
+  await executeAgentRun(store, run, undefined, { config, streamFn: scripted(() => [
+    { type: "toolCall", id: "date", name: "ask_user", arguments: { question: "出生日期？" } },
+    { type: "toolCall", id: "gender", name: "ask_user", arguments: { question: "性别？" } },
+  ]) });
+  let finished = store.writes.filter(w => w.name === "agent_finish_run").at(-1)!;
+  assert.equal(finished.args.p_status, "awaiting_input");
+  run.checkpoint = finished.args.p_checkpoint as AgentRunRow["checkpoint"];
+  store.pending.push(input(7, "1990年1月15日9时"));
+  await executeAgentRun(store, run, undefined, { config, streamFn: scripted(() => { throw new Error("second question remains pending"); }) });
+  finished = store.writes.filter(w => w.name === "agent_finish_run").at(-1)!;
+  assert.equal(finished.args.p_status, "awaiting_input");
+  assert.equal((finished.args.p_checkpoint as AgentRunRow["checkpoint"]).question, "性别？");
+  assert.equal(store.pending.length, 1, "admitted first reply stays queued until the round boundary");
+  run.checkpoint = finished.args.p_checkpoint as AgentRunRow["checkpoint"];
+  store.pending.push(input(8, "男性"));
+  await executeAgentRun(store, run, undefined, { config, streamFn: scripted(() => [{ type: "text", text: "两项补充已确认" }], messages => {
+    const replies = messages.filter((m): m is import("@earendil-works/pi-ai").ToolResultMessage => m.role === "toolResult" && m.toolName === "ask_user");
+    assert.ok(replies.some(m => JSON.stringify(m.content).includes("1990年")));
+    assert.ok(replies.some(m => JSON.stringify(m.content).includes("男性")));
+  }) });
+  finished = store.writes.filter(w => w.name === "agent_finish_run").at(-1)!;
+  assert.equal(finished.args.p_status, "completed");
+  assert.equal(store.pending.length, 0);
+});
+
+test("a V1 committed question migrates while paused, then continues on its first V2 reply", async () => {
+  const store = new MemoryStore(), run = row();
+  const assistant = emptyPiAssistant({ id: "fixture", provider: "taibu" } as Parameters<typeof emptyPiAssistant>[0]);
+  assistant.stopReason = "toolUse";
+  assistant.content = [{ type: "toolCall", id: "legacy-question", name: "ask_user", arguments: { question: "出生日期？" } }];
+  run.checkpoint.messages.push(assistant);
+  run.checkpoint.question = "出生日期？";
+  store.drafts.set("legacy-question", {
+    id: randomUUID(), call_id: "legacy-question", tool_name: "ask_user", kind: "tool",
+    args: { question: "出生日期？" },
+    result: { content: [{ type: "text", text: "等待补充" }], details: { question: "出生日期？", awaitingUser: true } },
+  });
+  await executeAgentRun(store, run, undefined, { config, streamFn: () => { throw new Error("must wait for the human reply"); } });
+  let finished = store.writes.filter(w => w.name === "agent_finish_run").at(-1)!;
+  assert.equal(finished.args.p_status, "awaiting_input");
+  run.checkpoint = finished.args.p_checkpoint as AgentRunRow["checkpoint"];
+  run.fence++;
+  store.pending.push({ sequence: 9, mode: "reply", message: { id: "legacy-reply", role: "user", content: "1990年1月15日9时，男性", createdAt: new Date().toISOString() } });
+  await executeAgentRun(store, run, undefined, { config, streamFn: scripted(() => [{ type: "text", text: "旧任务补充后完成" }], messages => {
+    assert.ok(messages.some(m => m.role === "user" && JSON.stringify(m.content).includes("男性")));
+  }) });
+  finished = store.writes.filter(w => w.name === "agent_finish_run").at(-1)!;
+  assert.equal(finished.args.p_status, "completed");
+  assert.equal(store.pending.length, 0);
+  assert.equal(store.writes.filter(w => w.name === "agent_cache_tool").length, 0);
+});
+
+test("repeated model call IDs identify distinct native ToolTasks", async () => {
+  const store = new MemoryStore(), run = row();
+  await executeAgentRun(store, run, undefined, { config, streamFn: scripted(index => {
+    if (index < 2) return [{
+      type: "toolCall", id: "same-model-id", name: "bazi",
+      arguments: { gender: "male", birthYear: 1990, birthMonth: 1, birthDay: 15 + index, birthHour: 9 },
+    }];
+    if (index === 2) return [{ type: "toolCall", id: "same-model-id", name: "select_final_artifacts", arguments: { artifactIds: [...store.drafts.values()].filter(d => d.kind === "calculation").map(d => d.id) } }];
+    return [{ type: "text", text: "两个不同命盘" }];
+  }) });
+  assert.equal(store.writes.find(w => w.name === "agent_finish_run")!.args.p_status, "completed");
+  assert.equal((await store.artifacts()).length, 2);
+  assert.equal(new Set([...store.drafts.values()].map(d => d.call_id)).size, 3);
+});
+
+test("lease renewal begins while a long native log is still reopening", async () => {
+  class SlowReadStore extends MemoryStore {
+    renewingBeforeOpen = false;
+    reading = false;
+    override async rpc<T>(name: string, args: Record<string, unknown>): Promise<T> {
+      if (name === "agent_durable_read") {
+        this.reading = true;
+        await new Promise(resolve => setTimeout(resolve, 1200));
+        this.reading = false;
+      }
+      if (name === "agent_renew_lease" && this.reading) this.renewingBeforeOpen = true;
+      return super.rpc<T>(name, args);
+    }
+  }
+  const store = new SlowReadStore();
+  await executeAgentRun(store, row(), undefined, { config, streamFn: scripted(() => [{ type: "text", text: "加载后完成" }]) });
+  assert.equal(store.renewingBeforeOpen, true);
+  assert.equal(store.writes.find(w => w.name === "agent_finish_run")!.args.p_status, "completed");
+});
+
+test("Agent database RPC requests carry a per-request deadline", async () => {
+  let signal: AbortSignal | undefined;
+  const store = new AgentStore({
+    rpc: () => ({
+      abortSignal: (deadline: AbortSignal) => { signal = deadline; return Promise.resolve({ data: 7, error: null }); },
+    }),
+  } as unknown as SupabaseClient);
+  assert.equal(await store.rpc("fixture", {}), 7);
+  assert.ok(signal instanceof AbortSignal && !signal.aborted);
+});
+
+test("an empty new answer cannot succeed by reusing an earlier task's history", async () => {
+  const store = new MemoryStore(), run = row();
+  const history = emptyPiAssistant({ id: "fixture", provider: "taibu" } as Parameters<typeof emptyPiAssistant>[0]);
+  history.content = [{ type: "text", text: "之前任务的回答" }];
+  history.stopReason = "stop";
+  run.checkpoint.messages.unshift(history);
+  await executeAgentRun(store, run, undefined, { config, streamFn: scripted(() => []) });
+  const finished = store.writes.find(w => w.name === "agent_finish_run")!;
+  assert.equal(finished.args.p_status, "failed");
+  assert.equal(finished.args.p_record, null);
+  assert.equal((finished.args.p_message as AgentRunRow["public_message"]).content, "");
+});
+
+test("unsupported tools are reported without copying upstream error details", async () => {
+  const store = new MemoryStore(), run = row();
+  await executeAgentRun(store, run, undefined, { config, streamFn: model => {
+    const stream = createAssistantMessageEventStream(), message = emptyPiAssistant(model);
+    message.stopReason = "error";
+    message.errorMessage = "当前模型不支持工具调用，请切换普通对话";
+    stream.push({ type: "error", reason: "error", error: message });
+    stream.end(message);
+    return stream;
+  } });
+  const finished = store.writes.find(w => w.name === "agent_finish_run")!;
+  assert.equal(finished.args.p_status, "failed");
+  assert.match((finished.args.p_message as AgentRunRow["public_message"]).agent!.error!, /不支持工具调用/);
+});
+
+test("native Durable settlement fails SDK EOF and timeout, retaining visible text without saving a record", async (t) => {
+  const sdk = require("../lib/ai/providers/ai-sdk-provider") as typeof import("../lib/ai/providers/ai-sdk-provider");
+  for (const scenario of ["eof", "timeout"] as const) {
+    const timeout = new AbortController();
+    t.mock.method(AbortSignal, "timeout", () => timeout.signal);
+    const model = new MockLanguageModelV3({ doStream: async ({ abortSignal }) => ({
+      stream: new ReadableStream({ start(controller) {
+        controller.enqueue({ type: "stream-start", warnings: [] });
+        controller.enqueue({ type: "text-start", id: "text" });
+        controller.enqueue({ type: "text-delta", id: "text", delta: "partial interrupted response" });
+        if (scenario === "eof") controller.close();
+        else {
+          abortSignal!.addEventListener("abort", () => controller.error(abortSignal!.reason), { once: true });
+          setTimeout(() => timeout.abort(), 20);
+        }
+      } }),
+    }) });
+    t.mock.method(sdk, "createModelFromConfig", () => model);
+    const store = new MemoryStore();
+    await executeAgentRun(store, row(), undefined, { config });
+    const finished = store.writes.find(w => w.name === "agent_finish_run")!;
+    assert.equal(finished.args.p_status, "failed", scenario);
+    assert.equal(finished.args.p_record, null);
+    assert.match((finished.args.p_message as AgentRunRow["public_message"]).content, /partial interrupted/);
+    assert.ok(store.log.flatMap(c => c.writes).some(w => w.type === "submission" && w.value.status === "unanswered"));
+    assert.equal(model.doStreamCalls.length, 1);
+  }
+});
+
+test("fresh unavailable or disabled Agent permission blocks every model turn even with a permissive cache", async (t) => {
+  const features = require("../lib/app-settings") as typeof import("../lib/app-settings");
+  t.mock.method(features, "isFeatureModuleEnabled", async () => true);
+  for (const state of ["disabled", "unavailable"] as const) {
+    t.mock.method(features, "readFeatureModuleStateFresh", async (feature: Parameters<typeof features.readFeatureModuleStateFresh>[0]) => ({ status: feature === "agent" ? state : "enabled" }));
+    let calls = 0;
+    const store = new MemoryStore();
+    await executeAgentRun(store, row(), undefined, { config, streamFn: scripted(() => { calls++; return [{ type: "text", text: "must not run" }]; }) });
+    assert.equal(calls, 0);
+    const finish = store.writes.find(w => w.name === "agent_finish_run")!;
+    assert.equal(finish.args.p_status, "failed");
+    assert.equal(finish.args.p_record, null);
+  }
+});
+
+test("Agent completion depends on chat permissions, independently of records availability", async (t) => {
+  const features = require("../lib/app-settings") as typeof import("../lib/app-settings");
+  t.mock.method(console, "warn", () => {});
+  t.mock.method(features, "isFeatureModuleEnabled", async () => true);
+  for (const state of ["disabled", "unavailable"] as const) {
+    t.mock.method(features, "readFeatureModuleStateFresh", async (feature: Parameters<typeof features.readFeatureModuleStateFresh>[0]) => ({ status: feature === "records" ? state : "enabled" }));
+    const store = new MemoryStore();
+    await executeAgentRun(store, row(), undefined, { config, streamFn: scripted(() => [{ type: "text", text: "visible final text" }]) });
+    const finish = store.writes.filter(w => w.name === "agent_finish_run");
+    assert.equal(finish.length, 1);
+    assert.equal(finish[0].args.p_status, "completed");
+    assert.equal(finish[0].args.p_record, null);
+    assert.equal((finish[0].args.p_message as AgentRunRow["public_message"]).content, "visible final text");
+  }
+});
+
+test("cached private tool results cannot bypass a fresh unavailable feature state", async (t) => {
+  const features = require("../lib/app-settings") as typeof import("../lib/app-settings");
+  const store = new MemoryStore(), run = row();
+  const tools = await createAgentTools(store, run, run.checkpoint);
+  store.drafts.set("private-profile", { id: randomUUID(), call_id: "private-profile", tool_name: "read_user_profile", kind: "tool", args: {}, result: { content: [], details: { private: true } } });
+  t.mock.method(features, "isFeatureModuleEnabled", async () => true);
+  t.mock.method(features, "readFeatureModuleStateFresh", async () => ({ status: "unavailable" as const }));
+  await assert.rejects(tools.find(tool => tool.name === "read_user_profile")!.execute("private-profile", {}), /功能状态暂不可用/);
+  await assert.rejects(tools.find(tool => tool.name === "bazi")!.execute("chart", { gender: "male", birthYear: 1990, birthMonth: 1, birthDay: 1, birthHour: 9 }), /功能状态暂不可用/);
+  assert.equal(store.writes.length, 0);
+});
+
+test("recovery reuses a committed calculation result and recreates its missing toolResult once", async () => {
+  const store = new MemoryStore(),
+    run = row(),
+    args = {
+      gender: "male",
+      birthYear: 1990,
+      birthMonth: 1,
+      birthDay: 15,
+      birthHour: 9,
+    };
+  const assistant = emptyPiAssistant({
+    id: "fixture",
+    provider: "taibu",
+  } as Parameters<typeof emptyPiAssistant>[0]);
+  assistant.content = [
+    { type: "toolCall", id: "replay", name: "bazi", arguments: args },
+  ];
+  assistant.stopReason = "toolUse";
+  run.checkpoint.messages.push(assistant);
+  const artifact: AgentArtifactRow = {
+    id: randomUUID(),
+    call_id: "replay",
+    tool_name: "bazi",
+    kind: "calculation",
+    args,
+    result: {
+      content: [{ type: "text", text: "已提交的真实排盘" }],
+      details: { original: true },
+      canonicalText: "已提交的真实排盘",
+    },
+  };
+  store.drafts.set("replay", artifact);
+  await executeAgentRun(store, run, undefined, {
+    config,
+    streamFn: scripted((index) =>
+      index === 0
+        ? [
+            {
+              type: "toolCall",
+              id: "selection",
+              name: "select_final_artifacts",
+              arguments: { artifactIds: [artifact.id] },
+            },
+          ]
+        : [{ type: "text", text: "恢复完成" }],
+    ),
+  });
+  assert.equal(
+    store.writes.filter(
+      (w) => w.name === "agent_cache_tool" && w.args.p_call_id === "replay",
+    ).length,
+    0,
+  );
+  const cp = store.writes.find((w) => w.name === "agent_finish_run")!.args
+    .p_checkpoint as AgentRunRow["checkpoint"];
+  assert.equal(
+    cp.messages.filter(
+      (m) => m.role === "toolResult" && m.toolCallId === "replay",
+    ).length,
+    1,
+  );
+});
+
+test("truncated tool arguments and restored model errors fail without replay or falsely succeeding", async () => {
+  for (const stopReason of ["length", "error"] as const) {
+    const store = new MemoryStore(),
+      run = row(),
+      assistant = emptyPiAssistant({
+        id: "fixture",
+        provider: "taibu",
+      } as Parameters<typeof emptyPiAssistant>[0]);
+    assistant.stopReason = stopReason;
+    assistant.errorMessage = "fixture failure";
+    assistant.content = [
+      { type: "toolCall", id: "invalid", name: "bazi", arguments: {} },
+    ];
+    run.checkpoint.messages.push(assistant);
+    await executeAgentRun(store, run, undefined, {
+      config,
+      streamFn: () => {
+        throw new Error("must not request again");
+      },
+    });
+    assert.equal(
+      store.writes.find((w) => w.name === "agent_finish_run")!.args.p_status,
+      "failed",
+    );
+    assert.equal(store.drafts.size, 0);
+  }
+});
+
+test("queued cancellation settles without model invocation; random seeds and native chart rules are stable", async () => {
+  const store = new MemoryStore(),
+    run = row();
+  run.cancel_requested = true;
+  await executeAgentRun(store, run, undefined, {
+    config,
+    streamFn: () => {
+      throw new Error("must not invoke model");
+    },
+  });
+  assert.equal(
+    store.writes.find((w) => w.name === "agent_finish_run")!.args.p_status,
+    "cancelled",
+  );
+  assert.equal(
+    stableAgentSeed(run.id, "call"),
+    stableAgentSeed(run.id, "call"),
+  );
+  assert.notEqual(
+    stableAgentSeed(run.id, "call"),
+    stableAgentSeed(run.id, "other"),
+  );
+  const args = {
+    gender: "male",
+    birthYear: 1990,
+    birthMonth: 1,
+    birthDay: 15,
+    birthHour: 9,
+  };
+  assert.equal(chartPayloadForAgent("bazi", args)?.birth_date, "1990-01-15");
+  assert.equal(
+    chartPayloadForAgent("bazi", { ...args, timezone: "America/New_York", disambiguation: "later" })?.timezone,
+    "America/New_York",
+  );
+  assert.equal(chartPayloadForAgent("bazi", { ...args, disambiguation: "later" })?.disambiguation, "later");
+  assert.equal(chartPayloadForAgent("bazi", { ...args, timezone: "invalid/timezone" }), null);
+  assert.equal(chartPayloadForAgent("bazi", { ...args, disambiguation: "invalid" }), null);
+  assert.equal(chartPayloadForAgent("bazi", { ...args, dayBoundary: "zi" }), null);
+  assert.equal(
+    chartPayloadForAgent("bazi", { ...args, timezone: "UTC" })?.disambiguation,
+    "reject",
+  );
+  assert.equal(
+    chartPayloadForAgent("bazi", {
+      ...args,
+      birthMonth: 2,
+      birthDay: 30,
+      calendarType: "lunar",
+    }),
+    null,
+  );
+  assert.equal(
+    chartPayloadForAgent("ziwei", {
+      ...args,
+      calculationOptions: { algorithm: "zhongzhou" },
+    }),
+    null,
+  );
+});
+
+test("takeover completes final selection after a committed model response", async () => {
+  const store = new MemoryStore(),
+    run = row();
+  const assistant = emptyPiAssistant({
+    id: "fixture",
+    provider: "taibu",
+  } as Parameters<typeof emptyPiAssistant>[0]);
+  assistant.content = [{ type: "text", text: "排盘初步分析" }];
+  assistant.stopReason = "stop";
+  run.checkpoint.messages.push(assistant);
+  run.checkpoint.parts.push({
+    type: "text",
+    id: "committed",
+    text: "排盘初步分析",
+  });
+  const artifact: AgentArtifactRow = {
+    id: randomUUID(),
+    call_id: "saved",
+    tool_name: "bazi",
+    kind: "calculation",
+    args: {},
+    result: { content: [{ type: "text", text: "真实成果" }], details: {} },
+  };
+  store.drafts.set("saved", artifact);
+  await executeAgentRun(store, run, undefined, {
+    config,
+    streamFn: scripted((index) =>
+      index === 0
+        ? [
+            {
+              type: "toolCall",
+              id: "select-after-takeover",
+              name: "select_final_artifacts",
+              arguments: { artifactIds: [artifact.id] },
+            },
+          ]
+        : [{ type: "text", text: "最终分析" }],
+    ),
+  });
+  const finish = store.writes.find((w) => w.name === "agent_finish_run")!;
+  assert.equal(finish.args.p_status, "completed");
+  assert.deepEqual(
+    (finish.args.p_checkpoint as AgentRunRow["checkpoint"]).finalArtifacts,
+    [artifact.id],
+  );
+  assert.equal(finish.args.p_record, null);
+  assert.ok((finish.args.p_message as AgentRunRow["public_message"]).content.includes("最终分析"), "final analysis stays in chat history");
+});
+
+test("takeover replaces interrupted assistant parts without duplicating visible output", async () => {
+  const store = new MemoryStore(),
+    run = row();
+  run.checkpoint.streamingAssistantId = "interrupted";
+  run.checkpoint.parts.push(
+    { type: "text", id: "interrupted:0", text: "未完成的旧片段" },
+    { type: "reasoning", id: "interrupted:1", text: "旧推理片段" },
+  );
+  await executeAgentRun(store, run, undefined, {
+    config,
+    streamFn: scripted(() => [{ type: "text", text: "完整恢复结果" }]),
+  });
+  const cp = store.writes.find((w) => w.name === "agent_finish_run")!.args
+    .p_checkpoint as AgentRunRow["checkpoint"];
+  assert.deepEqual(cp.parts.filter(p => p.type === "text").map(p => p.text), ["完整恢复结果"]);
+  assert.equal(cp.streamingAssistantId, undefined);
+});
+
+test("cached web and question results restore their public parts once before continuation", async () => {
+  const previous = process.env.TAVILY_API_KEY;
+  process.env.TAVILY_API_KEY = randomUUID();
+  try {
+    const store = new MemoryStore(),
+      run = row();
+    run.input.webEnabled = true;
+    const results = [
+      { title: "来源", url: "https://example.com/source", content: "摘要" },
+    ];
+    store.drafts.set("web", {
+      id: randomUUID(),
+      call_id: "web",
+      tool_name: "web_search",
+      kind: "tool",
+      args: { query: "查询" },
+      result: { content: [], details: results },
+    });
+    store.drafts.set("ask", {
+      id: randomUUID(),
+      call_id: "ask",
+      tool_name: "ask_user",
+      kind: "tool",
+      args: { question: "出生时间？" },
+      result: { content: [], details: { question: "出生时间？" } },
+    });
+    const tools = await createAgentTools(store, run, run.checkpoint);
+    for (let i = 0; i < 2; i++) {
+      await tools
+        .find((t) => t.name === "web_search")!
+        .execute("web", { query: "查询" });
+      await tools
+        .find((t) => t.name === "ask_user")!
+        .execute("ask", { question: "出生时间？" });
+    }
+    assert.equal(
+      run.checkpoint.parts.filter((p) => p.type === "source").length,
+      1,
+    );
+    assert.equal(
+      run.checkpoint.parts.filter((p) => p.type === "question").length,
+      1,
+    );
+    assert.equal(run.checkpoint.question, "出生时间？");
+    assert.equal(
+      store.writes.length,
+      0,
+      "cache replay does not fetch or recache",
+    );
+  } finally {
+    if (previous === undefined) delete process.env.TAVILY_API_KEY;
+    else process.env.TAVILY_API_KEY = previous;
+  }
+});
+
+test("cached reads still check current feature and membership permissions", async (t) => {
+  const store = new MemoryStore(),
+    run = row();
+  const tools = await createAgentTools(store, run, run.checkpoint);
+  store.drafts.set("profile", {
+    id: randomUUID(),
+    call_id: "profile",
+    tool_name: "read_user_profile",
+    kind: "tool",
+    args: {},
+    result: { content: [], details: { private: true } },
+  });
+  const features =
+    require("../lib/app-settings") as typeof import("../lib/app-settings");
+  t.mock.method(
+    features,
+    "readFeatureModuleStateFresh",
+    async (feature: Parameters<typeof features.readFeatureModuleStateFresh>[0]) =>
+      ({ status: feature === "ai-personalization" ? "disabled" as const : "enabled" as const }),
+  );
+  await assert.rejects(
+    tools.find((t) => t.name === "read_user_profile")!.execute("profile", {}),
+    /个性化功能已关闭/,
+  );
+  const credits =
+    require("../lib/user/credits") as typeof import("../lib/user/credits");
+  t.mock.method(credits, "getUserCreditInfo", async () => ({
+    membership: "free",
+    credits: 10,
+    expiresAt: null,
+  }));
+  await assert.rejects(
+    tools
+      .find((t) => t.name === "search_knowledge")!
+      .execute("kb", { query: "查询" }),
+    /当前会员/,
+  );
+});
+
+test("Tavily transport sends only search fields and returns usable sources", async (t) => {
+  const previous = process.env.TAVILY_API_KEY;
+  process.env.TAVILY_API_KEY = randomUUID();
+  try {
+    t.mock.method(
+      globalThis,
+      "fetch",
+      async (
+        input: Parameters<typeof fetch>[0],
+        init: Parameters<typeof fetch>[1],
+      ) => {
+        assert.equal(input, "https://api.tavily.com/search");
+        assert.equal(
+          new Headers(init?.headers).get("authorization"),
+          `Bearer ${process.env.TAVILY_API_KEY}`,
+        );
+        assert.deepEqual(JSON.parse(String(init?.body)), {
+          query: "公开信息",
+          search_depth: "basic",
+          max_results: 5,
+          include_answer: false,
+          include_raw_content: false,
+        });
+        assert.ok(init?.signal);
+        return Response.json({
+          results: [
+            { title: "可引用", url: "https://example.com", content: "摘要" },
+            { title: "不可引用", url: "javascript:alert(1)", content: "资料" },
+          ],
+        });
+      },
+    );
+    assert.deepEqual(await searchAgentWeb("公开信息"), [
+      { title: "可引用", url: "https://example.com", content: "摘要" },
+    ]);
+  } finally {
+    if (previous === undefined) delete process.env.TAVILY_API_KEY;
+    else process.env.TAVILY_API_KEY = previous;
+  }
+});
+
+test("lease renewal failure preserves an interrupted checkpoint for takeover", async () => {
+  class InterruptedStore extends MemoryStore {
+    override async rpc<T>(
+      name: string,
+      args: Record<string, unknown>,
+    ): Promise<T> {
+      if (name === "agent_renew_lease")
+        throw new Error("connection interrupted");
+      return super.rpc<T>(name, args);
+    }
+  }
+  const store = new InterruptedStore(),
+    run = row();
+  const keepAlive = setTimeout(() => {}, 5000);
+  try {
+    await executeAgentRun(store, run, undefined, {
+      config,
+      streamFn: (model, _context, options) => {
+        const output = createAssistantMessageEventStream(),
+          message = emptyPiAssistant(model);
+        message.content = [{ type: "text", text: "中断片段" }];
+        output.push({ type: "start", partial: message });
+        output.push({
+          type: "text_delta",
+          contentIndex: 0,
+          delta: "中断片段",
+          partial: message,
+        });
+        options!.signal!.addEventListener(
+          "abort",
+          () => {
+            message.stopReason = "aborted";
+            output.push({ type: "error", reason: "aborted", error: message });
+            output.end(message);
+          },
+          { once: true },
+        );
+        return output;
+      },
+    });
+    assert.ok(
+      !store.writes.some((w) => w.name === "agent_finish_run"),
+      "transient lease loss does not settle the task",
+    );
+    const checkpoint = store.writes
+      .filter((w) => w.name === "agent_checkpoint")
+      .at(-1)!.args.p_checkpoint as AgentRunRow["checkpoint"];
+    assert.ok(checkpoint.streamingAssistantId);
+    assert.ok(
+      !checkpoint.messages.some(
+        (m) => m.role === "assistant" && m.stopReason === "aborted",
+      ),
+    );
+    run.checkpoint = checkpoint;
+    run.fence++;
+    await executeAgentRun(store, run, undefined, {
+      config,
+      streamFn: scripted(() => [{ type: "text", text: "接管后完成" }]),
+    });
+    const finish = store.writes.find((w) => w.name === "agent_finish_run")!;
+    assert.equal(finish.args.p_status, "completed");
+    assert.equal(
+      (finish.args.p_message as AgentRunRow["public_message"]).content,
+      "接管后完成",
+    );
+  } finally {
+    clearTimeout(keepAlive);
+  }
+});
+
+test("new calculations invalidate an earlier selection; selected tool-only results can finish", async () => {
+  const store = new MemoryStore(),
+    run = row();
+  const args = {
+    gender: "male",
+    birthYear: 1990,
+    birthMonth: 1,
+    birthDay: 15,
+    birthHour: 9,
+  };
+  await executeAgentRun(store, run, undefined, {
+    config,
+    streamFn: scripted((index) => {
+      if (index === 0 || index === 2)
+        return [
+          {
+            type: "toolCall",
+            id: `calc-${index}`,
+            name: "bazi",
+            arguments: { ...args, birthDay: index === 0 ? 15 : 16 },
+          },
+        ];
+      if (index === 1 || index === 4)
+        return [
+          {
+            type: "toolCall",
+            id: `select-${index}`,
+            name: "select_final_artifacts",
+            arguments: {
+              artifactIds: [
+                store.draft(index === 1 ? "calc-0" : "calc-2")!.id,
+              ],
+            },
+          },
+        ];
+      return index === 3
+        ? [{ type: "text", text: "重新计算后需要最终选择" }]
+        : [];
+    }),
+  });
+  const finish = store.writes.find((w) => w.name === "agent_finish_run")!;
+  assert.equal(finish.args.p_status, "completed");
+  assert.deepEqual(
+    (finish.args.p_checkpoint as AgentRunRow["checkpoint"]).finalArtifacts,
+    [store.draft("calc-2")!.id],
+  );
+  const toolOnlyStore = new MemoryStore(),
+    toolOnlyRun = row();
+  await executeAgentRun(toolOnlyStore, toolOnlyRun, undefined, {
+    config,
+    streamFn: scripted((index) =>
+      index === 0
+        ? [{ type: "toolCall", id: "calc", name: "bazi", arguments: args }]
+        : index === 1
+          ? [
+              {
+                type: "toolCall",
+                id: "select",
+                name: "select_final_artifacts",
+                arguments: {
+                  artifactIds: [toolOnlyStore.draft("calc")!.id],
+                },
+              },
+            ]
+          : [],
+    ),
+  });
+  const saved = toolOnlyStore.writes.find(
+    (w) => w.name === "agent_finish_run",
+  )!;
+  assert.equal(saved.args.p_status, "completed");
+  assert.equal(
+    (saved.args.p_message as AgentRunRow["public_message"]).content,
+    "",
+  );
+  assert.equal(saved.args.p_record, null);
+  assert.equal((saved.args.p_checkpoint as AgentRunRow["checkpoint"]).finalArtifacts.length, 1, "selected calculation still settles without prose or a record");
+});
+
+test("unknown Pi models carry an unknown capacity and expose native context usage in snapshots", async () => {
+  const store = new MemoryStore();
+  let capacity: number | undefined;
+  const streamFn: StreamFn = (model, context, options) => {
+    capacity = model.contextWindow;
+    return scripted(() => [{ type: "text", text: "chat-only result" }])(model, context, options);
+  };
+  await executeAgentRun(store, row(), undefined, { config, streamFn });
+  assert.equal(capacity, 0, "Pi's sentinel does not invent a 32k limit");
+  const finish = store.writes.find(w => w.name === "agent_finish_run")!;
+  const data = (finish.args.p_message as AgentRunRow["public_message"]).agent!;
+  assert.equal(data.runtime?.model.contextWindow, null);
+  assert.equal(data.runtime?.model.limitSource, "unknown");
+  assert.equal(data.runtime?.context?.source, "usage");
+  assert.ok(data.runtime!.context!.measuredTokens > 0);
+  assert.ok(store.writes.some(w => w.name === "agent_checkpoint" && (w.args.p_message as AgentRunRow["public_message"]).agent?.runtime?.context));
+  assert.equal(finish.args.p_record, null);
+});
+
+test("unknown capacity still uses Pi's bounded compaction recovery on a reported overflow", async () => {
+  const store = new MemoryStore(), run = row();
+  run.checkpoint.messages = Array.from({ length: 5 }, (_, index) => ({ role: "user" as const, content: `old turn ${index}: ${"history ".repeat(5000)}`, timestamp: index + 1 }));
+  let calls = 0;
+  const streamFn: StreamFn = model => {
+    assert.equal(model.contextWindow, 0);
+    const stream = createAssistantMessageEventStream(), message = emptyPiAssistant(model);
+    if (calls++ === 0) {
+      message.stopReason = "error";
+      message.errorMessage = "context_length_exceeded";
+      stream.push({ type: "error", reason: "error", error: message });
+    } else {
+      message.content = [{ type: "text", text: "recovered answer" }];
+      message.usage.input = 100;
+      message.usage.totalTokens = 100;
+      stream.push({ type: "done", reason: "stop", message });
+    }
+    stream.end(message);
+    return stream;
+  };
+  await executeAgentRun(store, run, undefined, { config, streamFn });
+  assert.equal(calls, 2);
+  assert.ok(store.nativeEntries().some(entry => entry.kind === "pi.compaction"));
+  const finish = store.writes.find(w => w.name === "agent_finish_run")!;
+  assert.equal(finish.args.p_status, "completed");
+  assert.equal((finish.args.p_message as AgentRunRow["public_message"]).agent?.runtime?.context?.compactions, 1);
+  assert.equal(finish.args.p_record, null);
+});

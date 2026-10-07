@@ -9,6 +9,13 @@ const publicStorageOrigin = isSelfHosted()
 
 const nextConfig: NextConfig = {
   output: 'standalone',
+  // Sharp loads platform binaries and libvips at runtime; pnpm keeps these
+  // optional packages outside the sharp package's directory.
+  outputFileTracingIncludes: {
+    '/api/agent/attachments': [
+      './node_modules/.pnpm/@img+sharp-*/node_modules/@img/sharp-*/**/*',
+    ],
+  },
   images: {
     remotePatterns: [
       {

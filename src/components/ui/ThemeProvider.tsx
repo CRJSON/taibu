@@ -7,9 +7,11 @@
  * - system: 跟随系统设置自动切换
  */
 'use client';
+import './font-scale.css';
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { removeLocalCache, writeLocalCache } from '@/lib/cache/local-storage';
+import { FONT_SCALES, type FontScale } from '@/lib/chat/preferences';
 
 // 主题模式：light、dark 或 system（跟随系统）
 type ThemeMode = 'light' | 'dark' | 'system';
@@ -25,6 +27,8 @@ const THEME_COLORS: Record<AppliedTheme, string> = {
 };
 
 interface ThemeContextType {
+  fontScale: FontScale;
+  setFontScale: (scale: FontScale) => void;
   theme: AppliedTheme;
   themeMode: ThemeMode;
   toggleTheme: () => void;
@@ -82,16 +86,22 @@ function applyThemeToDocument(theme: AppliedTheme) {
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  // 用户选择的主题模式
-  const [themeMode, setThemeModeState] = useState<ThemeMode>(() => {
-    if (typeof window === 'undefined') return 'system';
-    return getStoredThemeMode();
-  });
-  const [systemTheme, setSystemTheme] = useState<AppliedTheme>(() => {
-    if (typeof window === 'undefined') return 'dark';
-    return getSystemTheme();
-  });
+  // Match the server's first render. The head script applies saved colors before
+  // paint; read browser preferences only after hydration without overwriting them.
+  const [themeMode, setThemeModeState] = useState<ThemeMode>('system');
+  const [systemTheme, setSystemTheme] = useState<AppliedTheme>('dark');
+  const [initialized, setInitialized] = useState(false);
+  const [fontScale, setFontScaleState] = useState<FontScale>(100);
   const theme = themeMode === 'system' ? systemTheme : themeMode;
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Synchronize browser-only preferences after the matching SSR render.
+    setThemeModeState(getStoredThemeMode());
+    setSystemTheme(getSystemTheme());
+    setInitialized(true);
+    const savedScale = readStoredLocalValue<FontScale>('taibu.pref.fontScale');
+    if (savedScale && FONT_SCALES.includes(savedScale)) setFontScaleState(savedScale);
+  }, []);
 
   // 监听系统主题变化
   useEffect(() => {
@@ -108,9 +118,10 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   // 当主题模式变化时，更新实际主题
   useEffect(() => {
+    if (!initialized) return;
     writeLocalCache(THEME_MODE_CACHE_KEY, themeMode);
     REMOVED_THEME_CACHE_KEYS.forEach(removeLocalCache);
-  }, [themeMode]);
+  }, [initialized, themeMode]);
 
   useEffect(() => {
     REMOVED_THEME_CACHE_KEYS.forEach(removeLocalCache);
@@ -118,8 +129,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   // 当实际主题变化时，更新 DOM
   useEffect(() => {
+    if (!initialized) return;
     applyThemeToDocument(theme);
-  }, [theme]);
+  }, [initialized, theme]);
 
   // 切换主题：light -> dark -> system -> light
   const toggleTheme = () => {
@@ -133,9 +145,18 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const setThemeMode = (mode: ThemeMode) => {
     setThemeModeState(mode);
   };
+  const setFontScale = (scale: FontScale) => {
+    if (!FONT_SCALES.includes(scale)) return;
+    setFontScaleState(scale);
+    writeLocalCache('taibu.pref.fontScale', scale);
+    document.documentElement.style.fontSize = `${scale}%`;
+  };
+  useEffect(() => {
+    if (initialized) document.documentElement.style.fontSize = `${fontScale}%`;
+  }, [initialized, fontScale]);
 
   return (
-    <ThemeContext.Provider value={{ theme, themeMode, toggleTheme, setThemeMode }}>
+    <ThemeContext.Provider value={{ theme, themeMode, toggleTheme, setThemeMode, fontScale, setFontScale }}>
       {children}
     </ThemeContext.Provider>
   );

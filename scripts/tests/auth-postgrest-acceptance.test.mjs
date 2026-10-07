@@ -1,11 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { Socket } from 'node:net';
 import http from 'node:http';
 import path from 'node:path';
 import { assertLocalDocker, startLocalAuthStack } from './local-auth-stack.mjs';
+import { refreshRestSchema } from '../selfhost.mjs';
 
 // Run after building current Core:
 // node --require ./scripts/ts-register.cjs --test scripts/tests/auth-postgrest-acceptance.test.mjs
@@ -141,6 +142,61 @@ test('real local GoTrue/PostgREST application acceptance', { timeout: 300_000 },
     }
     const wrong = await post(auth.POST, '/api/auth', { action: 'signInWithPassword', email: identities.owner.email, password: 'invalid-test-password' });
     assert.equal(wrong.response.status, 401);
+  });
+
+  await t.test('a warm PostgREST cache accepts added columns after the local upgrade refresh', async () => {
+    const own = client(sessions.owner.access_token);
+    await own.from('user_settings').select('user_id').limit(1);
+    await trustedSql(`ALTER TABLE public.user_settings ADD COLUMN acceptance_upgrade_marker text;
+      GRANT UPDATE (acceptance_upgrade_marker) ON public.user_settings TO authenticated;
+      INSERT INTO public.user_settings(user_id) VALUES(${quote(identities.owner.id)}) ON CONFLICT(user_id) DO NOTHING;`);
+    try {
+      const payload = { acceptance_upgrade_marker: 'upgraded' };
+      const before = await own.from('user_settings').update(payload).eq('user_id', identities.owner.id);
+      assert.equal(before.error?.code, 'PGRST204', 'a running REST service has stale write metadata before refresh');
+      await refreshRestSchema(stack.sql);
+      let after;
+      for (let attempt = 0; attempt < 30; attempt++) {
+        after = await own.from('user_settings').update(payload).eq('user_id', identities.owner.id);
+        if (!after.error) break;
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+      assert.equal(after.error, null, 'upgrade refresh makes the new column writable');
+      const saved = await own.from('user_settings').select('acceptance_upgrade_marker').eq('user_id', identities.owner.id).single();
+      assert.equal(saved.data?.acceptance_upgrade_marker, 'upgraded');
+      const other = await client(sessions.other.access_token).from('user_settings').select('user_id').eq('user_id', identities.owner.id);
+      assert.deepEqual(other.data, [], 'schema reload preserves owner isolation');
+    } finally {
+      await trustedSql('ALTER TABLE public.user_settings DROP COLUMN acceptance_upgrade_marker;');
+      await refreshRestSchema(stack.sql);
+    }
+  });
+
+  await t.test('authenticated system administrators manage attachments and briefings while ordinary users remain isolated', async () => {
+    const { getSystemAdminClient } = require('../../src/lib/supabase-server.ts');
+    const system = getSystemAdminClient();
+    const id = randomUUID();
+    const inserted = await system.from('agent_attachments').insert({ id, user_id: identities.owner.id,
+      object_path: `${identities.owner.id}/${id}`, name: 'owned private text', kind: 'text', mime_type: 'text/plain',
+      size: 4, sha256: 'a'.repeat(64), status: 'ready' });
+    assert.equal(inserted.error, null, 'backend uses an authenticated admin session without a service key');
+    try {
+      const owner = client(sessions.owner.access_token), other = client(sessions.other.access_token);
+      assert.equal((await owner.from('agent_attachments').select('id').eq('id', id)).data?.length, 1);
+      assert.deepEqual((await other.from('agent_attachments').select('id').eq('id', id)).data, []);
+      await owner.from('agent_attachments').update({ name: 'unauthorized change' }).eq('id', id);
+      assert.equal((await system.from('agent_attachments').select('name').eq('id', id).single()).data?.name, 'owned private text');
+      const refs = await system.from('agent_attachment_refs').select('attachment_id');
+      assert.equal(refs.error, null);
+      for (const [name, args] of [['claim_agent_attachment_cleanup', { p_limit: 1 }],
+        ['claim_daily_briefings', { p_limit: 1, p_enabled: false }], ['deliver_daily_briefing_notices', { p_limit: 1 }]]) {
+        assert.equal((await owner.rpc(name, args)).error?.code, '42501', `${name} rejects ordinary callers`);
+        assert.equal((await system.rpc(name, args)).error, null, `${name} accepts the system session`);
+      }
+      assert.equal((await owner.rpc('configure_agent_attachment_storage')).error?.code, '42501', 'Storage policy installation is migration-only');
+    } finally {
+      assert.equal((await system.from('agent_attachments').delete().eq('id', id)).error, null);
+    }
   });
 
   await t.test('refresh rotates a real session and api-utils uses refreshed caller identity', async () => {

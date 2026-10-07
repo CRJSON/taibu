@@ -89,7 +89,7 @@ export default function ChatPage() {
         return () => clearMenuItems();
     }, [aiPersonalizationEnabled, clearMenuItems, knowledgeBaseEnabled, membership?.type, router, setMenuItems]);
 
-    const isCreditLocked = typeof credits === 'number' && credits <= 0 && !state.customProviderActive;
+    const isCreditLocked = typeof credits === 'number' && credits <= 0 && !state.customProviderActive && !messaging.agent.active;
     const [showAuthModal, setShowAuthModal] = useState(false);
 
     if (bootstrapLocked) {
@@ -127,13 +127,15 @@ export default function ChatPage() {
         <>
             <ChatLayout
                 activeConversationId={state.activeConversationId}
+                conversationTitle={state.conversations.find(conversation => conversation.id === state.activeConversationId)?.title || state.pendingSidebarTitle || undefined}
                 conversationLoading={state.conversationLoading}
                 conversationError={state.conversationError}
                 messages={state.messages}
-                isLoading={state.isLoading}
-                isSendingToList={state.isSendingToList}
+                isLoading={state.isLoading || messaging.agent.running}
+                isSendingToList={state.isSendingToList || messaging.agent.restoring || messaging.agent.syncing}
                 messagesEndRef={state.messagesEndRef}
                 messageScrollContainerRef={state.messageScrollContainerRef}
+                shouldAutoScrollRef={state.shouldAutoScrollRef}
                 onMessageListScroll={messaging.handleMessageListScroll}
                 onEditMessage={messaging.handleEditMessage}
                 onRegenerateResponse={messaging.handleRegenerateResponse}
@@ -141,6 +143,8 @@ export default function ChatPage() {
                 onArchiveMessage={state.activeConversationId && knowledgeBaseEnabled ? messaging.handleArchiveMessage : undefined}
                 onSend={messaging.handleSend}
                 onStop={messaging.handleStop}
+                agent={messaging.agent}
+                onQueueMessage={messaging.handleQueueMessage}
                 onAuthRequired={!userId ? () => setShowAuthModal(true) : undefined}
                 onRetryConversationLoad={state.retryConversationLoad}
                 inputValue={state.inputValue}

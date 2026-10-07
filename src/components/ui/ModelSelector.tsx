@@ -7,9 +7,10 @@
  */
 'use client';
 
-import { useMemo, useEffect, useState } from 'react';
+import { useMemo, useEffect, useRef, useState, useId } from 'react';
 import { ChevronDown, Cpu, Lightbulb } from 'lucide-react';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
+import { FloatingPanel } from './FloatingPanel';
 import { getVendorIcon } from '@/lib/ai/vendor-config';
 import { DEFAULT_MODEL_ID } from '@/lib/ai/ai-config';
 import { useAvailableModels } from '@/lib/hooks/useAvailableModels';
@@ -56,11 +57,13 @@ export function ModelSelector({
     toolbarStyle = false,
 }: ModelSelectorProps) {
     const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
+    const modelButtonRef = useRef<HTMLButtonElement>(null);
+    const menuId = useId();
     const modelsQuery = useAvailableModels(userId ?? null, {
         enabled: !!onModelChange,
         membershipType,
     });
-    const [customProviderConfig, setCustomProviderConfig] = useState(() => getCustomProvider());
+    const [customProviderConfig, setCustomProviderConfig] = useState<ReturnType<typeof getCustomProvider>>(null);
     const models = useMemo(() => (modelsQuery.data ?? []) as ClientModelConfig[], [modelsQuery.data]);
     const modelsLoading = modelsQuery.isLoading;
     const modelsError = modelsQuery.error instanceof Error ? modelsQuery.error.message : null;
@@ -144,22 +147,22 @@ export function ModelSelector({
         ? `h-9 rounded-xl px-2 ${textSize}`
         : `${buttonPadding} rounded-lg ${textSize}`;
     const selectorActiveClass = toolbarStyle
-        ? 'bg-transparent text-[#37352f]/70 hover:bg-[#f3f0ea] hover:text-[#37352f]'
+        ? 'bg-transparent text-foreground-secondary hover:bg-background-secondary hover:text-foreground'
         : 'hover:bg-background-tertiary text-foreground-secondary hover:text-foreground';
     const selectorDisabledClass = toolbarStyle
-        ? 'bg-transparent text-[#37352f]/35 opacity-60 cursor-not-allowed'
+        ? 'bg-transparent text-foreground-secondary opacity-60 cursor-not-allowed'
         : 'opacity-50 cursor-not-allowed text-foreground-secondary';
     const reasoningBaseClass = toolbarStyle
         ? `h-9 w-10 rounded-xl ${textSize}`
         : `${buttonPadding} rounded-lg ${textSize}`;
     const reasoningIdleClass = toolbarStyle
-        ? 'bg-transparent text-[#37352f]/72 hover:bg-[#f3f0ea] hover:text-[#37352f]'
+        ? 'bg-transparent text-foreground-secondary hover:bg-background-secondary hover:text-foreground'
         : 'hover:bg-background-tertiary text-foreground-secondary hover:text-foreground';
     const reasoningActiveClass = toolbarStyle
-        ? 'bg-[#f4efe2] text-[#8a6b00]'
+        ? 'bg-accent/10 text-accent'
         : 'text-yellow-600';
     const reasoningDisabledClass = toolbarStyle
-        ? 'bg-transparent text-[#37352f]/30 opacity-60 cursor-not-allowed'
+        ? 'bg-transparent text-foreground-secondary opacity-60 cursor-not-allowed'
         : 'opacity-30 cursor-not-allowed text-foreground-secondary';
 
     if (customProviderConfig && !toolbarStyle) {
@@ -180,7 +183,7 @@ export function ModelSelector({
     }
 
     return (
-        <div className={`flex items-center ${toolbarStyle ? 'gap-1' : ''}`}>
+        <div className={`flex items-center ${toolbarStyle ? 'chat-model-selector gap-1' : ''}`}>
             {onReasoningChange && toolbarStyle && (
                 <button
                     type="button"
@@ -195,6 +198,7 @@ export function ModelSelector({
                                 : reasoningIdleClass
                         }`}
                     title={reasoningTooltip}
+                    aria-label={reasoningTooltip}
                 >
                     <Lightbulb className={`${compact ? 'w-4 h-4' : 'w-4.5 h-4.5'} ${(reasoningEnabled || isReasoningForced) ? 'fill-yellow-500' : ''}`} />
                 </button>
@@ -203,23 +207,28 @@ export function ModelSelector({
             {onModelChange && (
                 <div className="relative">
                     <button
+                        ref={modelButtonRef}
                         type="button"
                         onClick={() => setModelDropdownOpen(!modelDropdownOpen)}
-                        className={`flex items-center gap-1.5 transition-all ${selectorButtonClass} ${
+                        className={`chat-model-picker flex items-center gap-1.5 transition-all ${selectorButtonClass} ${
                             modelSelectorDisabled
                                 ? selectorDisabledClass
                                 : toolbarStyle && modelDropdownOpen
-                                    ? 'bg-[#f3f0ea] text-[#37352f]'
+                                    ? 'bg-background-secondary text-foreground'
                                     : selectorActiveClass
                         }`}
                         disabled={modelSelectorDisabled}
+                        aria-label={`选择模型：${currentModelConfig.name}`}
+                        aria-expanded={modelDropdownOpen}
+                        aria-haspopup="menu"
+                        aria-controls={modelDropdownOpen ? menuId : undefined}
                     >
                         {modelsLoading ? (
                             <SoundWaveLoader variant="inline" />
                         ) : (
                             getVendorIcon(currentModelConfig.vendor)
                         )}
-                        <span className={`${compact ? 'max-w-[104px]' : 'max-w-[125px]'} truncate`}>
+                        <span className={`chat-model-name ${compact ? 'max-w-[104px]' : 'max-w-[125px]'} truncate`}>
                             {modelsLoading
                                 ? ''
                                 : models.length === 0
@@ -228,19 +237,16 @@ export function ModelSelector({
                         </span>
                         <ChevronDown className={`w-4 h-4 transition-transform ${modelDropdownOpen ? 'rotate-180' : ''}`} />
                     </button>
-                    {modelDropdownOpen && !modelSelectorDisabled && (
-                        <>
-                            <div
-                                className="fixed inset-0 z-10"
-                                onClick={() => setModelDropdownOpen(false)}
-                            />
-                            <div className="absolute bottom-full left-0 mb-2 w-56 max-h-80 overflow-y-auto bg-background border border-border rounded-lg shadow-lg z-20">
+                    <FloatingPanel open={modelDropdownOpen && !modelSelectorDisabled} anchorRef={modelButtonRef}
+                        onClose={() => setModelDropdownOpen(false)} id={menuId} label="选择模型" side="top" align={toolbarStyle ? 'end' : 'start'} className="chat-model-menu w-64">
                                 {models.map((model) => {
                                     const isAllowed = model.allowed !== false;
                                     return (
                                         <button
                                             key={model.id}
                                             type="button"
+                                            role="menuitemradio"
+                                            aria-checked={selectedModel === model.id}
                                             onClick={() => {
                                                 onModelChange(model.id);
                                                 setModelDropdownOpen(false);
@@ -258,9 +264,7 @@ export function ModelSelector({
                                         </button>
                                     );
                                 })}
-                            </div>
-                        </>
-                    )}
+                    </FloatingPanel>
                     {modelsError && !modelsLoading && (
                         <div className="mt-1 text-xs text-rose-500">{modelsError}</div>
                     )}

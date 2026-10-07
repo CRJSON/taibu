@@ -5,7 +5,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import storageAttributes from '../selfhost/storage-attributes.cjs';
 import { gzipSync } from 'node:zlib';
-import { containerNameFilter, createConfig, validateConfig, validateEndpoint, validateProject, validatePort, validateStorageArchive, validateResourceOwnership, summarizeLogs, withStorageMigrationPrivilege, schemaBundle, matchesSchemaFingerprint } from '../selfhost.mjs';
+import { createHash } from 'node:crypto';
+import { containerNameFilter, createConfig, validateConfig, validateEndpoint, validateProject, validatePort, validateStorageArchive, validateResourceOwnership, summarizeLogs, withStorageMigrationPrivilege, schemaBundle, matchesSchemaFingerprint, reviewedSchemaUpgrade } from '../selfhost.mjs';
 import { routeFor, cleanHeaders } from '../selfhost/gateway.mjs';
 
 test('Agent schema addition rejects previous baselines while preserving SQL drift checks', async () => {
@@ -24,9 +25,30 @@ test('Agent schema addition rejects previous baselines while preserving SQL drif
   assert.match(source, /!matchesSchemaFingerprint\(manifest\.fingerprint, bundle\)/);
 });
 
+test('only reviewed Agent baselines can apply the ordered experience migrations', async () => {
+  const bundle = await schemaBundle();
+  const previous = '9a6fd07d2d17f61ee6669d20d4910f2b3b7c621d3d07d9ceeba2b0af26df90be';
+  const upgrade = reviewedSchemaUpgrade(previous, bundle);
+  assert.ok(upgrade);
+  assert.equal(upgrade.files[0].file, 'supabase/migrations/20261007_100000_agent_chat_results.sql');
+  assert.equal(upgrade.files.length, 10);
+  for (const entry of upgrade.files) assert.equal(entry.sha256, createHash('sha256').update(await readFile(new URL(`../../${entry.file}`, import.meta.url))).digest('hex'));
+  const current = reviewedSchemaUpgrade('e639cd6d5a7d70ed5450bd5ee5cc7cd44f3a0924b5b91ce33d719df2c99cec9f', bundle);
+  assert.equal(current.files.length, 9);
+  const backend = reviewedSchemaUpgrade('aa23300ca84196b4c6e3a5ab0669168420c78be450c4ea8f5cc273ccc3687fc2', bundle);
+  assert.equal(backend.files.length, 1);
+  assert.equal(backend.files[0].file, 'supabase/migrations/20261007_190000_agent_backend_access.sql');
+  assert.equal(reviewedSchemaUpgrade('f'.repeat(64), bundle), null);
+  assert.equal(reviewedSchemaUpgrade(previous, { ...bundle, fingerprint: 'f'.repeat(64) }), null);
+  const source = await readFile(new URL('../selfhost.mjs', import.meta.url), 'utf8');
+  assert.match(source, /digest\(content\) !== entry\.sha256/);
+});
+
 test('project-prefix siblings are not mistaken for owned containers', () => {
   const pattern = new RegExp(containerNameFilter('taibu-restore').slice('name='.length));
   assert.ok(pattern.test('/taibu-restore-web-1'));
+  assert.ok(pattern.test('/taibu-restore-worker-1'));
+  assert.ok(!pattern.test('/taibu-restore-v2-worker-1'));
   assert.ok(pattern.test('/taibu-restore-maintenance-attributes-run-abc123'));
   assert.ok(!pattern.test('/taibu-restore-v2-web-1'));
   assert.ok(!pattern.test('/taibu-restore-web-1-foreign'));

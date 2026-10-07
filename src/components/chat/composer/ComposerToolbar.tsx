@@ -6,7 +6,7 @@
  */
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
     ArrowUp,
     Atom,
@@ -19,6 +19,7 @@ import {
     Paperclip,
     Plus,
     Square,
+    X,
 } from 'lucide-react';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import type { MembershipType } from '@/lib/user/membership';
@@ -28,8 +29,14 @@ import { CustomProviderPanel } from '@/components/chat/CustomProviderPanel';
 import type { PromptLayerDiagnostic } from '@/types';
 import { getNavItemById } from '@/lib/navigation/registry';
 import type { ChatMode } from '@/lib/chat/use-chat-state';
+import type { AgentRuntimeInfo } from '@/lib/agent/types';
+import { AgentContextUsage } from '../agent/AgentContextUsage';
+import { FloatingPanel } from '@/components/ui/FloatingPanel';
+import { Modal } from '@/components/ui/Modal';
 
 interface ComposerToolbarProps {
+    agentMode?: boolean;
+    agentRuntime?: AgentRuntimeInfo;
     // Menu
     menuOpen: boolean;
     setMenuOpen: (open: boolean) => void;
@@ -85,10 +92,12 @@ interface ComposerToolbarProps {
     isSendingToList: boolean;
     dreamContextLoading: boolean;
     handleButtonClick: () => void;
+    sendsDuringRun?: boolean;
 }
 
 export function ComposerToolbar(props: ComposerToolbarProps) {
     const {
+        agentMode, agentRuntime,
         menuOpen, setMenuOpen,
         fileInputRef, hasFile, handleFileChange,
         hasWebSearch, canUseWeb, handleWebToggle,
@@ -103,36 +112,41 @@ export function ComposerToolbar(props: ComposerToolbarProps) {
         promptPreviewTokens, promptPreviewBudget,
         selectedModel, onModelChange, reasoningEnabled, onReasoningChange, membershipType,
         customProviderActive, customProviderLabel,
-        disabled, isLoading, isSendingToList, dreamContextLoading, handleButtonClick,
+        disabled, isLoading, isSendingToList, dreamContextLoading, handleButtonClick, sendsDuringRun,
     } = props;
     const BaziNavIcon = getNavItemById('bazi')?.icon ?? Orbit;
     const isDreamMode = chatMode === 'dream';
     const isMangpaiMode = chatMode === 'mangpai';
     const [customProviderOpen, setCustomProviderOpen] = useState(false);
+    const toolsRef = useRef<HTMLButtonElement>(null);
+    const providerRef = useRef<HTMLButtonElement>(null);
+    const stopAction = isLoading && !sendsDuringRun;
 
     return (
-        <div className="flex items-center justify-between gap-3 border-border/50">
+        <div className="chat-composer-toolbar flex items-center justify-between gap-3 border-border/50">
             {/* 左侧按钮组 */}
-            <div className="flex min-w-0 items-center gap-1.5 flex-shrink">
+            <div className="chat-composer-tools flex min-w-0 items-center gap-1.5 flex-shrink">
                 <div className="relative">
                     <button
+                        ref={toolsRef}
                         type="button"
                         onClick={() => setMenuOpen(!menuOpen)}
                         className={`h-9 w-9 rounded-xl transition-all flex items-center justify-center ${menuOpen
-                            ? 'bg-[#f3f0ea] text-[#37352f]'
-                            : 'text-[#37352f]/60 hover:bg-[#f3f0ea] hover:text-[#37352f]'
+                            ? 'bg-background-secondary text-foreground'
+                            : 'text-foreground-secondary hover:bg-background-secondary hover:text-foreground'
                             }`}
                         title="更多选项"
+                        aria-label="更多选项"
+                        aria-expanded={menuOpen}
+                        aria-haspopup="menu"
                     >
                         <Plus className={`w-5.5 h-5.5 transition-transform duration-200 ${menuOpen ? 'rotate-45' : ''}`} />
                     </button>
 
-                    {menuOpen && (
-                        <>
-                            <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-                            <div className="absolute bottom-full left-0 mb-2 w-38 bg-background border border-border rounded-xl shadow-lg z-20 overflow-hidden p-1 flex flex-col gap-1">
+                    <FloatingPanel open={menuOpen} anchorRef={toolsRef} onClose={() => setMenuOpen(false)} label="更多选项" side="top" className="w-48 flex flex-col gap-1" restoreFocus={false}>
                                 {/* 附件选项 */}
                                 <button
+                                    role="menuitem"
                                     type="button"
                                     onClick={() => {
                                         if (isDreamMode) return;
@@ -158,6 +172,8 @@ export function ComposerToolbar(props: ComposerToolbarProps) {
                                         : 'hover:bg-background-secondary text-foreground-secondary'
                                     }`}>
                                     <button
+                                        role="menuitemcheckbox"
+                                        aria-checked={hasWebSearch}
                                         type="button"
                                         onClick={() => {
                                             if (isDreamMode) return;
@@ -173,6 +189,8 @@ export function ComposerToolbar(props: ComposerToolbarProps) {
                                 </div>
                                 {canUseBazi && !!userId && onChatModeChange && (
                                     <button
+                                        role="menuitemcheckbox"
+                                        aria-checked={isMangpaiMode}
                                         type="button"
                                         onClick={() => {
                                             if (isDreamMode) return;
@@ -194,6 +212,8 @@ export function ComposerToolbar(props: ComposerToolbarProps) {
                                 )}
                                 {!!userId && onChatModeChange && (
                                     <button
+                                        role="menuitemcheckbox"
+                                        aria-checked={isDreamMode}
                                         type="button"
                                         onClick={() => {
                                             onChatModeChange(isDreamMode ? 'normal' : 'dream');
@@ -216,6 +236,7 @@ export function ComposerToolbar(props: ComposerToolbarProps) {
                                         : 'opacity-50 text-foreground-secondary hover:bg-background-secondary'
                                         }`}>
                                         <button
+                                            role="menuitem"
                                             type="button"
                                             onClick={handleKnowledgeBaseOpen}
                                             className="flex-1 flex items-center gap-2 w-full px-3 py-2 text-sm"
@@ -228,6 +249,7 @@ export function ComposerToolbar(props: ComposerToolbarProps) {
                                 )}
                                 {!!userId && canMentionAnything && (
                                     <button
+                                        role="menuitem"
                                         type="button"
                                         onClick={() => {
                                             const textarea = textareaRef.current;
@@ -254,21 +276,22 @@ export function ComposerToolbar(props: ComposerToolbarProps) {
                                         </span>
                                     </button>
                                 )}
-                            </div>
-                        </>
-                    )}
+                    </FloatingPanel>
 
                     {/* 隐藏的文件输入 */}
                     <input
                         ref={fileInputRef}
                         type="file"
                         className="hidden"
-                        accept=".pdf,.txt,.md,.doc,.docx,.xlsx,.xls,.csv"
+                        accept={agentMode ? '.jpg,.jpeg,.png,.webp,.pdf,.txt,.md,.doc,.docx,.xlsx,.xls,.csv' : '.pdf,.txt,.md,.doc,.docx,.xlsx,.xls,.csv'}
+                        multiple={agentMode}
                         onChange={handleFileChange}
                     />
                 </div>
 
-                <div className="flex h-9 w-9 items-center justify-center">
+            </div>
+            <div className="chat-composer-controls flex min-w-0 items-center gap-1.5 ml-auto">
+                {agentMode ? <AgentContextUsage key={agentRuntime?.model.id ?? 'new'} runtime={agentRuntime} /> : <div className="chat-prompt-preview flex h-9 w-9 items-center justify-center">
                     <PromptPreview
                         promptPreviewLoading={promptPreviewLoading}
                         hasPromptDiagnostics={hasPromptDiagnostics}
@@ -283,24 +306,29 @@ export function ComposerToolbar(props: ComposerToolbarProps) {
                         displayUserMessageTokens={displayUserMessageTokens}
                         formatLayerLabel={formatLayerLabel}
                     />
-                </div>
+                </div>}
 
                 <div className="relative ml-0.5 flex items-center gap-1">
                     <button
+                        ref={providerRef}
                         type="button"
                         onClick={() => setCustomProviderOpen((prev) => !prev)}
                         className={`flex h-9 w-9 items-center justify-center rounded-xl transition-colors duration-150 ${
                             customProviderOpen
-                                ? 'bg-[#f3f0ea] text-[#37352f]'
-                                : 'text-[#37352f]/60 hover:bg-[#f3f0ea] hover:text-[#37352f]'
+                                ? 'bg-background-secondary text-foreground'
+                                : 'text-foreground-secondary hover:bg-background-secondary hover:text-foreground'
                         }`}
                         title="自定义模型"
+                        aria-label="自定义模型"
+                        aria-expanded={customProviderOpen}
+                        aria-haspopup="dialog"
                     >
                         <KeyRound className="h-4.5 w-4.5" />
                     </button>
 
-                    <div className="relative min-h-[36px] min-w-[136px]">
+                    <div className="chat-composer-model relative min-h-[36px] min-w-[136px]">
                         <div
+                            inert={customProviderActive}
                             className={`transition-opacity duration-150 ${
                                 customProviderActive
                                     ? 'pointer-events-none absolute inset-0 opacity-0'
@@ -319,6 +347,7 @@ export function ComposerToolbar(props: ComposerToolbarProps) {
                             />
                         </div>
                         <div
+                            inert={!customProviderActive}
                             className={`transition-opacity duration-150 ${
                                 customProviderActive
                                     ? 'opacity-100'
@@ -328,14 +357,14 @@ export function ComposerToolbar(props: ComposerToolbarProps) {
                             <button
                                 type="button"
                                 onClick={() => setCustomProviderOpen(true)}
-                                className="flex min-w-0 items-center gap-2 rounded-xl px-3 py-1.5 text-left text-[#37352f] transition-colors duration-150 hover:bg-[#f3f0ea]"
+                                className="chat-model-picker flex min-w-0 items-center gap-2 rounded-xl px-3 py-1.5 text-left text-foreground transition-colors duration-150 hover:bg-background-secondary"
                                 title="查看或修改自定义模型"
                             >
                                 <span className="flex h-7 w-4.5 flex-shrink-0 items-center justify-center rounded-lg text-foreground-secondary">
                                     <Atom className="h-4.5 w-4.5" />
                                 </span>
                                 <span className="min-w-0">
-                                    <span className="block max-w-[132px] truncate text-sm font-medium text-[#37352f]">
+                                    <span className="chat-model-name block max-w-[132px] truncate text-sm font-medium text-foreground">
                                         {customProviderLabel || '自定义模型'}
                                     </span>
                                 </span>
@@ -343,29 +372,22 @@ export function ComposerToolbar(props: ComposerToolbarProps) {
                         </div>
                     </div>
 
-                    {customProviderOpen && (
-                        <>
-                            <div className="fixed inset-0 z-20" onClick={() => setCustomProviderOpen(false)} />
-                            <div className="hidden md:block absolute bottom-full right-[-4rem] mb-2 z-30 origin-bottom-right">
-                                <CustomProviderPanel onClose={() => setCustomProviderOpen(false)} />
-                            </div>
-                            <div className="fixed inset-x-0 bottom-0 z-30 px-3 pb-[calc(var(--sab)+0.75rem)] md:hidden">
-                                <CustomProviderPanel onClose={() => setCustomProviderOpen(false)} />
-                            </div>
-                        </>
-                    )}
+                    <Modal open={customProviderOpen} onClose={() => setCustomProviderOpen(false)} returnFocusRef={providerRef} labelledBy="custom-provider-panel-title" className="chat-provider-dialog">
+                        <button type="button" onClick={() => setCustomProviderOpen(false)} aria-label="关闭自定义模型" className="agent-icon-button absolute right-3 top-3 z-10"><X size={17} /></button>
+                        <CustomProviderPanel onClose={() => setCustomProviderOpen(false)} />
+                    </Modal>
                 </div>
-            </div>
-
             {/* 发送/停止按钮 */}
             <button
+                type="button"
+                aria-label={isSendingToList ? '正在发送' : stopAction ? '停止生成' : sendsDuringRun ? '调整任务' : '发送消息'}
                 onClick={handleButtonClick}
                 disabled={disabled || isSendingToList || (!isLoading && (!inputValue.trim() || dreamContextLoading))}
                 className={`
                     px-2 py-2 rounded-full transition-all duration-200 flex items-center gap-2 flex-shrink-0
                     ${isSendingToList
                         ? 'bg-background-tertiary text-foreground-secondary cursor-wait'
-                        : isLoading
+                        : stopAction
                         ? 'bg-red-500 text-white hover:bg-red-600'
                         : inputValue.trim() && !disabled && !dreamContextLoading
                             ? 'bg-foreground text-background hover:bg-foreground/90'
@@ -375,12 +397,13 @@ export function ComposerToolbar(props: ComposerToolbarProps) {
             >
                 {isSendingToList ? (
                     <SoundWaveLoader variant="inline" />
-                ) : isLoading ? (
+                ) : stopAction ? (
                     <Square className="w-4.5 h-4.5" strokeWidth={2.5} />
                 ) : (
                     <ArrowUp className="w-5 h-5" strokeWidth={2.5} />
                 )}
             </button>
+            </div>
         </div>
     );
 }

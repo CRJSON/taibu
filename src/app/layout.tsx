@@ -11,7 +11,9 @@
  */
 
 import type { Metadata, Viewport } from "next";
+import { Suspense } from "react";
 import "./globals.css";
+import Loading from "./loading";
 
 import { ThemeProvider } from "@/components/ui/ThemeProvider";
 import { HeaderMenuProvider } from "@/components/layout/HeaderMenuContext";
@@ -154,7 +156,7 @@ export default function RootLayout({
                   <Sidebar />
 
                   {/* 主内容区 */}
-                  <div className="flex-1 flex flex-col min-h-screen">
+                  <div className="flex-1 flex flex-col min-w-0 min-h-screen">
                     {/* 顶部 Header 占位 - 仅移动端显示 */}
                     <div className="lg:hidden h-[var(--mobile-header-height)] safe-top flex-shrink-0">
                       <Header />
@@ -162,7 +164,10 @@ export default function RootLayout({
 
                     {/* 页面内容 */}
                     <main className="flex-1 pb-20 lg:pb-0 overflow-x-hidden">
-                      {children}
+                      {/* Give streamed route children their own hydration boundary. */}
+                      <Suspense fallback={<Loading />}>
+                        {children}
+                      </Suspense>
                     </main>
                   </div>
                 </div>

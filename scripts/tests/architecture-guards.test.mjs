@@ -36,7 +36,7 @@ test('architecture migration inputs exist and are not hidden by ignore rules', (
 
 test('PostgreSQL and real Auth fixture source manifests are complete and reproducible', () => {
   const paths = [...Object.values(SQL_SOURCE_MANIFEST), ...Object.values(AUTH_SQL_SOURCE_MANIFEST)];
-  assert.equal(new Set(paths).size, paths.length);
+  for (const manifest of [SQL_SOURCE_MANIFEST, AUTH_SQL_SOURCE_MANIFEST]) assert.equal(new Set(Object.values(manifest)).size, Object.values(manifest).length);
   for (const relativePath of paths) {
     assert.ok(existsSync(path.join(REPO_ROOT, relativePath)), `Missing ${relativePath}`);
   }

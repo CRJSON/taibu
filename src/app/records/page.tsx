@@ -12,6 +12,7 @@ import {
     deleteRecord,
     getNotesByDate,
     getRecords,
+    getRecord,
     MingRecord,
     MingNote,
     RecordCategory,
@@ -84,6 +85,20 @@ export default function RecordsPage() {
     const { user, loading: sessionLoading } = useSessionSafe();
     const userId = user?.id;
     const accountIdentity = JSON.stringify([userId ?? null, sessionLoading]);
+    useEffect(() => {
+        if (sessionLoading || !userId) return;
+        const recordId = new URLSearchParams(window.location.search).get('id');
+        if (!recordId) return;
+        const controller = new AbortController();
+        void getRecord(recordId, { signal: controller.signal }).then(record => {
+            if (controller.signal.aborted) return;
+            setEditingRecord(record);
+            setShowRecordForm(true);
+        }).catch(error => {
+            if (!controller.signal.aborted) showToast('error', error instanceof Error ? error.message : '获取记录失败');
+        });
+        return () => controller.abort();
+    }, [sessionLoading, showToast, userId]);
     const recordsIdentity = JSON.stringify([accountIdentity, search, category, page]);
     const recordsLifecycle = useRef<ReadScope | null>(null);
     const notesLifecycle = useRef<ReadScope | null>(null);

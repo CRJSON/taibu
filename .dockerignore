@@ -1,12 +1,15 @@
 .git
 .github
 .next
+.agent
 .pnpm-store
 .vscode
 .worktrees
 .claude
 .codex-deploy
 .taibu-local
+.playwright-cli
+output/playwright
 GEMINI.md
 skills/notion-style.md
 .trae

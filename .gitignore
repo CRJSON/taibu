@@ -90,7 +90,21 @@ supabase/migrations/*
 !supabase/migrations/20261002_101000_restrict_credit_ledger_rpc.sql
 !supabase/migrations/20261002_102000_protect_account_and_ledger_writes.sql
 !supabase/migrations/20261003_100000_fix_rate_limit_admission.sql
+!supabase/migrations/20261005_100000_agent_runtime.sql
 !supabase/migrations/20261005_110000_chart_time_resolution.sql
+!supabase/migrations/20261005_120000_agent_chart_identity.sql
+!supabase/migrations/20261006_100000_agent_pi_durable.sql
+!supabase/migrations/20261006_110000_agent_lifecycle_fixes.sql
+!supabase/migrations/20261007_100000_agent_chat_results.sql
+!supabase/migrations/20261007_110000_agent_reading_preferences.sql
+!supabase/migrations/20261007_120000_agent_search.sql
+!supabase/migrations/20261007_130000_agent_input_preferences.sql
+!supabase/migrations/20261007_140000_agent_queue.sql
+!supabase/migrations/20261007_150000_agent_notifications.sql
+!supabase/migrations/20261007_160000_agent_attachments.sql
+!supabase/migrations/20261007_170000_daily_briefing.sql
+!supabase/migrations/20261007_180000_conversation_fork.sql
+!supabase/migrations/20261007_190000_agent_backend_access.sql
 # Additional explicit inputs for isolated Auth/PostgREST acceptance only.
 !supabase/migrations/20260110_add_user_settings_and_fix_notifications_rls.sql
 !supabase/migrations/20260113_add_app_settings.sql
@@ -108,6 +122,8 @@ docs/manual/*
 !docs/manual/Architecture.md
 !docs/manual/Refactor-Acceptance.md
 !docs/manual/Self-Hosting.md
+!docs/manual/Agent.md
+!docs/agent-experience-implementation.md
 
 # AI
 .claude

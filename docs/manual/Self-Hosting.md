@@ -5,6 +5,7 @@
 这是从 Vercel＋托管 Supabase 迁往自有基础设施的**第一阶段本地原型**，不是已经上线的生产方案。应用仍是 Next.js 模块化单体，Core/MCP 包边界不变。
 
 - 已将 Web、PostgreSQL/pgvector、Redis、Auth、PostgREST、头像 Storage、向量函数和提醒调度装配到本地容器。
+- Agent 使用与 Web 相同的镜像运行常驻 `worker`，新空库基线增加任务表和租约 RPC。工具、凭据、功能开关及部署说明见 [Agent](Agent.md)。只有经哈希审定的旧基线可应用指定增量迁移。
 - 先解除托管平台运行依赖，保留 Supabase 协议兼容层；没有同时重写身份系统和所有查询。
 - `--demo` 是明确标注的确定性模型服务，用于验证真实 HTTP、SSE、计费和保存，不代表真实 AI 推理质量。不调用付费供应商。
 - 不复制生产账号/业务数据，不读取项目真实 `.env`，不自动部署或修改 DNS。
@@ -37,12 +38,28 @@ pnpm selfhost up --build # 修改应用或公开构建配置后重建镜像
 
 CLI 校验本地 Docker endpoint、私有配置及资源实例标签，拒绝远程 Docker、同名陌生容器/网络/卷和不匹配的数据库基线。仅通过 CLI 操作这套原型，不能直接运行会自动读取 `.env` 的裸 Compose 命令。原 `docker-compose.yml`、Web/MCP 独立 Compose 继续服务原来的外部后端部署，不被自动覆盖。
 
+### 固定通用测试栈（3196）
+
+本工作区后续统一使用已有 `taibu-agent-1006b` 项目作为通用测试栈，访问 `http://127.0.0.1:3196`。保留原项目名以继续使用已有账号、命盘、记录和持久卷。它包含完整的 Web、worker、认证、数据库、存储、网关等服务，不限于 Agent 测试。
+
+```bash
+pnpm local:update # 重建 Web / worker 等应用服务，在同一个项目更新
+pnpm local:up     # 启动既有服务与镜像
+pnpm local:status
+pnpm local:logs
+```
+
+这些命令包装已有 `selfhost` CLI，继续执行所有权和数据库基线校验。不会重新初始化配置或删除数据卷。凭据位于 `.taibu-local/taibu-agent-1006b/credentials.json`。当前启用了确定性 demo 模型；真实模型与联网搜索需要单独配置，不能用 demo 回复衡量推理质量。
+
+本次更新将既有 Agent 测试基线升级至 `20261007_100000_agent_chat_results.sql`，迁移内容与目标基线均校验 SHA-256，并与本地版本标记在同一事务提交。普通代码更新的调用行号不再影响数据库指纹；实际 SQL／引导契约变化仍需审定。升级前备份保存在私有目录 `.taibu-local/agent-ui-backup-20261007/`。
+
 ## 拓扑、身份与数据
 
 | 服务 | 职责 | 持久化/暴露 |
 |---|---|---|
 | gateway | 固定路径转发；替换伪造转发头；直接传递 SSE | 唯一宿主入口，默认 loopback |
 | web | 生产模式 Next standalone | 非 root；不持有 PG owner 连接 |
+| worker | Pi Durable 执行、工具调用、检查点与命盘成果结算 | 无宿主端口；管理员登录身份；复用应用环境和镜像 |
 | db | PostgreSQL、pgvector、RLS、事务 RPC、Auth/Storage 元数据 | `database` 命名卷，不映射端口 |
 | auth / rest | 真正的会话、JWT 校验与 PostgREST | 内部网络 |
 | redis | 共享固定窗口限流 | 密码认证、AOF、128MB 上限、noeviction；内部网络 |
@@ -55,7 +72,7 @@ CLI 校验本地 Docker endpoint、私有配置及资源实例标签，拒绝远
 
 向量维护角色独立于应用，拥有 `knowledge_entries` 单表，以及 PostgreSQL 创建索引要求的 `public` schema CREATE 权限。因此它是**可信 DDL 维护身份**，有创建 schema 对象的能力，不是“只能创建一个索引”的沙箱；凭据只注入函数容器，不授予普通 API 角色。Storage 建库所需数据库 CREATE 权限只在首次迁移阶段临时授予，完成/失败均撤销，后续启动清理遗留授权。
 
-数据库初始化采用 `supabase/selfhost/` 的来源清单、完整表/视图与选定最终 RPC，不全量回放历史 SQL。详见 [基线说明](../../supabase/selfhost/README.md)。所有表/视图有显式权限边界；本地作者定义的策略和兼容修订不冒充生产导出。初始化和追加限流修复在同一事务；已有数据卷遇到指纹变化直接拒绝，不自动重放。
+数据库初始化采用 `supabase/selfhost/` 的来源清单、完整表/视图与选定最终 RPC，不全量回放历史 SQL。详见 [基线说明](../../supabase/selfhost/README.md)。所有表/视图有显式权限边界；本地作者定义的策略和兼容修订不冒充生产导出。初始化和追加限流修复在同一事务；已有数据卷只接受审定的增量升级，未知指纹仍拒绝。
 
 ## 环境与兼容规则
 
@@ -66,6 +83,7 @@ CLI 校验本地 Docker endpoint、私有配置及资源实例标签，拒绝远
 - `SUPABASE_URL`：服务间网关地址；`SUPABASE_PUBLIC_URL`：浏览器可访问地址，防止头像指向容器 hostname。
 - `AUTH_ALLOW_INSECURE_LOCAL_HTTP`：仅明确自托管且配置精确 loopback HTTP origin 时生效。不会根据请求 Host 降低 Cookie 安全性；托管生产仍保留 Secure。
 - `RATE_LIMIT_BACKEND`：默认 `postgres`，本地为 `redis`；`REDIS_URL` 仅服务端使用。
+- `AGENT_CREDENTIAL_ENCRYPTION_KEY`：Web/worker 共用的 32 字节标准 Base64 任务密钥；新项目自动生成。`TAVILY_API_KEY` 为空时关闭联网；`AGENT_WORKER_CONCURRENCY` 控制单 worker 并发。
 
 `SELF_HOSTED`、`SUPABASE_PUBLIC_URL` 同时影响构建和运行，变更需 `up --build`。镜像不接收 Auth/供应商秘密 build args。多个不同公开 origin 的部署应分别构建/标记镜像，不能假定同一个 `:local` 镜像内的图片白名单会随运行环境自动更新。头像使用直接 URL，不开启 Next 图片优化器的任意内网访问。
 
@@ -105,6 +123,7 @@ node scripts/tests/selfhost-live.mjs --project taibu-local
 node scripts/tests/selfhost-browser.mjs --project taibu-local --chrome
 # 仅验证命盘即时同步，不调用演示模型；创建临时命盘后清理并恢复之前的默认设置
 node scripts/tests/selfhost-browser.mjs --project taibu-local --chrome --sync-only
+node scripts/tests/agent-selfhost-browser.mjs --project <独立演示项目> --chrome
 # 去掉 --chrome 使用已安装的 Playwright Chromium
 
 # 重启后验证上次保存的历史、头像及归属（不重新生成记录）

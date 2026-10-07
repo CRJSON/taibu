@@ -7,6 +7,7 @@ import {
     USER_SETTINGS_SELECT,
     type UserSettingsUpdateInput,
 } from '@/lib/user/settings';
+import { validBriefingPreferences } from '@/lib/briefing-preferences';
 
 async function loadSettings(auth: Exclude<Awaited<ReturnType<typeof requireUserContext>>, { error: unknown }>) {
   const db = resolveRequestDbClient(auth);
@@ -64,6 +65,8 @@ export async function PATCH(request: NextRequest) {
     return jsonError('请求体不是合法 JSON', 400);
   }
 
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return jsonError('设置无效', 400);
+  if (body.briefingPreferences !== undefined && !validBriefingPreferences(body.briefingPreferences)) return jsonError('早报时区或时间无效', 400);
   const payload = buildUserSettingsUpdatePayload(auth.user.id, body);
   if (!hasEffectiveUserSettingsUpdate(payload)) {
     return jsonError('没有可更新的设置字段', 400);

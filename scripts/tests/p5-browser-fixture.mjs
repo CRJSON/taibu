@@ -29,7 +29,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const origin = 'https://taibu-fixture.invalid';
 
 const entry = String.raw`
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { useQueryClient } from '@tanstack/react-query';
 import { ClientProviders, useSessionSafe } from '@/components/providers/ClientProviders';
@@ -39,6 +39,8 @@ import { openSettingsCenter } from '@/lib/settings-center';
 import { AIModelPanel } from '@/components/admin/AIModelPanel';
 import { AnnouncementManagementPanel } from '@/components/admin/AnnouncementManagementPanel';
 import { ConversationListProvider, useConversationList } from '@/lib/chat/ConversationListContext';
+import { useChatState } from '@/lib/chat/use-chat-state';
+import { useChatMessaging } from '@/lib/chat/use-chat-messaging';
 import { ChatStreamManager } from '@/lib/chat/chat-stream-manager';
 import { ChartPickerModal } from '@/components/common/ChartPickerModal';
 import { useComposerState } from '@/components/chat/composer/useComposerState';
@@ -48,6 +50,7 @@ import RecordsPage from '@/app/records/page';
 import * as chartClient from '@/lib/user/charts-client';
 import { useSelectedBaziChart } from '@/lib/hooks/useUserCharts';
 import { TimeInputModal } from '@/components/bazi/form/TimeInputModal';
+import { AgentQuestionDialog } from '@/components/chat/agent/AgentQuestionDialog';
 import { calculateZiweiChartBundle, getHoroscope } from '@/lib/divination/ziwei';
 function BirthRulesProbe() {
   const [open, setOpen] = useState(false);
@@ -72,6 +75,28 @@ import { deleteHistorySummary } from '@/lib/history/client';
 import { removeKnowledgeBaseArchive } from '@/lib/knowledge-base/browser-client';
 const sourceTypes = ['bazi_chart'];
 const empty = [];
+function StructuredQuestionProbe() {
+  const { user } = useSessionSafe();
+  const [attachments, setAttachments] = useState({ webSearchEnabled: false });
+  return <AgentQuestionDialog question="选择分析范围" questionId="same-tool-call" scopeKey={(user?.id ?? '') + ':structured'}
+    questions={[
+      { id: 'topics', question: '选择分析范围', options: [{ id: 'work', label: '工作' }, { id: 'life', label: '生活' }], multiple: true, allowCustom: true },
+      { id: 'optional', question: '补充其他资料', allowCustom: true, allowSkip: true },
+    ]} disabled={false} attachmentState={attachments} onAttachmentChange={setAttachments} onStop={() => window.fixture.mount.question(false)}
+    onAnswer={async (text, answers) => { window.fixture.structuredAnswers = { text, answers }; window.fixture.mount.question(false); }} />;
+}
+function AgentChatProbe() {
+  const { user } = useSessionSafe();
+  const router = useMemo(() => ({ replace() {}, push() {} }), []);
+  const searchParams = useMemo(() => new URLSearchParams(), []);
+  const state = useChatState({ userId: user?.id ?? null, sessionLoading: false, bootstrapLoading: false, router, searchParams });
+  const messaging = useChatMessaging({ state, userId: user?.id ?? null, user, membership: { type: 'plus', isActive: true }, credits: 20,
+    refreshViewerState: async () => {}, markViewerCreditsExhausted() {}, showToast: (...args) => { window.fixture.agentToasts.push(args); }, router, searchParams });
+  window.fixture.agentChat = { state, messaging };
+  return <section data-testid="agent-chat"><input aria-label="Agent fixture draft" value={state.inputValue} onChange={event => state.setInputValue(event.target.value)} />
+    <output data-testid="agent-status">{messaging.agent.run?.status ?? 'none'}</output>
+    <output data-testid="agent-messages">{JSON.stringify(state.messages)}</output></section>;
+}
 function ComposerProbe() {
   const { user } = useSessionSafe();
   const state = useComposerState({ userId: user?.id, isLoading: true, membershipType: 'pro',
@@ -98,7 +123,7 @@ let client;
 const manager = new ChatStreamManager();
 const invalidations = [];
 
-window.fixture = { user: 'alice', invalidations, client, manager };
+window.fixture = { user: 'alice', invalidations, client, manager, agentToasts: [] };
 function Shell() {
   const queryClient = useQueryClient();
   const { user } = useSessionSafe();
@@ -120,8 +145,12 @@ function Shell() {
   const [drawerMounted, setDrawerMounted] = useState(false);
   const [recordsMounted, setRecordsMounted] = useState(false);
   const [selectedMounted, setSelectedMounted] = useState(false);
+  const [agentMounted, setAgentMounted] = useState(false);
+  const [questionMounted, setQuestionMounted] = useState(false);
+  const [modelMountKey, setModelMountKey] = useState(0);
+  window.fixture.remountModels = () => setModelMountKey(current => current + 1);
   window.fixture.mount = { composer: setComposerMounted, history: setHistoryMounted, drawer: setDrawerMounted,
-    records: setRecordsMounted, picker: setPickerOpen, selected: setSelectedMounted };
+    records: setRecordsMounted, picker: setPickerOpen, selected: setSelectedMounted, agent: setAgentMounted, question: setQuestionMounted };
   window.fixture.chartKey = queryKeys.userCharts;
   window.fixture.chartClient = chartClient;
   window.fixture.deleteHistory = deleteHistorySummary;
@@ -155,9 +184,9 @@ function Shell() {
       <button onClick={() => navigate('/models')}>Fixture Models route</button>
       <button onClick={() => navigate('/announcements')}>Fixture Announcements route</button>
       <button onClick={() => openSettingsCenter('general')}>Open actual settings</button>
-      <button onClick={() => { window.fixture.user = 'alice'; setUser('alice'); }}>Fixture Alice</button>
-      <button onClick={() => { window.fixture.user = 'bob'; setUser('bob'); }}>Fixture Bob</button>
-      <button onClick={() => { window.fixture.user = null; setUser(null); }}>Fixture Logout</button>
+      <button onClick={() => setUser('alice')}>Fixture Alice</button>
+      <button onClick={() => setUser('bob')}>Fixture Bob</button>
+      <button onClick={() => setUser(null)}>Fixture Logout</button>
     </header>
     <output data-testid="route">{route}</output>
     <section aria-label="Fixture conversation controls">
@@ -175,10 +204,12 @@ function Shell() {
     </section>}
     <button onClick={() => manager.stopTask('alice-1')}>Stop actual stream manager</button>
     <output data-testid="stream">{stream ? stream.status + ':' + stream.content : 'idle'}</output>
-    {route === '/models' && <section data-testid="models"><AIModelPanel /></section>}
+    {route === '/models' && <section data-testid="models"><AIModelPanel key={modelMountKey} /></section>}
     {route === '/announcements' && <section data-testid="announcements"><AnnouncementManagementPanel /></section>}
     {composerMounted && <ComposerProbe />}
     {selectedMounted && <SelectedChartProbe />}
+    {agentMounted && <AgentChatProbe />}
+    {questionMounted && <StructuredQuestionProbe />}
     {historyMounted && <section data-testid="history-page"><HistoryPageTemplate {...historyConfig} /></section>}
     {drawerMounted && <section data-testid="history-drawer"><HistoryDrawer type="tarot" /></section>}
     {recordsMounted && <section data-testid="records"><RecordsPage /></section>}
@@ -242,7 +273,7 @@ export async function build(outputDirectory) {
         `;
         if (args.path.endsWith('/ChatTaskToastBridge')) contents = 'export function ChatTaskToastBridge() { return null; }';
         if (args.path.endsWith('/AnnouncementPopupHost')) contents = 'export function AnnouncementPopupHost({ children }) { return children; }';
-        if (args.path.endsWith('/useFeatureToggles')) contents = 'const enabled = () => true; export function useFeatureToggles() { return { loaded: true, isFeatureEnabled: enabled }; }';
+        if (args.path.endsWith('/useFeatureToggles')) contents = 'const enabled = () => true; export function useFeatureToggles() { return { loaded: true, isLoading: false, isFeatureEnabled: enabled }; }';
         if (args.path.endsWith('/useCurrentUserProfile')) contents = "import { useSessionSafe } from '@/lib/hooks/session-context'; export function useCurrentUserProfile() { const {user} = useSessionSafe(); return { profile: user ? { is_admin: user.id === 'alice' } : null, loading: false, error: null }; }";
         if (args.path.endsWith('/AccountAdminPanels')) contents = "export { AIModelPanel as AdminAIServicesContent } from '@/components/admin/AIModelPanel'; export const AdminAnnouncementsContent = () => null; export const AdminFeaturesContent = () => null;";
         return { contents, loader: 'jsx', resolveDir: root };
@@ -279,8 +310,64 @@ export async function run(existingPage, bundlePath) {
   await context.addInitScript(() => {
     // Keep actual fetch/Response behavior; only hold JSON completion when a test asks.
     const nativeFetch = window.fetch.bind(window);
+    // In-memory Agent HTTP boundary supplies real Response/ReadableStream objects
+    // to the production chat hooks, including held receipts and cross-tab SSE.
+    const agentIO = window.fixtureAgentIO = { requests: [], runs: {}, commands: {}, streams: [], held: [], holdNext: false, failReceipts: 0, resumeOnCommand: false };
+    agentIO.view = (conversationId, status = 'running', id = 'run-' + conversationId, cursor = 1) => ({
+      id, conversationId, status, cursor, createdAt: '2026-10-06T00:00:00Z',
+      message: { id: 'agent:' + id, role: 'assistant', content: '', createdAt: '2026-10-06T00:00:00Z', agent: { version: 1, runId: id, status, parts: [] } },
+    });
+    agentIO.emit = view => {
+      agentIO.runs[view.conversationId] = view;
+      for (const stream of agentIO.streams) if (!stream.closed && stream.runId === view.id) {
+        stream.controller.enqueue(new TextEncoder().encode('event: snapshot\ndata: ' + JSON.stringify(view) + '\n\n'));
+        if (['completed', 'cancelled', 'failed'].includes(view.status)) { stream.closed = true; stream.controller.close(); }
+      }
+    };
     window.fixtureNetwork = { next: 0, requests: {}, jsonGate: null };
     window.fetch = async (input, init) => {
+      const url = new URL(String(input), location.origin);
+      if (url.pathname.startsWith('/api/agent/')) {
+        const method = init?.method ?? 'GET', body = init?.body ? JSON.parse(init.body) : null;
+        agentIO.requests.push({ url: url.pathname, search: url.search, method, body });
+        if (url.pathname === '/api/agent/status') return Response.json({ enabled: true, ready: true, webAvailable: false, customAvailable: true });
+        if (url.pathname === '/api/agent/runs' && method === 'GET') return Response.json(agentIO.runs[url.searchParams.get('conversationId')] ?? null);
+        const events = url.pathname.match(/^\/api\/agent\/runs\/([^/]+)\/events$/);
+        if (events) {
+          let stream;
+          return new Response(new ReadableStream({
+            start(controller) {
+              stream = { controller, runId: events[1], closed: false };
+              agentIO.streams.push(stream);
+              const view = Object.values(agentIO.runs).find(view => view.id === events[1]);
+              if (view) controller.enqueue(new TextEncoder().encode('event: snapshot\ndata: ' + JSON.stringify(view) + '\n\n'));
+            }, cancel() { stream.closed = true; },
+          }), { headers: { 'Content-Type': 'text/event-stream' } });
+        }
+        let payload;
+        if (url.pathname === '/api/agent/runs' && method === 'POST') {
+          const existing = Object.values(agentIO.runs).find(view => view.clientRequestId === body.clientRequestId);
+          payload = existing ?? { ...agentIO.view(body.conversationId, 'queued', 'created-' + body.conversationId), clientRequestId: body.clientRequestId,
+            userMessage: { ...body.message, role: 'user', createdAt: '2026-10-06T00:00:00Z' } };
+          agentIO.runs[body.conversationId] = payload;
+        } else {
+          const command = url.pathname.match(/^\/api\/agent\/runs\/([^/]+)\/messages$/);
+          if (!command) throw new Error('Unhandled Agent fixture: ' + url.pathname);
+          const key = command[1] + ':' + body.clientRequestId;
+          let receipt = agentIO.commands[key];
+          if (!receipt) {
+            const view = Object.values(agentIO.runs).find(view => view.id === command[1]);
+            const resumed = { ...view, cursor: view.cursor + 1, status: agentIO.resumeOnCommand ? 'running' : view.status };
+            resumed.message = { ...resumed.message, agent: { ...resumed.message.agent, status: resumed.status } };
+            receipt = agentIO.commands[key] = { message: { id: 'command:' + body.clientRequestId, role: 'user', content: body.content, createdAt: '2026-10-06T00:00:00Z' }, run: resumed };
+            agentIO.emit(resumed);
+          }
+          payload = receipt;
+        }
+        if (agentIO.holdNext) { agentIO.holdNext = false; await new Promise(resolve => agentIO.held.push(resolve)); }
+        if (agentIO.failReceipts > 0) { agentIO.failReceipts--; throw new TypeError('lost committed receipt'); }
+        return Response.json(payload);
+      }
       const network = window.fixtureNetwork;
       const id = String(++network.next);
       const headers = new Headers(init?.headers || (input instanceof Request ? input.headers : undefined));
@@ -380,6 +467,8 @@ export async function run(existingPage, bundlePath) {
     if (url.pathname === '/fixture.js') return route.fulfill({ status: 200, contentType: 'text/javascript', body: bundle });
     if (url.pathname === '/chat' && method === 'GET') return route.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><meta charset="utf-8"><style>[hidden],.hidden{display:none!important}button,input,select,textarea{margin:4px;padding:4px}svg{width:16px;height:16px}body{font-family:sans-serif}</style><div id="root"></div><script src="/fixture.js"></script>' });
     if (url.pathname === '/favicon.ico') return route.fulfill({ status: 204, body: '' });
+    if (url.pathname === '/api/notifications' && method === 'GET') return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { notifications: [] }, error: null }) });
+    if (url.pathname === '/api/notifications/popup' && method === 'POST') return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { claimed: false }, error: null }) });
     const body = request.postDataJSON();
     requests.push({ method, pathname: url.pathname, search: url.search, body, expectedUserId: request.headers()['x-expected-user-id'] });
     if (holdSettingsReads && url.pathname === '/api/user/settings' && method === 'GET') holdNext(url.pathname, method);
@@ -475,8 +564,15 @@ export async function run(existingPage, bundlePath) {
       if (holdList) { holdList = false; await new Promise(done => { releaseList = done; }); }
       return ok(payload).catch(() => {}); // An intentionally aborted old-account request may be closed.
     }
+    if (/^\/api\/conversations\/[^/]+\/configuration$/.test(url.pathname)) {
+      return ok(method === 'GET' ? { configuration: null } : { saved: true });
+    }
     const conversation = url.pathname.match(/^\/api\/conversations\/([^/]+)$/);
     if (conversation) {
+      if (method === 'GET') {
+        const user = await page.evaluate(() => window.fixtureAuth.cookieUser);
+        return ok({ conversation: { id: conversation[1], user_id: user, personality: 'general', title: 'Agent test', messages: [], created_at: '2026-01-01', updated_at: '2026-01-01', source_type: 'chat' } });
+      }
       if (control?.fail) return ok({ saved: false });
       if (method === 'DELETE') {
         if (failDelete) { failDelete = false; return denied(); }
@@ -625,7 +721,7 @@ export async function run(existingPage, bundlePath) {
     assert.ok(releaseRename, 'Controlled rename request was intercepted');
     const nextSettingsResponse = () => page.waitForResponse(response => response.url().endsWith('/api/user/settings') && response.request().method() === 'GET');
     const bobSettings = nextSettingsResponse();
-    await page.getByRole('button', { name: 'Fixture Bob', exact: true }).click();
+    await page.getByRole('button', { name: 'Fixture Bob', exact: true }).evaluate(button => button.click());
     await until(() => window.fixture.list().length === 2 && window.fixture.list()[0].id === 'bob-1');
     await (await bobSettings).finished();
     check('Changing users remounts account-owned settings panels', settingsReads >= readsBeforeClose + 2);
@@ -635,13 +731,13 @@ export async function run(existingPage, bundlePath) {
     await (await lateRenameResponse).finished();
     check('Old-account load and failed rename cannot contaminate new-account data', (await page.locator('[data-testid="conversation-list"] li').allTextContents()).join('|') === rows.bob.map(row => row.title).join('|'));
     check('Account change removes old-user Query data', await page.evaluate(() => window.fixture.client.getQueryData(['chat', 'conversations', 'alice']) === undefined));
-    await page.getByRole('button', { name: 'Fixture Logout', exact: true }).click();
+    await page.getByRole('button', { name: 'Fixture Logout', exact: true }).evaluate(button => button.click());
     await until(() => window.fixture.list().length === 0);
     check('Logout clears previous-user Query data', await page.evaluate(() => window.fixture.client.getQueryData(['chat', 'conversations', 'bob']) === undefined));
     check('Logout does not load authenticated settings', settingsReads === readsAfterBob);
 
     const aliceSettings = nextSettingsResponse();
-    await page.getByRole('button', { name: 'Fixture Alice', exact: true }).click();
+    await page.evaluate(() => window.fixtureAuth.change('alice'));
     await (await aliceSettings).finished();
     check('Signing back in reloads account panels without remounting the settings host', settingsReads >= readsAfterBob + 2);
     await page.getByRole('button', { name: 'Fixture Models route', exact: true }).click();
@@ -722,11 +818,13 @@ export async function run(existingPage, bundlePath) {
         check('Announcement DELETE invalidates once', JSON.stringify(await page.evaluate(() => window.fixture.invalidations)) === JSON.stringify([{ queryKey: ['announcements'] }]));
       }
     }
-    // StrictMode starts overlapping real loadModels calls on remount.
+    // Explicitly remount while a real loadModels receipt is held. React's
+    // development effect replay count varies for later conditional mounts.
     const oldModelLoad = holdNext('/api/admin/ai-models', 'GET');
     oldModelLoad.snapshot = { models: models.map(model => model.id === 'model-1' ? { ...model, displayName: 'Stale older reload' } : model) };
     await page.getByRole('button', { name: 'Fixture Models route', exact: true }).click();
     await intercepted(oldModelLoad);
+    await page.evaluate(() => window.fixture.remountModels());
     await page.getByText('Edited Fixture Model', { exact: true }).waitFor();
     oldModelLoad.release();
     await page.waitForTimeout(40);
@@ -754,16 +852,19 @@ export async function run(existingPage, bundlePath) {
     await until(() => window.fixture.user === 'bob');
     await until(() => document.querySelector('textarea[placeholder^="例如：先给结论"]')?.value === 'Bob preferences');
     check('Cross-account real focus replaces old settings', await aiDraft.inputValue() === 'Bob preferences');
-    await page.getByRole('button', { name: 'Fixture Logout', exact: true }).click();
+    // These fixture events represent auth changes in another tab, outside the modal.
+    await page.evaluate(() => window.fixtureAuth.change(null));
+    await until(() => window.fixture.user === null);
     const readsStart = controls.length;
     holdSettingsReads = true;
     const staleRead = holdNext('/api/user/settings', 'GET');
-    await page.getByRole('button', { name: 'Fixture Bob', exact: true }).click();
+    await page.evaluate(() => window.fixtureAuth.change('bob'));
     await intercepted(staleRead);
     await page.waitForTimeout(30);
     holdSettingsReads = false;
     const staleReads = controls.splice(readsStart);
-    await page.getByRole('button', { name: 'Fixture Alice', exact: true }).click();
+    await page.evaluate(() => window.fixtureAuth.change('alice'));
+    await until(() => window.fixture.user === 'alice');
     await aiDraft.waitFor();
     await aiDraft.fill('Fresh Alice draft');
     for (const read of staleReads) read.release?.();
@@ -773,8 +874,10 @@ export async function run(existingPage, bundlePath) {
     await page.locator('select').filter({ visible: true }).last().selectOption('dark');
     await page.getByRole('button', { name: '保存', exact: true }).click();
     await intercepted(staleSave);
-    await page.getByRole('button', { name: 'Fixture Logout', exact: true }).click();
-    await page.getByRole('button', { name: 'Fixture Alice', exact: true }).click();
+    await page.evaluate(() => window.fixtureAuth.change(null));
+    await until(() => window.fixture.user === null);
+    await page.evaluate(() => window.fixtureAuth.change('alice'));
+    await until(() => window.fixture.user === 'alice');
     await aiDraft.waitFor();
     await aiDraft.fill('New login same Alice');
     await page.evaluate(() => { localStorage.setItem('chartStyle', 'modern'); window.fixture.invalidations.length = 0; });
@@ -782,6 +885,8 @@ export async function run(existingPage, bundlePath) {
     await page.waitForTimeout(40);
     check('Logout/login same-ID stale PATCH cannot reset draft or local preferences', await aiDraft.inputValue() === 'New login same Alice' && await page.evaluate(() => localStorage.getItem('chartStyle')) === 'modern');
     check('Aborted settings completion does not emit old mutation effects', (await page.evaluate(() => window.fixture.invalidations)).length === 0);
+    await page.getByRole('button', { name: '关闭设置中心', exact: true }).click();
+    await page.locator('dialog.settings-center-dialog[open]').waitFor({ state: 'hidden' });
     await page.getByRole('button', { name: 'Open actual settings', exact: true }).click();
     await page.getByText('推送通知', { exact: true }).waitFor();
     const notificationSwitch = page.getByRole('switch').first();
@@ -807,9 +912,9 @@ export async function run(existingPage, bundlePath) {
 
     // Controlled interleavings invoke real ConversationListProvider actions.
     rows.alice = Array.from({ length: 12 }, (_, index) => ({ id: 'race-' + (index + 1), user_id: 'alice', title: 'Race ' + (index + 1), personality: 'general', created_at: '2026-01-01', updated_at: '2026-01-01', source_type: 'chat' }));
-    await page.getByRole('button', { name: 'Fixture Bob', exact: true }).click();
+    await page.getByRole('button', { name: 'Fixture Bob', exact: true }).evaluate(button => button.click());
     await until(() => window.fixture.list()[0]?.id === 'bob-1');
-    await page.getByRole('button', { name: 'Fixture Alice', exact: true }).click();
+    await page.getByRole('button', { name: 'Fixture Alice', exact: true }).evaluate(button => button.click());
     await until(() => window.fixture.list().length === 7 && window.fixture.list()[0]?.id === 'race-1');
     const append = holdNext('/api/conversations', 'GET');
     await page.getByRole('button', { name: 'Load more actual list', exact: true }).click();
@@ -894,7 +999,7 @@ export async function run(existingPage, bundlePath) {
     await page.evaluate(() => { void window.fixture.composer.refreshMentionData(true); });
     await intercepted(oldSource);
     const newAccountSource = holdNext('/api/data-sources', 'GET');
-    await page.getByRole('button', { name: 'Fixture Bob', exact: true }).click();
+    await page.getByRole('button', { name: 'Fixture Bob', exact: true }).evaluate(button => button.click());
     await intercepted(newAccountSource);
     check('Composer clears Alice sources immediately while Bob request remains pending',
       await page.getByTestId('composer-sources').innerText() === '');
@@ -907,14 +1012,14 @@ export async function run(existingPage, bundlePath) {
     const logoutSource = holdNext('/api/data-sources', 'GET');
     await page.evaluate(() => { void window.fixture.composer.refreshMentionData(true); });
     await intercepted(logoutSource);
-    await page.getByRole('button', { name: 'Fixture Logout', exact: true }).click();
+    await page.getByRole('button', { name: 'Fixture Logout', exact: true }).evaluate(button => button.click());
     await until(() => window.fixture.user === null);
     await release(logoutSource);
     check('Composer logout clears visible sources, knowledge bases and account cache while mounted',
       await page.getByTestId('composer-sources').innerText() === '' && await page.getByTestId('composer-knowledge').innerText() === '' &&
       await page.evaluate(() => localStorage.getItem('taibu.data_sources.bob.v1') === null));
     await page.evaluate(() => window.fixture.mount.composer(false));
-    await page.getByRole('button', { name: 'Fixture Alice', exact: true }).click();
+    await page.getByRole('button', { name: 'Fixture Alice', exact: true }).evaluate(button => button.click());
     await until(() => window.fixture.user === 'alice');
 
     const openCharts = async () => {
@@ -980,13 +1085,13 @@ export async function run(existingPage, bundlePath) {
     check('Delete removes the chart from panel, open picker and selected-chart helper',
       !await page.evaluate(() => window.fixture.selectedChart.data?.baziCharts.some(item => item.id === 'chart-created')));
 
-    await page.getByRole('button', { name: 'Fixture Bob', exact: true }).click();
+    await page.getByRole('button', { name: 'Fixture Bob', exact: true }).evaluate(button => button.click());
     await chartRow('chart-bob').waitFor();
     charts.alice = { baziCharts: [], ziweiCharts: [], defaultChartIds: { bazi: null, ziwei: null } };
     const emptyChartStart = controls.length;
     holdReads.add('/api/user/charts');
     const emptyChartLoad = holdNext('/api/user/charts', 'GET');
-    await page.getByRole('button', { name: 'Fixture Alice', exact: true }).click();
+    await page.getByRole('button', { name: 'Fixture Alice', exact: true }).evaluate(button => button.click());
     await intercepted(emptyChartLoad);
     holdReads.delete('/api/user/charts');
     await createChart('chart-first', 'First chart after empty load');
@@ -1010,7 +1115,7 @@ export async function run(existingPage, bundlePath) {
     await chartRow('chart-second').getByTitle('设为默认', { exact: true }).click();
     await intercepted(aliceChartMutation);
     const bobChartLoad = holdNext('/api/user/charts', 'GET');
-    await page.getByRole('button', { name: 'Fixture Bob', exact: true }).click();
+    await page.getByRole('button', { name: 'Fixture Bob', exact: true }).evaluate(button => button.click());
     await intercepted(bobChartLoad);
     // Bob was visited above; his own cached chart may remain visible during revalidation.
     // Only Alice's rows/selection are forbidden, not a valid same-account cache hit.
@@ -1037,7 +1142,7 @@ export async function run(existingPage, bundlePath) {
         .every(item => item.expectedUserId === 'alice' || item.expectedUserId === 'bob'));
     await page.getByRole('button', { name: '关闭设置中心', exact: true }).click();
     await page.evaluate(() => { window.fixture.mount.picker(false); window.fixture.mount.selected(false); });
-    await page.getByRole('button', { name: 'Fixture Alice', exact: true }).click();
+    await page.getByRole('button', { name: 'Fixture Alice', exact: true }).evaluate(button => button.click());
     await until(() => window.fixture.user === 'alice');
 
     const historyPage = page.getByTestId('history-page');
@@ -1084,22 +1189,22 @@ export async function run(existingPage, bundlePath) {
     await drawer.getByTitle('历史记录', { exact: true }).evaluate(button => button.click());
     await drawer.getByText('alice history 4', { exact: true }).waitFor();
     const bobDrawer = holdNext('/api/history-summaries', 'GET');
-    await page.getByRole('button', { name: 'Fixture Bob', exact: true }).click();
+    await page.getByRole('button', { name: 'Fixture Bob', exact: true }).evaluate(button => button.click());
     await intercepted(bobDrawer);
     check('Open HistoryDrawer clears rendered Alice rows before Bob response arrives',
       !(await drawer.innerText()).includes('alice history'));
     await release(bobDrawer);
     await drawer.getByText('bob history 1', { exact: true }).waitFor();
     const lateDrawer = holdNext('/api/history-summaries', 'GET');
-    await page.getByRole('button', { name: 'Fixture Alice', exact: true }).click();
+    await page.getByRole('button', { name: 'Fixture Alice', exact: true }).evaluate(button => button.click());
     await intercepted(lateDrawer);
-    await page.getByRole('button', { name: 'Fixture Bob', exact: true }).click();
+    await page.getByRole('button', { name: 'Fixture Bob', exact: true }).evaluate(button => button.click());
     await drawer.getByText('bob history 1', { exact: true }).waitFor();
     await release(lateDrawer);
     check('Open HistoryDrawer rejects old-account response after switching back to Bob',
       !(await drawer.innerText()).includes('alice history') && await drawer.getByText('bob history 2', { exact: true }).isVisible());
     await page.evaluate(() => window.fixture.mount.drawer(false));
-    await page.getByRole('button', { name: 'Fixture Alice', exact: true }).click();
+    await page.getByRole('button', { name: 'Fixture Alice', exact: true }).evaluate(button => button.click());
     await until(() => window.fixture.user === 'alice');
 
     const recordPanel = page.getByTestId('records');
@@ -1126,6 +1231,149 @@ export async function run(existingPage, bundlePath) {
       await recordPanel.getByRole('heading', { name: 'Event refreshed record', exact: true }).isVisible() &&
       await recordPanel.getByRole('heading', { name: 'Event saved record', exact: true }).count() === 0);
     await page.evaluate(() => window.fixture.mount.records(false));
+
+    await page.evaluate(() => window.fixture.mount.question(true));
+    let structuredDialog = page.getByRole('dialog', { name: '需要你的补充', exact: true });
+    await structuredDialog.getByLabel('工作', { exact: true }).check();
+    await structuredDialog.getByLabel('生活', { exact: true }).check();
+    await structuredDialog.getByLabel('自行填写', { exact: true }).fill('具体项目');
+    await structuredDialog.getByRole('button', { name: '下一步', exact: true }).click();
+    await structuredDialog.getByRole('button', { name: '跳过', exact: true }).click();
+    const answerSummary = page.getByRole('dialog', { name: '确认回答', exact: true });
+    await answerSummary.getByText('已跳过', { exact: true }).waitFor();
+    await answerSummary.getByRole('button', { name: '选择分析范围 · 修改', exact: true }).click();
+    check('Structured question summary returns to stable choices and custom input', await structuredDialog.getByLabel('工作', { exact: true }).isChecked() && await structuredDialog.getByLabel('生活', { exact: true }).isChecked() && await structuredDialog.getByLabel('自行填写', { exact: true }).inputValue() === '具体项目');
+    await page.evaluate(() => window.fixture.mount.question(false));
+    await structuredDialog.waitFor({ state: 'hidden' });
+    await page.evaluate(() => window.fixture.mount.question(true));
+    structuredDialog = page.getByRole('dialog', { name: '需要你的补充', exact: true });
+    check('Remounting the same question restores its choices and draft', await structuredDialog.getByLabel('工作', { exact: true }).isChecked() && await structuredDialog.getByLabel('自行填写', { exact: true }).inputValue() === '具体项目');
+    await structuredDialog.getByRole('button', { name: '下一步', exact: true }).click();
+    await structuredDialog.getByRole('button', { name: '跳过', exact: true }).click();
+    await answerSummary.getByRole('button', { name: '提交并继续', exact: true }).click();
+    await answerSummary.waitFor({ state: 'hidden' });
+    check('Structured answer submission binds selected IDs and explicit skip to the tool call', await page.evaluate(() => JSON.stringify(window.fixture.structuredAnswers.answers) === JSON.stringify({ topics: ['work', 'life', '具体项目'], optional: null }) && localStorage.getItem('taibu.question:alice:structured:same-tool-call') === null));
+
+    await page.evaluate(() => window.fixture.mount.agent(true));
+    await until(() => window.fixture.agentChat?.messaging.agent.capabilities.ready);
+    await page.evaluate(() => window.fixture.agentChat.messaging.agent.setMode('agent'));
+    const selectAgentConversation = async (id, status = null) => {
+      await page.evaluate(async ({ id, status }) => {
+        const io = window.fixtureAgentIO;
+        if (status) io.runs[id] = io.view(id, status, io.runs[id]?.id ?? 'run-' + id, (io.runs[id]?.cursor ?? 0) + 1);
+        await window.fixture.agentChat.state.handleSelectConversation(id);
+      }, { id, status });
+      await until(({ id, status }) => window.fixture.agentChat.state.activeConversationId === id &&
+        !window.fixture.agentChat.messaging.agent.restoring &&
+        (status ? window.fixture.agentChat.messaging.agent.run?.conversationId === id : !window.fixture.agentChat.messaging.agent.run), { id, status });
+      await renderBarrier();
+    };
+    const sendHeldAgent = async (queue = false) => {
+      await page.evaluate(queue => {
+        window.fixtureAgentIO.holdNext = true;
+        window.fixture.agentSend = queue ? window.fixture.agentChat.messaging.handleQueueMessage() : window.fixture.agentChat.messaging.handleSend();
+      }, queue);
+      await until(() => window.fixtureAgentIO.held.length > 0);
+    };
+    const releaseAgent = async () => {
+      await page.evaluate(async () => { window.fixtureAgentIO.held.shift()(); await window.fixture.agentSend; });
+      await renderBarrier();
+    };
+    await selectAgentConversation('agent-a', 'running');
+    await page.getByLabel('Agent fixture draft').fill('supplement for A');
+    await sendHeldAgent();
+    await selectAgentConversation('agent-b');
+    await page.evaluate(() => {
+      const state = window.fixture.agentChat.state;
+      state.setInputValue('new B draft');
+      state.setMentions([{ type: 'bazi_chart', name: 'B reference', preview: 'B', id: '00000000-0000-4000-8000-000000000001' }]);
+      state.setAttachmentState({ file: new File(['B'], 'b.txt'), webSearchEnabled: false });
+    });
+    await renderBarrier();
+    await releaseAgent();
+    check('Late command receipts cannot append A messages to B or clear B draft, mentions and file', await page.evaluate(() => {
+      const state = window.fixture.agentChat.state;
+      return state.messages.every(message => !message.id.startsWith('command:')) && state.inputValue === 'new B draft' && state.mentions[0]?.name === 'B reference' && state.attachmentState.file?.name === 'b.txt';
+    }));
+
+    await selectAgentConversation('agent-a', 'running');
+    await page.getByLabel('Agent fixture draft').fill('old visit A');
+    await sendHeldAgent(true);
+    await selectAgentConversation('agent-b');
+    await selectAgentConversation('agent-a', 'running');
+    await page.getByLabel('Agent fixture draft').fill('new visit A');
+    await releaseAgent();
+    check('A to B to A invalidates the old visit receipt even when the conversation ID matches again', await page.evaluate(() => {
+      const state = window.fixture.agentChat.state;
+      return state.inputValue === 'new visit A' && !state.messages.some(message => message.content === 'old visit A');
+    }));
+
+    await selectAgentConversation('agent-waiting', 'awaiting_input');
+    const waitingConnections = await page.evaluate(() => window.fixtureAgentIO.requests.filter(request => request.url.endsWith('/events')).length);
+    await page.evaluate(() => {
+      const io = window.fixtureAgentIO, current = io.runs['agent-waiting'];
+      io.emit({ ...current, status: 'running', cursor: current.cursor + 1, message: { ...current.message, agent: { ...current.message.agent, status: 'running' } } });
+    });
+    await until(() => window.fixture.agentChat.messaging.agent.run?.status === 'running');
+    await page.evaluate(async () => window.fixture.agentChat.state.retryConversationLoad());
+    await until(() => !window.fixture.agentChat.messaging.agent.restoring && window.fixture.agentChat.messaging.agent.run?.status === 'running');
+    await page.evaluate(() => {
+      const io = window.fixtureAgentIO, current = io.runs['agent-waiting'];
+      io.emit({ ...current, status: 'cancelled', cursor: current.cursor + 1, message: { ...current.message, agent: { ...current.message.agent, status: 'cancelled' } } });
+    });
+    await until(() => window.fixture.agentChat.messaging.agent.run?.status === 'cancelled' && !window.fixture.agentChat.messaging.agent.syncing);
+    check('Awaiting input keeps observing other-tab resume and cancellation, including a same-conversation reload', await page.evaluate(count =>
+      window.fixture.agentChat.messaging.agent.run?.status === 'cancelled' && count > 0, waitingConnections));
+
+    await selectAgentConversation('agent-retry', 'awaiting_input');
+    await page.getByLabel('Agent fixture draft').fill('one human reply');
+    await page.evaluate(async () => {
+      window.fixtureAgentIO.failReceipts = 2;
+      window.fixtureAgentIO.resumeOnCommand = true;
+      await window.fixture.agentChat.messaging.handleSend();
+    });
+    await until(() => window.fixture.agentChat.messaging.agent.run?.status === 'running');
+    await page.evaluate(async () => window.fixture.agentChat.messaging.handleSend());
+    await until(() => window.fixture.agentChat.state.inputValue === '');
+    check('Manual retry after both lost receipts and awaiting-to-running transition retains the original reply ID and mode', await page.evaluate(() => {
+      const io = window.fixtureAgentIO;
+      const attempts = io.requests.filter(request => request.url === '/api/agent/runs/run-agent-retry/messages');
+      return attempts.length === 3 && attempts.every(request => JSON.stringify(request.body) === JSON.stringify(attempts[0].body)) &&
+        attempts[0].body.mode === 'reply' && Object.values(io.commands).filter(receipt => receipt.run.id === 'run-agent-retry').length === 1;
+    }));
+
+    await selectAgentConversation('agent-new-task');
+    await page.evaluate(() => { const state = window.fixture.agentChat.state; state.setMentions([]); state.setAttachmentState({ webSearchEnabled: false }); });
+    await page.getByLabel('Agent fixture draft').fill('original task');
+    await sendHeldAgent();
+    await page.evaluate(() => {
+      const state = window.fixture.agentChat.state;
+      state.setInputValue('next task draft');
+      state.setMentions([{ type: 'bazi_chart', name: 'next reference', preview: 'next' }]);
+      state.setAttachmentState({ file: new File(['next'], 'next.txt'), webSearchEnabled: false });
+    });
+    await renderBarrier();
+    await releaseAgent();
+    check('Successful delayed task creation preserves a newer draft, mention and attachment in the same conversation', await page.evaluate(() => {
+      const state = window.fixture.agentChat.state;
+      return state.inputValue === 'next task draft' && state.mentions[0]?.name === 'next reference' && state.attachmentState.file?.name === 'next.txt';
+    }));
+
+    await selectAgentConversation('agent-account', 'running');
+    await page.getByLabel('Agent fixture draft').fill('Alice pending command');
+    await sendHeldAgent();
+    await page.getByRole('button', { name: 'Fixture Logout', exact: true }).evaluate(button => button.click());
+    await until(() => window.fixture.user === null);
+    await page.getByRole('button', { name: 'Fixture Alice', exact: true }).evaluate(button => button.click());
+    await until(() => window.fixture.user === 'alice');
+    await selectAgentConversation('agent-account', 'running');
+    await page.getByLabel('Agent fixture draft').fill('Alice new session draft');
+    await releaseAgent();
+    check('Logout and relogin to the same account invalidate old async receipts and draft clearing', await page.evaluate(() =>
+      window.fixture.agentChat.state.inputValue === 'Alice new session draft' && !window.fixture.agentChat.state.messages.some(message => message.content === 'Alice pending command')));
+    await page.evaluate(() => window.fixture.mount.agent(false));
+    await renderBarrier();
+    check('Unmount cancels all nonterminal Agent event readers', await page.evaluate(() => window.fixtureAgentIO.streams.every(stream => stream.closed)));
 
     check('No unhandled network requests escaped fixtures', blocked.length === 0);
     check('No browser runtime exceptions', browserErrors.length === 0);

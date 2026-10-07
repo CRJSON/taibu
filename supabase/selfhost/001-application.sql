@@ -272,6 +272,7 @@ CREATE TABLE public.conversation_messages (
 
 -- Table provenance: supabase/tabel_export_from_supabase.sql; reviewed syntax/ordering normalization.
 CREATE TABLE public.conversations (
+  next_task_config jsonb,
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   user_id uuid,
   personality text DEFAULT 'master'::text,
@@ -461,6 +462,9 @@ CREATE TABLE public.ming_records (
 
 -- Table provenance: supabase/tabel_export_from_supabase.sql; reviewed syntax/ordering normalization.
 CREATE TABLE public.notifications (
+  event_key text,
+  event_data jsonb,
+  popup_claimed_at timestamptz,
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL,
   type character varying NOT NULL,
@@ -571,6 +575,8 @@ CREATE TABLE public.user_oauth_providers (
 
 -- Table provenance: supabase/tabel_export_from_supabase.sql; reviewed syntax/ordering normalization.
 CREATE TABLE public.user_settings (
+  chat_preferences jsonb NOT NULL DEFAULT '{}',
+  daily_briefing_settings jsonb NOT NULL DEFAULT '{}',
   user_id uuid NOT NULL,
   notifications_enabled boolean DEFAULT true,
   notify_email boolean DEFAULT true,
@@ -943,6 +949,8 @@ CREATE INDEX selfhost_user_settings_owner_idx ON public.user_settings(user_id);
 CREATE INDEX selfhost_xiaoliuren_divinations_owner_idx ON public.xiaoliuren_divinations(user_id);
 
 CREATE INDEX selfhost_ziwei_charts_owner_idx ON public.ziwei_charts(user_id);
+
+CREATE INDEX selfhost_prompt_enhancement_usage_owner_idx ON public.prompt_enhancement_usage(user_id);
 
 -- Function source: create_conversations_table
 create or replace function update_conversations_updated_at()
@@ -5155,6 +5163,408 @@ CREATE POLICY credit_transactions_authenticated_insert_guard
 
 
 
+-- Durable application runtime around Pi Core. Browser writes go through owner-checked RPCs.
+CREATE TABLE public.agent_runs (
+  id uuid PRIMARY KEY,
+  user_id uuid NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  conversation_id uuid NOT NULL REFERENCES public.conversations(id) ON DELETE CASCADE,
+  request_id text NOT NULL,
+  request_hash text NOT NULL,
+  status text NOT NULL DEFAULT 'queued' CHECK (status IN ('queued','running','awaiting_input','cancelling','completed','cancelled','failed')),
+  input jsonb NOT NULL,
+  checkpoint jsonb NOT NULL,
+  public_message jsonb NOT NULL,
+  billing text NOT NULL CHECK (billing IN ('charged','exempt','refunded')),
+  worker_id text,
+  fence bigint NOT NULL DEFAULT 0,
+  lease_until timestamptz,
+  cancel_requested boolean NOT NULL DEFAULT false,
+  record_id uuid REFERENCES public.ming_records(id) ON DELETE SET NULL,
+  event_cursor bigint NOT NULL DEFAULT 0,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (user_id, request_id)
+);
+CREATE UNIQUE INDEX agent_one_active_conversation ON public.agent_runs(conversation_id)
+  WHERE status IN ('queued','running','awaiting_input','cancelling');
+CREATE INDEX agent_queue ON public.agent_runs(status, lease_until, created_at);
+CREATE INDEX agent_conversation_runs ON public.agent_runs(user_id, conversation_id, created_at DESC);
+CREATE TABLE public.agent_run_events (
+  sequence bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  run_id uuid NOT NULL REFERENCES public.agent_runs(id) ON DELETE CASCADE,
+  type text NOT NULL,
+  payload jsonb NOT NULL DEFAULT '{}',
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX agent_events_cursor ON public.agent_run_events(run_id, sequence);
+CREATE TABLE public.agent_run_commands (
+  sequence bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  run_id uuid NOT NULL REFERENCES public.agent_runs(id) ON DELETE CASCADE,
+  request_id text NOT NULL,
+  mode text NOT NULL CHECK (mode IN ('steer','follow_up','reply')),
+  message jsonb NOT NULL,
+  consumed boolean NOT NULL DEFAULT false,
+  UNIQUE(run_id, request_id)
+);
+CREATE TABLE public.agent_run_artifacts (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  run_id uuid NOT NULL REFERENCES public.agent_runs(id) ON DELETE CASCADE,
+  call_id text NOT NULL,
+  tool_name text NOT NULL,
+  kind text NOT NULL CHECK(kind IN ('calculation','tool')),
+  args jsonb NOT NULL,
+  result jsonb NOT NULL,
+  chart_payload jsonb,
+  chart_id uuid,
+  chart_type text,
+  UNIQUE(run_id,call_id)
+);
+CREATE TABLE public.agent_run_credentials (
+  run_id uuid PRIMARY KEY REFERENCES public.agent_runs(id) ON DELETE CASCADE,
+  ciphertext jsonb NOT NULL
+);
+CREATE TABLE public.agent_workers (
+  id text PRIMARY KEY,
+  heartbeat_at timestamptz NOT NULL DEFAULT now()
+);
+
+ALTER TABLE public.agent_runs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.agent_run_events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.agent_run_commands ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.agent_run_artifacts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.agent_run_credentials ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.agent_workers ENABLE ROW LEVEL SECURITY;
+CREATE POLICY agent_runs_read ON public.agent_runs FOR SELECT TO authenticated USING(user_id=auth.uid() OR public.is_admin_user());
+CREATE POLICY agent_events_read ON public.agent_run_events FOR SELECT TO authenticated USING(EXISTS(SELECT 1 FROM public.agent_runs r WHERE r.id=run_id));
+CREATE POLICY agent_artifacts_read ON public.agent_run_artifacts FOR SELECT TO authenticated USING(EXISTS(SELECT 1 FROM public.agent_runs r WHERE r.id=run_id));
+CREATE POLICY agent_commands_admin ON public.agent_run_commands FOR SELECT TO authenticated USING(public.is_admin_user());
+CREATE POLICY agent_credentials_admin ON public.agent_run_credentials FOR SELECT TO authenticated USING(public.is_admin_user());
+CREATE POLICY agent_workers_admin ON public.agent_workers FOR SELECT TO authenticated USING(public.is_admin_user());
+REVOKE ALL ON TABLE public.agent_runs FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON TABLE public.agent_run_events FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON TABLE public.agent_run_commands FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON TABLE public.agent_run_artifacts FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON TABLE public.agent_run_credentials FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON TABLE public.agent_workers FROM PUBLIC, anon, authenticated;
+GRANT SELECT ON public.agent_runs, public.agent_run_events, public.agent_run_commands, public.agent_run_artifacts, public.agent_run_credentials, public.agent_workers TO authenticated;
+GRANT ALL ON public.agent_runs, public.agent_run_events, public.agent_run_commands, public.agent_run_artifacts, public.agent_run_credentials, public.agent_workers TO service_role;
+
+CREATE FUNCTION public.agent_require_admin() RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
+BEGIN
+  IF coalesce(auth.role(),'') <> 'service_role' AND NOT coalesce(public.is_admin_user(),false) THEN
+    RAISE EXCEPTION 'AGENT_ADMIN_REQUIRED' USING ERRCODE='42501';
+  END IF;
+END;
+$$;
+CREATE FUNCTION public.agent_require_lease(p_run_id uuid,p_worker_id text,p_fence bigint) RETURNS public.agent_runs
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
+DECLARE r public.agent_runs;
+BEGIN
+  PERFORM public.agent_require_admin();
+  SELECT * INTO r FROM public.agent_runs WHERE id=p_run_id FOR UPDATE;
+  IF NOT FOUND OR r.worker_id IS DISTINCT FROM p_worker_id OR r.fence<>p_fence
+    OR r.lease_until IS NULL OR r.lease_until<=now() OR r.status NOT IN ('running','cancelling') THEN
+    RAISE EXCEPTION 'AGENT_LEASE_LOST' USING ERRCODE='40001';
+  END IF;
+  RETURN r;
+END;
+$$;
+
+CREATE FUNCTION public.agent_sync_message(p_run_id uuid) RETURNS void
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
+DECLARE r public.agent_runs; messages jsonb; user_message jsonb; versions jsonb; previous_write text;
+BEGIN
+  PERFORM public.agent_require_admin();
+  SELECT * INTO STRICT r FROM public.agent_runs WHERE id=p_run_id;
+  SELECT coalesce(c.messages,'[]') INTO messages FROM public.conversations c WHERE c.id=r.conversation_id FOR UPDATE;
+  SELECT coalesce(jsonb_agg(CASE WHEN m->>'id'=r.public_message->>'id' THEN r.public_message ELSE m END ORDER BY n),'[]')
+    INTO messages FROM jsonb_array_elements(messages) WITH ORDINALITY AS items(m,n);
+  IF r.input->>'replaceFromMessageId' IS NOT NULL AND r.status IN ('completed','failed','cancelled') THEN
+    SELECT m INTO user_message FROM jsonb_array_elements(messages) t(m) WHERE m->>'id'=r.input#>>'{userMessage,id}';
+    versions:=coalesce(user_message->'versions','[]')||jsonb_build_array(jsonb_build_object('userContent',user_message->>'content','mentions',user_message->'mentions','aiContent',r.public_message->>'content','aiAgent',r.public_message->'agent','aiMetadata',r.public_message->'metadata','createdAt',now()));
+    SELECT coalesce(jsonb_agg(CASE WHEN m->>'id'=user_message->>'id' THEN m||jsonb_build_object('versions',versions,'currentVersionIndex',jsonb_array_length(versions)-1) ELSE m END ORDER BY n),'[]') INTO messages FROM jsonb_array_elements(messages) WITH ORDINALITY t(m,n);
+  END IF;
+  previous_write:=current_setting('taibu.agent_write',true);
+  PERFORM set_config('taibu.agent_write','true',true);
+  PERFORM public.replace_conversation_messages(r.conversation_id,messages);
+  PERFORM set_config('taibu.agent_write',coalesce(previous_write,''),true);
+END;
+$$;
+
+CREATE FUNCTION public.agent_emit(p_run_id uuid,p_type text,p_payload jsonb DEFAULT '{}') RETURNS void
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
+DECLARE cursor_value bigint;
+BEGIN
+  INSERT INTO public.agent_run_events(run_id,type,payload) VALUES(p_run_id,p_type,p_payload) RETURNING sequence INTO cursor_value;
+  UPDATE public.agent_runs SET event_cursor=cursor_value WHERE id=p_run_id;
+END;
+$$;
+REVOKE ALL ON FUNCTION public.agent_emit(uuid,text,jsonb) FROM PUBLIC,anon,authenticated;
+
+CREATE FUNCTION public.agent_create_run(p_id uuid,p_user_id uuid,p_conversation_id uuid,p_request_id text,p_request_hash text,p_input jsonb,p_checkpoint jsonb,p_message jsonb,p_credential jsonb,p_charge boolean)
+RETURNS public.agent_runs LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
+DECLARE r public.agent_runs; c public.conversations; balance integer; messages jsonb; anchor_position bigint; anchor_message jsonb; old_answer jsonb; versions jsonb; previous_write text;
+BEGIN
+  PERFORM public.agent_require_admin();
+  SELECT * INTO c FROM public.conversations WHERE id=p_conversation_id FOR UPDATE;
+  IF NOT FOUND OR c.user_id IS DISTINCT FROM p_user_id THEN RAISE EXCEPTION 'AGENT_CONVERSATION_NOT_FOUND' USING ERRCODE='42501'; END IF;
+  SELECT * INTO r FROM public.agent_runs WHERE user_id=p_user_id AND request_id=p_request_id;
+  IF FOUND THEN
+    IF r.request_hash<>p_request_hash THEN RAISE EXCEPTION 'AGENT_REQUEST_MISMATCH' USING ERRCODE='22023'; END IF;
+    RETURN r;
+  END IF;
+  IF EXISTS(SELECT 1 FROM public.agent_runs WHERE conversation_id=p_conversation_id AND status IN ('queued','running','awaiting_input','cancelling')) THEN
+    RAISE EXCEPTION 'AGENT_CONVERSATION_BUSY' USING ERRCODE='23505';
+  END IF;
+  IF p_charge THEN
+    balance:=public.decrement_ai_chat_count(p_user_id);
+    IF balance IS NULL THEN RAISE EXCEPTION 'INSUFFICIENT_CREDITS' USING ERRCODE='P0001'; END IF;
+  END IF;
+  INSERT INTO public.agent_runs(id,user_id,conversation_id,request_id,request_hash,input,checkpoint,public_message,billing)
+    VALUES(p_id,p_user_id,p_conversation_id,p_request_id,p_request_hash,p_input,p_checkpoint,p_message,CASE WHEN p_charge THEN 'charged' ELSE 'exempt' END) RETURNING * INTO r;
+  IF p_credential IS NOT NULL THEN INSERT INTO public.agent_run_credentials VALUES(p_id,p_credential); END IF;
+  messages:=coalesce(c.messages,'[]');
+  IF p_input->>'replaceFromMessageId' IS NOT NULL THEN
+    SELECT n INTO anchor_position FROM jsonb_array_elements(messages) WITH ORDINALITY t(m,n) WHERE m->>'id'=p_input->>'replaceFromMessageId' AND m->>'role'='user';
+    IF anchor_position IS NULL THEN RAISE EXCEPTION 'AGENT_EDIT_ANCHOR_NOT_FOUND'; END IF;
+    anchor_message:=messages->(anchor_position::integer-1);old_answer:=messages->anchor_position::integer;
+    versions:=coalesce(anchor_message->'versions','[]');
+    IF jsonb_array_length(versions)=0 THEN versions:=jsonb_build_array(jsonb_build_object('userContent',anchor_message->>'content','mentions',anchor_message->'mentions','aiContent',coalesce(old_answer->>'content',''),'aiAgent',old_answer->'agent','aiMetadata',old_answer->'metadata','createdAt',anchor_message->>'createdAt','subsequentMessages',coalesce((SELECT jsonb_agg(m ORDER BY n) FROM jsonb_array_elements(messages) WITH ORDINALITY t(m,n) WHERE n>anchor_position+1),'[]'))); END IF;
+    p_input:=jsonb_set(p_input,'{userMessage}',(p_input->'userMessage')||jsonb_build_object('versions',versions,'currentVersionIndex',jsonb_array_length(versions)-1));
+    UPDATE public.agent_runs SET input=p_input WHERE id=p_id;
+    SELECT coalesce(jsonb_agg(m ORDER BY n),'[]') INTO messages FROM jsonb_array_elements(messages) WITH ORDINALITY t(m,n) WHERE n<anchor_position;
+  END IF;
+  messages:=messages||jsonb_build_array(p_input->'userMessage',p_message);
+  previous_write:=current_setting('taibu.agent_write',true);
+  PERFORM set_config('taibu.agent_write','true',true);
+  PERFORM public.replace_conversation_messages(p_conversation_id,messages);
+  PERFORM set_config('taibu.agent_write',coalesce(previous_write,''),true);
+  PERFORM public.agent_emit(p_id,'queued');
+  SELECT * INTO r FROM public.agent_runs WHERE id=p_id;
+  RETURN r;
+END;
+$$;
+
+CREATE FUNCTION public.agent_worker_heartbeat(p_worker_id text) RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
+BEGIN
+  PERFORM public.agent_require_admin();
+  INSERT INTO public.agent_workers VALUES(p_worker_id,now()) ON CONFLICT(id) DO UPDATE SET heartbeat_at=excluded.heartbeat_at;
+END;
+$$;
+CREATE FUNCTION public.agent_claim_run(p_worker_id text) RETURNS public.agent_runs LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
+DECLARE r public.agent_runs;
+BEGIN
+  PERFORM public.agent_require_admin();
+  SELECT * INTO r FROM public.agent_runs WHERE status='queued' OR (status IN ('running','cancelling') AND lease_until<now())
+    ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1;
+  IF NOT FOUND THEN RETURN NULL; END IF;
+  UPDATE public.agent_runs SET status=CASE WHEN cancel_requested THEN 'cancelling' ELSE 'running' END,
+    worker_id=p_worker_id,fence=fence+1,lease_until=now()+interval '60 seconds',updated_at=now() WHERE id=r.id RETURNING * INTO r;
+  PERFORM public.agent_emit(r.id,'claimed');
+  SELECT * INTO r FROM public.agent_runs WHERE id=r.id;
+  RETURN r;
+END;
+$$;
+CREATE FUNCTION public.agent_renew_lease(p_run_id uuid,p_worker_id text,p_fence bigint) RETURNS boolean LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
+DECLARE r public.agent_runs;
+BEGIN
+  r:=public.agent_require_lease(p_run_id,p_worker_id,p_fence);
+  UPDATE public.agent_runs SET lease_until=now()+interval '60 seconds',updated_at=now() WHERE id=p_run_id;
+  RETURN r.cancel_requested;
+END;
+$$;
+CREATE FUNCTION public.agent_checkpoint(p_run_id uuid,p_worker_id text,p_fence bigint,p_checkpoint jsonb,p_message jsonb,p_event jsonb,p_command bigint DEFAULT NULL)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
+BEGIN
+  PERFORM public.agent_require_lease(p_run_id,p_worker_id,p_fence);
+  UPDATE public.agent_runs SET checkpoint=p_checkpoint,public_message=p_message,updated_at=now() WHERE id=p_run_id;
+  IF p_command IS NOT NULL THEN UPDATE public.agent_run_commands SET consumed=true WHERE run_id=p_run_id AND sequence=p_command; END IF;
+  PERFORM public.agent_emit(p_run_id,coalesce(p_event->>'type','checkpoint'),p_event);
+END;
+$$;
+CREATE FUNCTION public.agent_cache_tool(p_run_id uuid,p_worker_id text,p_fence bigint,p_call_id text,p_tool_name text,p_kind text,p_args jsonb,p_result jsonb,p_chart jsonb DEFAULT NULL)
+RETURNS public.agent_run_artifacts LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
+DECLARE a public.agent_run_artifacts;
+BEGIN
+  PERFORM public.agent_require_lease(p_run_id,p_worker_id,p_fence);
+  INSERT INTO public.agent_run_artifacts(run_id,call_id,tool_name,kind,args,result,chart_payload)
+    VALUES(p_run_id,p_call_id,p_tool_name,p_kind,p_args,p_result,p_chart) ON CONFLICT(run_id,call_id) DO NOTHING;
+  SELECT * INTO STRICT a FROM public.agent_run_artifacts WHERE run_id=p_run_id AND call_id=p_call_id;
+  IF a.tool_name<>p_tool_name OR a.args IS DISTINCT FROM p_args OR a.kind<>p_kind THEN RAISE EXCEPTION 'AGENT_TOOL_CALL_MISMATCH'; END IF;
+  RETURN a;
+END;
+$$;
+
+CREATE FUNCTION public.agent_submit_command(p_run_id uuid,p_request_id text,p_mode text,p_message jsonb)
+RETURNS public.agent_run_commands LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
+DECLARE r public.agent_runs; cmd public.agent_run_commands; messages jsonb; previous_write text;
+BEGIN
+  SELECT * INTO r FROM public.agent_runs WHERE id=p_run_id FOR UPDATE;
+  IF NOT FOUND OR (r.user_id IS DISTINCT FROM auth.uid() AND NOT coalesce(public.is_admin_user(),false) AND coalesce(auth.role(),'')<>'service_role') THEN
+    RAISE EXCEPTION 'AGENT_RUN_NOT_FOUND' USING ERRCODE='42501';
+  END IF;
+  SELECT * INTO cmd FROM public.agent_run_commands WHERE run_id=p_run_id AND request_id=p_request_id;
+  IF FOUND THEN
+    IF cmd.message->>'content' IS DISTINCT FROM p_message->>'content' OR cmd.mode<>p_mode THEN RAISE EXCEPTION 'AGENT_REQUEST_MISMATCH' USING ERRCODE='22023'; END IF;
+    RETURN cmd;
+  END IF;
+  IF r.status NOT IN ('queued','running','awaiting_input') OR r.cancel_requested THEN RAISE EXCEPTION 'AGENT_RUN_CLOSED' USING ERRCODE='22023'; END IF;
+  IF p_message->>'role'<>'user' OR coalesce(btrim(p_message->>'content'),'')='' THEN RAISE EXCEPTION 'AGENT_INVALID_MESSAGE' USING ERRCODE='22023'; END IF;
+  INSERT INTO public.agent_run_commands(run_id,request_id,mode,message) VALUES(p_run_id,p_request_id,p_mode,p_message) RETURNING * INTO cmd;
+  SELECT coalesce(c.messages,'[]') INTO messages FROM public.conversations c WHERE c.id=r.conversation_id FOR UPDATE;
+  -- This invoker is the owner (or admin), so the existing RPC remains the common write path.
+  previous_write:=current_setting('taibu.agent_write',true);
+  PERFORM set_config('taibu.agent_write','true',true);
+  PERFORM public.replace_conversation_messages(r.conversation_id,messages||jsonb_build_array(p_message));
+  PERFORM set_config('taibu.agent_write',coalesce(previous_write,''),true);
+  UPDATE public.agent_runs SET status=CASE WHEN status='awaiting_input' THEN 'queued' ELSE status END,updated_at=now() WHERE id=p_run_id;
+  PERFORM public.agent_emit(p_run_id,'command');
+  RETURN cmd;
+END;
+$$;
+
+CREATE FUNCTION public.agent_finish_run(p_run_id uuid,p_worker_id text,p_fence bigint,p_status text,p_checkpoint jsonb,p_message jsonb,p_record jsonb DEFAULT NULL)
+RETURNS public.agent_runs LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
+DECLARE r public.agent_runs; a public.agent_run_artifacts; final_id uuid; v_chart_id uuid; chart_table text; selected text; final_status text; record_body text;
+BEGIN
+  r:=public.agent_require_lease(p_run_id,p_worker_id,p_fence);
+  IF p_status NOT IN ('completed','awaiting_input','failed','cancelled') THEN RAISE EXCEPTION 'AGENT_INVALID_STATUS'; END IF;
+  final_status:=CASE WHEN r.cancel_requested THEN 'cancelled' ELSE p_status END;
+  -- A command accepted while the final model turn was settling must be drained
+  -- before success/save. Row locking makes acceptance and settlement atomic.
+  IF final_status IN ('completed','awaiting_input') AND EXISTS(SELECT 1 FROM public.agent_run_commands WHERE run_id=p_run_id AND NOT consumed) THEN
+    final_status:='queued';
+  END IF;
+  IF final_status='completed' AND p_record IS NOT NULL AND r.record_id IS NULL THEN
+    record_body:=coalesce(p_record->>'content','');
+    FOR selected IN SELECT jsonb_array_elements_text(coalesce(p_checkpoint->'finalArtifacts','[]')) LOOP
+      SELECT * INTO a FROM public.agent_run_artifacts WHERE id=selected::uuid AND run_id=p_run_id AND kind='calculation';
+      IF NOT FOUND THEN RAISE EXCEPTION 'AGENT_ARTIFACT_NOT_FOUND'; END IF;
+      record_body:=record_body||E'\n\n'||coalesce(a.result->>'canonicalText','');
+      IF a.chart_payload IS NOT NULL AND a.tool_name IN ('bazi','ziwei') THEN
+        chart_table:=CASE WHEN a.tool_name='bazi' THEN 'bazi_charts' ELSE 'ziwei_charts' END;
+        -- Serialize matching/insertion across tasks of this owner as well as within this run.
+        PERFORM pg_advisory_xact_lock(hashtextextended(jsonb_build_array(r.user_id,chart_table,a.chart_payload->>'birth_date',a.chart_payload->>'birth_time',a.chart_payload->>'gender',a.chart_payload->>'calendar_type',coalesce((a.chart_payload->>'is_leap_month')::boolean,false),a.chart_payload->>'longitude')::text,0));
+        EXECUTE format('SELECT id FROM public.%I WHERE user_id=$1 AND birth_date=$2::date AND birth_time=$3 AND gender IS NOT DISTINCT FROM $4 AND calendar_type=$5 AND coalesce(is_leap_month,false)=$6 AND longitude IS NOT DISTINCT FROM $7 LIMIT 1',chart_table)
+          INTO v_chart_id USING r.user_id,a.chart_payload->>'birth_date',a.chart_payload->>'birth_time',a.chart_payload->>'gender',a.chart_payload->>'calendar_type',coalesce((a.chart_payload->>'is_leap_month')::boolean,false),(a.chart_payload->>'longitude')::double precision;
+        IF v_chart_id IS NULL THEN
+          EXECUTE format('INSERT INTO public.%I(user_id,name,birth_date,birth_time,gender,calendar_type,is_leap_month,birth_place,longitude) VALUES($1,$2,$3::date,$4,$5,$6,$7,$8,$9) RETURNING id',chart_table)
+            INTO v_chart_id USING r.user_id,a.chart_payload->>'name',a.chart_payload->>'birth_date',a.chart_payload->>'birth_time',a.chart_payload->>'gender',a.chart_payload->>'calendar_type',coalesce((a.chart_payload->>'is_leap_month')::boolean,false),a.chart_payload->>'birth_place',(a.chart_payload->>'longitude')::double precision;
+          IF a.tool_name='bazi' THEN
+            UPDATE public.bazi_charts SET day_master=a.chart_payload->>'day_master',day_branch=a.chart_payload->>'day_branch' WHERE id=v_chart_id;
+          END IF;
+        END IF;
+        UPDATE public.agent_run_artifacts SET chart_id=v_chart_id,chart_type=a.tool_name WHERE id=a.id;
+        p_message:=jsonb_set(p_message,'{agent,parts}',coalesce(p_message#>'{agent,parts}','[]')||jsonb_build_array(jsonb_build_object('type','artifact','id',a.id,'title',a.chart_payload->>'name','chartId',v_chart_id,'chartType',a.tool_name)));
+        v_chart_id:=NULL;
+      END IF;
+    END LOOP;
+    INSERT INTO public.ming_records(user_id,title,content,category,tags)
+      VALUES(r.user_id,coalesce(nullif(p_record->>'title',''),'Agent 分析'),record_body,'general',ARRAY['Agent']) RETURNING id INTO final_id;
+    r.record_id:=final_id;
+    p_message:=jsonb_set(p_message,'{agent,parts}',coalesce(p_message#>'{agent,parts}','[]')||jsonb_build_array(jsonb_build_object('type','artifact','id',final_id,'title','已保存分析记录','recordId',final_id)));
+  END IF;
+  IF final_status IN ('failed','cancelled') AND r.billing='charged' AND coalesce(btrim(p_message->>'content'),'')='' AND r.record_id IS NULL THEN
+    IF public.increment_ai_chat_count(r.user_id,1) IS NULL THEN RAISE EXCEPTION 'AGENT_REFUND_FAILED'; END IF;
+    r.billing:='refunded';
+  END IF;
+  p_message:=jsonb_set(p_message,'{agent,status}',to_jsonb(final_status));
+  UPDATE public.agent_runs SET status=final_status,checkpoint=p_checkpoint,public_message=p_message,billing=r.billing,record_id=r.record_id,
+    lease_until=NULL,worker_id=NULL,updated_at=now() WHERE id=p_run_id RETURNING * INTO r;
+  IF final_status IN ('completed','failed','cancelled') THEN DELETE FROM public.agent_run_credentials WHERE run_id=p_run_id; END IF;
+  PERFORM public.agent_emit(p_run_id,final_status);
+  PERFORM public.agent_sync_message(p_run_id);
+  SELECT * INTO r FROM public.agent_runs WHERE id=p_run_id;
+  RETURN r;
+END;
+$$;
+
+CREATE FUNCTION public.agent_cancel_run(p_run_id uuid) RETURNS public.agent_runs LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
+DECLARE r public.agent_runs;
+BEGIN
+  SELECT * INTO r FROM public.agent_runs WHERE id=p_run_id FOR UPDATE;
+  IF NOT FOUND OR (r.user_id IS DISTINCT FROM auth.uid() AND NOT coalesce(public.is_admin_user(),false) AND coalesce(auth.role(),'')<>'service_role') THEN RAISE EXCEPTION 'AGENT_RUN_NOT_FOUND' USING ERRCODE='42501'; END IF;
+  IF r.status IN ('completed','failed','cancelled') THEN RETURN r; END IF;
+  UPDATE public.agent_runs SET cancel_requested=true,status=CASE WHEN status IN ('queued','awaiting_input') THEN 'queued' ELSE 'cancelling' END WHERE id=p_run_id RETURNING * INTO r;
+  PERFORM public.agent_emit(p_run_id,'cancel_requested');
+  SELECT * INTO r FROM public.agent_runs WHERE id=p_run_id;
+  RETURN r;
+END;
+$$;
+
+-- Helpers are callable only by their definer; exposed mutations validate identity inside.
+REVOKE ALL ON FUNCTION public.agent_require_admin(),public.agent_require_lease(uuid,text,bigint),public.agent_sync_message(uuid) FROM PUBLIC,anon,authenticated;
+REVOKE ALL ON FUNCTION public.agent_create_run(uuid,uuid,uuid,text,text,jsonb,jsonb,jsonb,jsonb,boolean),public.agent_worker_heartbeat(text),public.agent_claim_run(text),public.agent_renew_lease(uuid,text,bigint),public.agent_checkpoint(uuid,text,bigint,jsonb,jsonb,jsonb,bigint),public.agent_cache_tool(uuid,text,bigint,text,text,text,jsonb,jsonb,jsonb),public.agent_submit_command(uuid,text,text,jsonb),public.agent_finish_run(uuid,text,bigint,text,jsonb,jsonb,jsonb),public.agent_cancel_run(uuid) FROM PUBLIC,anon;
+GRANT EXECUTE ON FUNCTION public.agent_create_run(uuid,uuid,uuid,text,text,jsonb,jsonb,jsonb,jsonb,boolean),public.agent_worker_heartbeat(text),public.agent_claim_run(text),public.agent_renew_lease(uuid,text,bigint),public.agent_checkpoint(uuid,text,bigint,jsonb,jsonb,jsonb,bigint),public.agent_cache_tool(uuid,text,bigint,text,text,text,jsonb,jsonb,jsonb),public.agent_submit_command(uuid,text,text,jsonb),public.agent_finish_run(uuid,text,bigint,text,jsonb,jsonb,jsonb),public.agent_cancel_run(uuid) TO authenticated,service_role;
+
+-- Bind existing search RPCs to the leased task owner. JWT settings are local to
+-- this transaction and restored even on failure; callers cannot choose an owner.
+CREATE FUNCTION public.agent_search_knowledge(p_run_id uuid,p_worker_id text,p_fence bigint,p_method text,p_args jsonb)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,extensions,pg_temp AS $$
+DECLARE r public.agent_runs; result jsonb; previous_sub text; previous_claims text; kb_ids uuid[]; query_text text; max_rows integer;
+BEGIN
+  r:=public.agent_require_lease(p_run_id,p_worker_id,p_fence);
+  IF NOT EXISTS(SELECT 1 FROM public.users u WHERE u.id=r.user_id AND u.membership IN ('plus','pro') AND (u.membership_expires_at IS NULL OR u.membership_expires_at>now())) THEN
+    RAISE EXCEPTION 'MEMBERSHIP_REQUIRED' USING ERRCODE='42501';
+  END IF;
+  IF p_method='vector' AND NOT EXISTS(SELECT 1 FROM public.users u WHERE u.id=r.user_id AND u.membership='pro') THEN RAISE EXCEPTION 'MEMBERSHIP_REQUIRED' USING ERRCODE='42501'; END IF;
+  SELECT array_agg(v::uuid) INTO kb_ids FROM jsonb_array_elements_text(nullif(p_args->'p_kb_ids','null'::jsonb)) AS t(v);
+  query_text:=p_args->>'p_query'; max_rows:=coalesce((p_args->>'p_limit')::integer,20);
+  IF max_rows<1 OR max_rows>100 THEN RAISE EXCEPTION 'INVALID_SEARCH_LIMIT'; END IF;
+  previous_sub:=current_setting('request.jwt.claim.sub',true); previous_claims:=current_setting('request.jwt.claims',true);
+  PERFORM set_config('request.jwt.claim.sub',r.user_id::text,true);
+  PERFORM set_config('request.jwt.claims',jsonb_build_object('sub',r.user_id,'role','authenticated')::text,true);
+  BEGIN
+    CASE p_method
+      WHEN 'fts' THEN SELECT coalesce(jsonb_agg(to_jsonb(q)),'[]') INTO result FROM public.search_knowledge_fts(query_text,kb_ids,max_rows,coalesce(p_args->>'p_config','simple')) q;
+      WHEN 'trigram' THEN SELECT coalesce(jsonb_agg(to_jsonb(q)),'[]') INTO result FROM public.search_knowledge_trigram(query_text,kb_ids,max_rows,coalesce((p_args->>'p_threshold')::real,0.3)) q;
+      WHEN 'vector' THEN SELECT coalesce(jsonb_agg(to_jsonb(q)),'[]') INTO result FROM public.search_knowledge_vector(ARRAY(SELECT v::float8 FROM jsonb_array_elements_text(p_args->'p_query_vector') t(v)),kb_ids,max_rows,(p_args->>'p_dim')::integer) q;
+      WHEN 'weights' THEN SELECT coalesce(jsonb_agg(jsonb_build_object('id',kb.id,'weight',kb.weight)),'[]') INTO result FROM public.knowledge_bases kb WHERE kb.user_id=r.user_id AND kb.id=ANY(kb_ids);
+      ELSE RAISE EXCEPTION 'INVALID_SEARCH_METHOD';
+    END CASE;
+  EXCEPTION WHEN OTHERS THEN
+    PERFORM set_config('request.jwt.claim.sub',coalesce(previous_sub,''),true); PERFORM set_config('request.jwt.claims',coalesce(previous_claims,''),true); RAISE;
+  END;
+  PERFORM set_config('request.jwt.claim.sub',coalesce(previous_sub,''),true); PERFORM set_config('request.jwt.claims',coalesce(previous_claims,''),true);
+  RETURN result;
+END;
+$$;
+REVOKE ALL ON FUNCTION public.agent_search_knowledge(uuid,text,bigint,text,jsonb) FROM PUBLIC,anon;
+GRANT EXECUTE ON FUNCTION public.agent_search_knowledge(uuid,text,bigint,text,jsonb) TO authenticated,service_role;
+
+CREATE FUNCTION public.agent_protect_conversation_messages() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
+BEGIN
+  IF OLD.messages IS DISTINCT FROM NEW.messages AND coalesce(current_setting('taibu.agent_write',true),'')<>'true'
+    AND EXISTS(SELECT 1 FROM public.agent_runs WHERE conversation_id=OLD.id AND status IN ('queued','running','awaiting_input','cancelling')) THEN
+    RAISE EXCEPTION 'AGENT_CONVERSATION_BUSY' USING ERRCODE='23505';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+REVOKE ALL ON FUNCTION public.agent_protect_conversation_messages() FROM PUBLIC,anon,authenticated;
+CREATE TRIGGER agent_conversation_message_guard BEFORE UPDATE OF messages ON public.conversations FOR EACH ROW EXECUTE FUNCTION public.agent_protect_conversation_messages();
+
+CREATE FUNCTION public.agent_protect_normalized_messages() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
+DECLARE target_id uuid;
+BEGIN
+  IF coalesce(current_setting('taibu.agent_write',true),'')<>'true' THEN
+    target_id:=CASE WHEN TG_OP='DELETE' THEN OLD.conversation_id ELSE NEW.conversation_id END;
+    IF EXISTS(SELECT 1 FROM public.agent_runs r JOIN public.conversations c ON c.id=r.conversation_id
+      WHERE r.conversation_id=target_id AND r.status IN ('queued','running','awaiting_input','cancelling'))
+      OR (TG_OP='UPDATE' AND OLD.conversation_id IS DISTINCT FROM NEW.conversation_id AND EXISTS(SELECT 1 FROM public.agent_runs r JOIN public.conversations c ON c.id=r.conversation_id
+      WHERE r.conversation_id=OLD.conversation_id AND r.status IN ('queued','running','awaiting_input','cancelling'))) THEN
+      RAISE EXCEPTION 'AGENT_CONVERSATION_BUSY' USING ERRCODE='23505';
+    END IF;
+  END IF;
+  IF TG_OP='DELETE' THEN RETURN OLD; END IF;
+  RETURN NEW;
+END;
+$$;
+REVOKE ALL ON FUNCTION public.agent_protect_normalized_messages() FROM PUBLIC,anon,authenticated;
+CREATE TRIGGER agent_normalized_message_guard BEFORE INSERT OR UPDATE OR DELETE ON public.conversation_messages FOR EACH ROW EXECUTE FUNCTION public.agent_protect_normalized_messages();
+
+
 -- Persist caller time resolution, not a second birth date or a new chart table.
 -- Existing place/longitude fields cannot represent an IANA zone or DST policy.
 -- Constant defaults preserve the legacy interpretation; do not recalculate old charts.
@@ -5171,6 +5581,815 @@ ALTER TABLE public.ziwei_charts
   ADD COLUMN IF NOT EXISTS disambiguation text NOT NULL DEFAULT 'reject'
     CHECK (disambiguation IN ('reject', 'earlier', 'later', 'compatible'));
 
+
+
+-- Agent chart identity includes the caller timezone and DST resolution policy.
+-- Depends on the runtime and chart-time migrations; Durable augments this function later.
+
+-- Keep Agent lease/fence, owner and transaction boundaries intact. Time rules
+-- are part of chart identity, including when finishing pre-migration artifacts.
+CREATE OR REPLACE FUNCTION public.agent_finish_run(p_run_id uuid,p_worker_id text,p_fence bigint,p_status text,p_checkpoint jsonb,p_message jsonb,p_record jsonb DEFAULT NULL)
+RETURNS public.agent_runs LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
+DECLARE r public.agent_runs; a public.agent_run_artifacts; final_id uuid; v_chart_id uuid; chart_table text; selected text; final_status text; record_body text; chart_timezone text; chart_disambiguation text;
+BEGIN
+  r:=public.agent_require_lease(p_run_id,p_worker_id,p_fence);
+  IF p_status NOT IN ('completed','awaiting_input','failed','cancelled') THEN RAISE EXCEPTION 'AGENT_INVALID_STATUS'; END IF;
+  final_status:=CASE WHEN r.cancel_requested THEN 'cancelled' ELSE p_status END;
+  -- A command accepted while the final model turn was settling must be drained
+  -- before success/save. Row locking makes acceptance and settlement atomic.
+  IF final_status IN ('completed','awaiting_input') AND EXISTS(SELECT 1 FROM public.agent_run_commands WHERE run_id=p_run_id AND NOT consumed) THEN
+    final_status:='queued';
+  END IF;
+  IF final_status='completed' AND p_record IS NOT NULL AND r.record_id IS NULL THEN
+    record_body:=coalesce(p_record->>'content','');
+    FOR selected IN SELECT jsonb_array_elements_text(coalesce(p_checkpoint->'finalArtifacts','[]')) LOOP
+      SELECT * INTO a FROM public.agent_run_artifacts WHERE id=selected::uuid AND run_id=p_run_id AND kind='calculation';
+      IF NOT FOUND THEN RAISE EXCEPTION 'AGENT_ARTIFACT_NOT_FOUND'; END IF;
+      record_body:=record_body||E'\n\n'||coalesce(a.result->>'canonicalText','');
+      IF a.chart_payload IS NOT NULL AND a.tool_name IN ('bazi','ziwei') THEN
+        chart_table:=CASE WHEN a.tool_name='bazi' THEN 'bazi_charts' ELSE 'ziwei_charts' END;
+        chart_timezone:=coalesce(nullif(btrim(a.chart_payload->>'timezone'),''),'Asia/Shanghai');
+        chart_disambiguation:=coalesce(a.chart_payload->>'disambiguation','reject');
+        -- Serialize matching/insertion across tasks of this owner as well as within this run.
+        PERFORM pg_advisory_xact_lock(hashtextextended(jsonb_build_array(r.user_id,chart_table,a.chart_payload->>'birth_date',a.chart_payload->>'birth_time',a.chart_payload->>'gender',a.chart_payload->>'calendar_type',coalesce((a.chart_payload->>'is_leap_month')::boolean,false),a.chart_payload->>'longitude',chart_timezone,chart_disambiguation)::text,0));
+        EXECUTE format('SELECT id FROM public.%I WHERE user_id=$1 AND birth_date=$2::date AND birth_time=$3 AND gender IS NOT DISTINCT FROM $4 AND calendar_type=$5 AND coalesce(is_leap_month,false)=$6 AND longitude IS NOT DISTINCT FROM $7 AND timezone=$8 AND disambiguation=$9 LIMIT 1',chart_table)
+          INTO v_chart_id USING r.user_id,a.chart_payload->>'birth_date',a.chart_payload->>'birth_time',a.chart_payload->>'gender',a.chart_payload->>'calendar_type',coalesce((a.chart_payload->>'is_leap_month')::boolean,false),(a.chart_payload->>'longitude')::double precision,chart_timezone,chart_disambiguation;
+        IF v_chart_id IS NULL THEN
+          EXECUTE format('INSERT INTO public.%I(user_id,name,birth_date,birth_time,gender,calendar_type,is_leap_month,birth_place,longitude,timezone,disambiguation) VALUES($1,$2,$3::date,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id',chart_table)
+            INTO v_chart_id USING r.user_id,a.chart_payload->>'name',a.chart_payload->>'birth_date',a.chart_payload->>'birth_time',a.chart_payload->>'gender',a.chart_payload->>'calendar_type',coalesce((a.chart_payload->>'is_leap_month')::boolean,false),a.chart_payload->>'birth_place',(a.chart_payload->>'longitude')::double precision,chart_timezone,chart_disambiguation;
+          IF a.tool_name='bazi' THEN
+            UPDATE public.bazi_charts SET day_master=a.chart_payload->>'day_master',day_branch=a.chart_payload->>'day_branch' WHERE id=v_chart_id;
+          END IF;
+        END IF;
+        UPDATE public.agent_run_artifacts SET chart_id=v_chart_id,chart_type=a.tool_name WHERE id=a.id;
+        p_message:=jsonb_set(p_message,'{agent,parts}',coalesce(p_message#>'{agent,parts}','[]')||jsonb_build_array(jsonb_build_object('type','artifact','id',a.id,'title',a.chart_payload->>'name','chartId',v_chart_id,'chartType',a.tool_name)));
+        v_chart_id:=NULL;
+      END IF;
+    END LOOP;
+    INSERT INTO public.ming_records(user_id,title,content,category,tags)
+      VALUES(r.user_id,coalesce(nullif(p_record->>'title',''),'Agent 分析'),record_body,'general',ARRAY['Agent']) RETURNING id INTO final_id;
+    r.record_id:=final_id;
+    p_message:=jsonb_set(p_message,'{agent,parts}',coalesce(p_message#>'{agent,parts}','[]')||jsonb_build_array(jsonb_build_object('type','artifact','id',final_id,'title','已保存分析记录','recordId',final_id)));
+  END IF;
+  IF final_status IN ('failed','cancelled') AND r.billing='charged' AND coalesce(btrim(p_message->>'content'),'')='' AND r.record_id IS NULL THEN
+    IF public.increment_ai_chat_count(r.user_id,1) IS NULL THEN RAISE EXCEPTION 'AGENT_REFUND_FAILED'; END IF;
+    r.billing:='refunded';
+  END IF;
+  p_message:=jsonb_set(p_message,'{agent,status}',to_jsonb(final_status));
+  UPDATE public.agent_runs SET status=final_status,checkpoint=p_checkpoint,public_message=p_message,billing=r.billing,record_id=r.record_id,
+    lease_until=NULL,worker_id=NULL,updated_at=now() WHERE id=p_run_id RETURNING * INTO r;
+  IF final_status IN ('completed','failed','cancelled') THEN DELETE FROM public.agent_run_credentials WHERE run_id=p_run_id; END IF;
+  PERFORM public.agent_emit(p_run_id,final_status);
+  PERFORM public.agent_sync_message(p_run_id);
+  SELECT * INTO r FROM public.agent_runs WHERE id=p_run_id;
+  RETURN r;
+END;
+$$;
+REVOKE ALL ON FUNCTION public.agent_finish_run(uuid,text,bigint,text,jsonb,jsonb,jsonb) FROM PUBLIC,anon;
+GRANT EXECUTE ON FUNCTION public.agent_finish_run(uuid,text,bigint,text,jsonb,jsonb,jsonb) TO authenticated,service_role;
+
+
+
+-- Pi Durable commit log. Each run is one storage and has exactly one lease owner.
+CREATE TABLE public.agent_durable_commits (
+  run_id uuid NOT NULL REFERENCES public.agent_runs(id) ON DELETE CASCADE,
+  sequence bigint NOT NULL CHECK(sequence > 0),
+  writes jsonb NOT NULL CHECK(jsonb_typeof(writes)='array'),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY(run_id,sequence)
+);
+ALTER TABLE public.agent_durable_commits ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE public.agent_durable_commits FROM PUBLIC, anon, authenticated;
+GRANT ALL ON public.agent_durable_commits TO service_role;
+ALTER TABLE public.agent_workers ADD COLUMN engine text NOT NULL DEFAULT 'pi-agent-core/1.0.2';
+ALTER TABLE public.agent_run_commands ADD COLUMN durable_admitted boolean NOT NULL DEFAULT false;
+
+DROP FUNCTION public.agent_worker_heartbeat(text);
+CREATE FUNCTION public.agent_worker_heartbeat(p_worker_id text,p_engine text DEFAULT 'pi-agent-core/1.0.2')
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
+BEGIN
+  PERFORM public.agent_require_admin();
+  IF p_engine NOT IN ('pi-agent-core/1.0.2','pi-durable/1.0.4') THEN
+    RAISE EXCEPTION 'AGENT_ENGINE_UNSUPPORTED' USING ERRCODE='22023';
+  END IF;
+  INSERT INTO public.agent_workers(id,heartbeat_at,engine) VALUES(p_worker_id,now(),p_engine)
+    ON CONFLICT(id) DO UPDATE SET heartbeat_at=excluded.heartbeat_at,engine=excluded.engine;
+END;
+$$;
+CREATE OR REPLACE FUNCTION public.agent_claim_run(p_worker_id text) RETURNS public.agent_runs
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
+DECLARE r public.agent_runs; worker_engine text;
+BEGIN
+  PERFORM public.agent_require_admin();
+  SELECT engine INTO worker_engine FROM public.agent_workers WHERE id=p_worker_id;
+  SELECT * INTO r FROM public.agent_runs
+    WHERE (status='queued' OR (status IN ('running','cancelling') AND lease_until<now()))
+      AND (coalesce(checkpoint->>'version','1')='1' OR (
+        checkpoint->>'version'='2' AND worker_engine='pi-durable/1.0.4'
+        AND checkpoint#>>'{durable,engine}'='pi-durable/1.0.4'))
+    ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1;
+  IF NOT FOUND THEN RETURN NULL; END IF;
+  UPDATE public.agent_runs SET status=CASE WHEN cancel_requested THEN 'cancelling' ELSE 'running' END,
+    worker_id=p_worker_id,fence=fence+1,lease_until=now()+interval '60 seconds',updated_at=now()
+    WHERE id=r.id RETURNING * INTO r;
+  PERFORM public.agent_emit(r.id,'claimed');
+  SELECT * INTO r FROM public.agent_runs WHERE id=r.id;
+  RETURN r;
+END;
+$$;
+
+CREATE FUNCTION public.agent_durable_read(p_run_id uuid,p_worker_id text,p_fence bigint,p_after bigint DEFAULT 0)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
+DECLARE result jsonb;
+BEGIN
+  PERFORM public.agent_require_lease(p_run_id,p_worker_id,p_fence);
+  IF p_after<0 THEN RAISE EXCEPTION 'AGENT_DURABLE_CURSOR_INVALID' USING ERRCODE='22023'; END IF;
+  SELECT coalesce(jsonb_agg(jsonb_build_object('sequence',c.sequence,'writes',c.writes) ORDER BY c.sequence),'[]')
+    INTO result FROM (SELECT sequence,writes FROM public.agent_durable_commits
+      WHERE run_id=p_run_id AND sequence>p_after ORDER BY sequence LIMIT 200) c;
+  RETURN result;
+END;
+$$;
+
+CREATE FUNCTION public.agent_durable_commit(p_run_id uuid,p_worker_id text,p_fence bigint,p_sequence bigint,p_writes jsonb,p_checkpoint jsonb)
+RETURNS bigint LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
+DECLARE existing jsonb; previous bigint; w jsonb; command_sequence bigint;
+BEGIN
+  PERFORM public.agent_require_lease(p_run_id,p_worker_id,p_fence);
+  IF p_sequence<1 OR jsonb_typeof(p_writes) IS DISTINCT FROM 'array' THEN
+    RAISE EXCEPTION 'AGENT_DURABLE_COMMIT_INVALID' USING ERRCODE='22023';
+  END IF;
+  SELECT writes INTO existing FROM public.agent_durable_commits WHERE run_id=p_run_id AND sequence=p_sequence;
+  IF FOUND THEN
+    IF existing IS DISTINCT FROM p_writes THEN RAISE EXCEPTION 'AGENT_DURABLE_CONFLICT' USING ERRCODE='40001'; END IF;
+    RETURN p_sequence;
+  END IF;
+  SELECT coalesce(max(sequence),0) INTO previous FROM public.agent_durable_commits WHERE run_id=p_run_id;
+  IF p_sequence<>previous+1 THEN RAISE EXCEPTION 'AGENT_DURABLE_CONFLICT' USING ERRCODE='40001'; END IF;
+  INSERT INTO public.agent_durable_commits(run_id,sequence,writes) VALUES(p_run_id,p_sequence,p_writes);
+  UPDATE public.agent_runs SET checkpoint=p_checkpoint,updated_at=now() WHERE id=p_run_id;
+  -- Admission alone is not consumption. Pi records a placed submission before
+  -- advancing its model task; acknowledge the matching outer command atomically.
+  FOR w IN SELECT value FROM jsonb_array_elements(p_writes) LOOP
+    IF w->>'type'='submission'
+      AND w#>>'{value,requestId}' ~ '^command:[0-9]+$' THEN
+      command_sequence:=substring(w#>>'{value,requestId}' FROM 9)::bigint;
+      UPDATE public.agent_run_commands SET durable_admitted=true,
+        consumed=consumed OR w#>>'{value,status}' IN ('placed','done')
+        WHERE run_id=p_run_id AND sequence=command_sequence;
+    END IF;
+  END LOOP;
+  RETURN p_sequence;
+END;
+$$;
+
+-- A pending native question can hold admitted inputs until its ToolTasks finish.
+-- Leave those runs awaiting the next human reply instead of repeatedly claiming
+-- the same queued run. Unadmitted late commands still trigger a new lease owner.
+DO $migration$
+DECLARE definition text;
+  old_guard text := 'IF final_status IN (''completed'',''awaiting_input'') AND EXISTS(SELECT 1 FROM public.agent_run_commands WHERE run_id=p_run_id AND NOT consumed) THEN';
+  new_guard text := 'IF final_status IN (''completed'',''awaiting_input'') AND EXISTS(SELECT 1 FROM public.agent_run_commands WHERE run_id=p_run_id AND NOT consumed AND NOT (final_status=''awaiting_input'' AND p_checkpoint#>>''{durable,engine}''=''pi-durable/1.0.4'' AND durable_admitted)) THEN';
+BEGIN
+  SELECT pg_catalog.pg_get_functiondef('public.agent_finish_run(uuid,text,bigint,text,jsonb,jsonb,jsonb)'::regprocedure) INTO definition;
+  IF position(old_guard IN definition)=0 THEN RAISE EXCEPTION 'Review changed agent_finish_run command guard before migrating'; END IF;
+  EXECUTE replace(definition,old_guard,new_guard);
+END;
+$migration$;
+
+REVOKE ALL ON FUNCTION public.agent_worker_heartbeat(text,text) FROM PUBLIC,anon;
+REVOKE ALL ON FUNCTION public.agent_durable_read(uuid,text,bigint,bigint) FROM PUBLIC,anon;
+REVOKE ALL ON FUNCTION public.agent_durable_commit(uuid,text,bigint,bigint,jsonb,jsonb) FROM PUBLIC,anon;
+GRANT EXECUTE ON FUNCTION public.agent_worker_heartbeat(text,text),
+  public.agent_durable_read(uuid,text,bigint,bigint),
+  public.agent_durable_commit(uuid,text,bigint,bigint,jsonb,jsonb) TO authenticated,service_role;
+
+
+-- Reuse the conversation's existing JSON message versions and Agent ledger.
+-- No new tables/columns or backfill: capture the visible branch before its next
+-- edit/regeneration, including the tail added since that branch was created.
+
+CREATE OR REPLACE FUNCTION public.agent_create_run(p_id uuid,p_user_id uuid,p_conversation_id uuid,p_request_id text,p_request_hash text,p_input jsonb,p_checkpoint jsonb,p_message jsonb,p_credential jsonb,p_charge boolean)
+RETURNS public.agent_runs LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
+DECLARE
+  r public.agent_runs; c public.conversations; balance integer; messages jsonb;
+  anchor_position bigint; anchor_message jsonb; old_answer jsonb; versions jsonb;
+  version_index integer; version_snapshot jsonb; tail_position bigint; previous_write text;
+BEGIN
+  PERFORM public.agent_require_admin();
+  SELECT * INTO c FROM public.conversations WHERE id=p_conversation_id FOR UPDATE;
+  IF NOT FOUND OR c.user_id IS DISTINCT FROM p_user_id THEN RAISE EXCEPTION 'AGENT_CONVERSATION_NOT_FOUND' USING ERRCODE='42501'; END IF;
+  SELECT * INTO r FROM public.agent_runs WHERE user_id=p_user_id AND request_id=p_request_id;
+  IF FOUND THEN
+    IF r.request_hash<>p_request_hash THEN RAISE EXCEPTION 'AGENT_REQUEST_MISMATCH' USING ERRCODE='22023'; END IF;
+    RETURN r;
+  END IF;
+  IF EXISTS(SELECT 1 FROM public.agent_runs WHERE conversation_id=p_conversation_id AND status IN ('queued','running','awaiting_input','cancelling')) THEN
+    RAISE EXCEPTION 'AGENT_CONVERSATION_BUSY' USING ERRCODE='23505';
+  END IF;
+  IF p_charge THEN
+    balance:=public.decrement_ai_chat_count(p_user_id);
+    IF balance IS NULL THEN RAISE EXCEPTION 'INSUFFICIENT_CREDITS' USING ERRCODE='P0001'; END IF;
+  END IF;
+  INSERT INTO public.agent_runs(id,user_id,conversation_id,request_id,request_hash,input,checkpoint,public_message,billing)
+    VALUES(p_id,p_user_id,p_conversation_id,p_request_id,p_request_hash,p_input,p_checkpoint,p_message,CASE WHEN p_charge THEN 'charged' ELSE 'exempt' END) RETURNING * INTO r;
+  IF p_credential IS NOT NULL THEN INSERT INTO public.agent_run_credentials VALUES(p_id,p_credential); END IF;
+  messages:=coalesce(c.messages,'[]');
+  IF p_input->>'replaceFromMessageId' IS NOT NULL THEN
+    SELECT n INTO anchor_position FROM jsonb_array_elements(messages) WITH ORDINALITY t(m,n) WHERE m->>'id'=p_input->>'replaceFromMessageId' AND m->>'role'='user';
+    IF anchor_position IS NULL THEN RAISE EXCEPTION 'AGENT_EDIT_ANCHOR_NOT_FOUND'; END IF;
+    anchor_message:=messages->(anchor_position::integer-1);
+    old_answer:=messages->anchor_position::integer;
+    tail_position:=anchor_position;
+    IF old_answer->>'role'='assistant' THEN tail_position:=anchor_position+1; ELSE old_answer:=NULL; END IF;
+    versions:=CASE WHEN jsonb_typeof(anchor_message->'versions')='array' THEN anchor_message->'versions' ELSE '[]'::jsonb END;
+    version_index:=jsonb_array_length(versions)-1;
+    IF coalesce(anchor_message->>'currentVersionIndex','') ~ '^[0-9]{1,9}$' THEN
+      IF (anchor_message->>'currentVersionIndex')::integer < jsonb_array_length(versions) THEN
+        version_index:=(anchor_message->>'currentVersionIndex')::integer;
+      END IF;
+    END IF;
+    version_snapshot:=CASE WHEN jsonb_typeof(versions->version_index)='object' THEN versions->version_index ELSE '{}'::jsonb END;
+    version_snapshot:=version_snapshot||jsonb_build_object(
+      'userContent',anchor_message->>'content','mentions',anchor_message->'mentions',
+      'aiContent',coalesce(old_answer->>'content',''),'aiAgent',old_answer->'agent','aiMetadata',old_answer->'metadata',
+      'createdAt',coalesce(old_answer->>'createdAt',anchor_message->>'createdAt'),
+      'subsequentMessages',coalesce((SELECT jsonb_agg(m ORDER BY n) FROM jsonb_array_elements(messages) WITH ORDINALITY t(m,n) WHERE n>tail_position),'[]'));
+    IF version_index<0 THEN
+      versions:=jsonb_build_array(version_snapshot); version_index:=0;
+    ELSE
+      versions:=jsonb_set(versions,ARRAY[version_index::text],version_snapshot);
+    END IF;
+    p_input:=jsonb_set(p_input,'{userMessage}',(p_input->'userMessage')||jsonb_build_object('versions',versions,'currentVersionIndex',version_index));
+    UPDATE public.agent_runs SET input=p_input WHERE id=p_id;
+    SELECT coalesce(jsonb_agg(m ORDER BY n),'[]') INTO messages FROM jsonb_array_elements(messages) WITH ORDINALITY t(m,n) WHERE n<anchor_position;
+  END IF;
+  messages:=messages||jsonb_build_array(p_input->'userMessage',p_message);
+  previous_write:=current_setting('taibu.agent_write',true);
+  PERFORM set_config('taibu.agent_write','true',true);
+  PERFORM public.replace_conversation_messages(p_conversation_id,messages);
+  PERFORM set_config('taibu.agent_write',coalesce(previous_write,''),true);
+  PERFORM public.agent_emit(p_id,'queued');
+  SELECT * INTO r FROM public.agent_runs WHERE id=p_id;
+  RETURN r;
+END;
+$$;
+REVOKE ALL ON FUNCTION public.agent_create_run(uuid,uuid,uuid,text,text,jsonb,jsonb,jsonb,jsonb,boolean) FROM PUBLIC,anon;
+GRANT EXECUTE ON FUNCTION public.agent_create_run(uuid,uuid,uuid,text,text,jsonb,jsonb,jsonb,jsonb,boolean) TO authenticated,service_role;
+
+-- Covers both the graph RPC and direct owner/admin DELETE. The conversation row
+-- is already locked by DELETE; avoid taking a run lock in the reverse order of
+-- settlement. The existing create RPC holds the same conversation lock, so a
+-- new run cannot race a successful deletion.
+CREATE FUNCTION public.agent_protect_conversation_delete() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
+BEGIN
+  IF EXISTS(SELECT 1 FROM public.agent_runs WHERE conversation_id=OLD.id AND status IN ('queued','running','awaiting_input','cancelling')) THEN
+    RAISE EXCEPTION 'AGENT_CONVERSATION_BUSY' USING ERRCODE='23505';
+  END IF;
+  RETURN OLD;
+END;
+$$;
+REVOKE ALL ON FUNCTION public.agent_protect_conversation_delete() FROM PUBLIC,anon,authenticated;
+CREATE TRIGGER agent_conversation_delete_guard BEFORE DELETE ON public.conversations
+FOR EACH ROW EXECUTE FUNCTION public.agent_protect_conversation_delete();
+
+
+
+-- Agent answers live in conversations. Selected charts settle independently of
+-- MingRecord, retaining the existing lease, command, timezone and billing rules.
+
+CREATE OR REPLACE FUNCTION public.agent_finish_run(p_run_id uuid,p_worker_id text,p_fence bigint,p_status text,p_checkpoint jsonb,p_message jsonb,p_record jsonb DEFAULT NULL)
+RETURNS public.agent_runs LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
+DECLARE r public.agent_runs; a public.agent_run_artifacts; v_chart_id uuid; chart_table text; selected text; final_status text; chart_timezone text; chart_disambiguation text;
+BEGIN
+  r:=public.agent_require_lease(p_run_id,p_worker_id,p_fence);
+  IF p_status NOT IN ('completed','awaiting_input','failed','cancelled') THEN RAISE EXCEPTION 'AGENT_INVALID_STATUS'; END IF;
+  final_status:=CASE WHEN r.cancel_requested THEN 'cancelled' ELSE p_status END;
+  IF final_status IN ('completed','awaiting_input') AND EXISTS(SELECT 1 FROM public.agent_run_commands WHERE run_id=p_run_id AND NOT consumed AND NOT (final_status='awaiting_input' AND p_checkpoint#>>'{durable,engine}'='pi-durable/1.0.4' AND durable_admitted)) THEN
+    final_status:='queued';
+  END IF;
+  -- p_record remains in the signature for old worker/RPC compatibility. It is
+  -- no longer consumed. Existing records and historical links are preserved.
+  IF final_status='completed' THEN
+    FOR selected IN SELECT jsonb_array_elements_text(coalesce(p_checkpoint->'finalArtifacts','[]')) LOOP
+      SELECT * INTO a FROM public.agent_run_artifacts WHERE id=selected::uuid AND run_id=p_run_id AND kind='calculation';
+      IF NOT FOUND THEN RAISE EXCEPTION 'AGENT_ARTIFACT_NOT_FOUND'; END IF;
+      IF a.chart_payload IS NOT NULL AND a.tool_name IN ('bazi','ziwei') THEN
+        chart_table:=CASE WHEN a.tool_name='bazi' THEN 'bazi_charts' ELSE 'ziwei_charts' END;
+        chart_timezone:=coalesce(nullif(btrim(a.chart_payload->>'timezone'),''),'Asia/Shanghai');
+        chart_disambiguation:=coalesce(a.chart_payload->>'disambiguation','reject');
+        PERFORM pg_advisory_xact_lock(hashtextextended(jsonb_build_array(r.user_id,chart_table,a.chart_payload->>'birth_date',a.chart_payload->>'birth_time',a.chart_payload->>'gender',a.chart_payload->>'calendar_type',coalesce((a.chart_payload->>'is_leap_month')::boolean,false),a.chart_payload->>'longitude',chart_timezone,chart_disambiguation)::text,0));
+        EXECUTE format('SELECT id FROM public.%I WHERE user_id=$1 AND birth_date=$2::date AND birth_time=$3 AND gender IS NOT DISTINCT FROM $4 AND calendar_type=$5 AND coalesce(is_leap_month,false)=$6 AND longitude IS NOT DISTINCT FROM $7 AND timezone=$8 AND disambiguation=$9 LIMIT 1',chart_table)
+          INTO v_chart_id USING r.user_id,a.chart_payload->>'birth_date',a.chart_payload->>'birth_time',a.chart_payload->>'gender',a.chart_payload->>'calendar_type',coalesce((a.chart_payload->>'is_leap_month')::boolean,false),(a.chart_payload->>'longitude')::double precision,chart_timezone,chart_disambiguation;
+        IF v_chart_id IS NULL THEN
+          EXECUTE format('INSERT INTO public.%I(user_id,name,birth_date,birth_time,gender,calendar_type,is_leap_month,birth_place,longitude,timezone,disambiguation) VALUES($1,$2,$3::date,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id',chart_table)
+            INTO v_chart_id USING r.user_id,a.chart_payload->>'name',a.chart_payload->>'birth_date',a.chart_payload->>'birth_time',a.chart_payload->>'gender',a.chart_payload->>'calendar_type',coalesce((a.chart_payload->>'is_leap_month')::boolean,false),a.chart_payload->>'birth_place',(a.chart_payload->>'longitude')::double precision,chart_timezone,chart_disambiguation;
+          IF a.tool_name='bazi' THEN
+            UPDATE public.bazi_charts SET day_master=a.chart_payload->>'day_master',day_branch=a.chart_payload->>'day_branch' WHERE id=v_chart_id;
+          END IF;
+        END IF;
+        UPDATE public.agent_run_artifacts SET chart_id=v_chart_id,chart_type=a.tool_name WHERE id=a.id;
+        IF NOT EXISTS(SELECT 1 FROM jsonb_array_elements(coalesce(p_message#>'{agent,parts}','[]')) part WHERE part->>'type'='artifact' AND part->>'id'=a.id::text) THEN
+          p_message:=jsonb_set(p_message,'{agent,parts}',coalesce(p_message#>'{agent,parts}','[]')||jsonb_build_array(jsonb_build_object('type','artifact','id',a.id,'title',a.chart_payload->>'name','chartId',v_chart_id,'chartType',a.tool_name)));
+        END IF;
+        v_chart_id:=NULL;
+      END IF;
+    END LOOP;
+  END IF;
+  IF final_status IN ('failed','cancelled') AND r.billing='charged' AND coalesce(btrim(p_message->>'content'),'')='' AND r.record_id IS NULL THEN
+    IF public.increment_ai_chat_count(r.user_id,1) IS NULL THEN RAISE EXCEPTION 'AGENT_REFUND_FAILED'; END IF;
+    r.billing:='refunded';
+  END IF;
+  p_message:=jsonb_set(p_message,'{agent,status}',to_jsonb(final_status));
+  UPDATE public.agent_runs SET status=final_status,checkpoint=p_checkpoint,public_message=p_message,billing=r.billing,
+    lease_until=NULL,worker_id=NULL,updated_at=now() WHERE id=p_run_id RETURNING * INTO r;
+  IF final_status IN ('completed','failed','cancelled') THEN DELETE FROM public.agent_run_credentials WHERE run_id=p_run_id; END IF;
+  PERFORM public.agent_emit(p_run_id,final_status);
+  PERFORM public.agent_sync_message(p_run_id);
+  SELECT * INTO r FROM public.agent_runs WHERE id=p_run_id;
+  RETURN r;
+END;
+$$;
+REVOKE ALL ON FUNCTION public.agent_finish_run(uuid,text,bigint,text,jsonb,jsonb,jsonb) FROM PUBLIC,anon;
+GRANT EXECUTE ON FUNCTION public.agent_finish_run(uuid,text,bigint,text,jsonb,jsonb,jsonb) TO authenticated,service_role;
+
+NOTIFY pgrst, 'reload schema';
+
+
+ALTER TABLE public.user_settings ADD COLUMN IF NOT EXISTS chat_preferences jsonb NOT NULL DEFAULT '{}'::jsonb;
+COMMENT ON COLUMN public.user_settings.chat_preferences IS 'Validated reading width, global font scale and explicit desktop notification preference; no credentials.';
+
+
+CREATE INDEX IF NOT EXISTS conversation_messages_content_trgm ON public.conversation_messages USING gin (content extensions.gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS conversations_title_trgm ON public.conversations USING gin (title extensions.gin_trgm_ops);
+
+CREATE OR REPLACE FUNCTION public.search_conversation_messages(p_query text, p_limit integer DEFAULT 30)
+RETURNS jsonb LANGUAGE plpgsql STABLE SECURITY INVOKER SET search_path = public, pg_temp SET statement_timeout = '3s' AS $$
+DECLARE pattern text; result jsonb;
+BEGIN
+  IF auth.uid() IS NULL THEN RAISE EXCEPTION 'authentication required' USING ERRCODE='42501'; END IF;
+  IF length(trim(p_query)) NOT BETWEEN 1 AND 200 THEN RAISE EXCEPTION 'invalid search query'; END IF;
+  pattern := '%' || replace(replace(replace(trim(p_query), '\', '\\'), '%', '\%'), '_', '\_') || '%';
+  SELECT coalesce(jsonb_agg(to_jsonb(search_rows)), '[]'::jsonb) INTO result FROM (
+    (SELECT c.id AS "conversationId", c.title, NULL::text AS "messageId", c.title AS preview, c.updated_at AS "updatedAt"
+      FROM public.conversations c WHERE c.user_id=auth.uid() AND c.title ILIKE pattern ESCAPE '\' ORDER BY c.updated_at DESC LIMIT 10)
+    UNION ALL
+    (SELECT c.id, c.title, m.message_id, substr(m.content, greatest(1, strpos(lower(m.content),lower(trim(p_query)))-80), 300), c.updated_at
+      FROM public.conversation_messages m JOIN public.conversations c ON c.id=m.conversation_id
+      WHERE c.user_id=auth.uid() AND m.role <> 'system' AND m.content ILIKE pattern ESCAPE '\'
+      ORDER BY c.updated_at DESC,m.sequence LIMIT least(greatest(p_limit,1),30))
+  ) search_rows;
+  RETURN result;
+END;
+$$;
+REVOKE ALL ON FUNCTION public.search_conversation_messages(text,integer) FROM public,anon;
+GRANT EXECUTE ON FUNCTION public.search_conversation_messages(text,integer) TO authenticated;
+
+
+ALTER TABLE public.conversations ADD COLUMN IF NOT EXISTS next_task_config jsonb;
+CREATE TABLE public.prompt_enhancement_usage (
+  user_id uuid NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  local_date date NOT NULL,
+  calls integer NOT NULL DEFAULT 0 CHECK (calls BETWEEN 0 AND 5),
+  PRIMARY KEY(user_id,local_date)
+);
+ALTER TABLE public.prompt_enhancement_usage ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE public.prompt_enhancement_usage FROM PUBLIC, anon, authenticated;
+GRANT ALL ON public.prompt_enhancement_usage TO service_role;
+CREATE OR REPLACE FUNCTION public.claim_prompt_enhancement() RETURNS boolean
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
+DECLARE affected integer;
+BEGIN
+  IF auth.uid() IS NULL THEN RAISE EXCEPTION 'authentication required' USING ERRCODE='42501'; END IF;
+  INSERT INTO public.prompt_enhancement_usage(user_id,local_date,calls) VALUES(auth.uid(),(now() AT TIME ZONE 'Asia/Shanghai')::date,1)
+  ON CONFLICT(user_id,local_date) DO UPDATE SET calls=prompt_enhancement_usage.calls+1 WHERE prompt_enhancement_usage.calls<5;
+  GET DIAGNOSTICS affected = ROW_COUNT;
+  RETURN affected=1;
+END;
+$$;
+REVOKE ALL ON FUNCTION public.claim_prompt_enhancement() FROM public,anon;
+GRANT EXECUTE ON FUNCTION public.claim_prompt_enhancement() TO authenticated;
+
+
+ALTER TABLE public.agent_run_commands
+  ADD COLUMN revision integer NOT NULL DEFAULT 1,
+  ADD COLUMN sort_order bigint,
+  ADD COLUMN delivery_state text NOT NULL DEFAULT 'pending' CHECK(delivery_state IN ('pending','claimed','admitted','consumed','cancelled')),
+  ADD COLUMN original_message jsonb,
+  ADD COLUMN original_mode text;
+UPDATE public.agent_run_commands SET sort_order=sequence*1024,original_message=message,original_mode=mode,
+  delivery_state=CASE WHEN consumed THEN 'consumed' WHEN durable_admitted THEN 'admitted' ELSE 'pending' END;
+ALTER TABLE public.agent_run_commands ALTER COLUMN sort_order SET NOT NULL;
+
+CREATE OR REPLACE FUNCTION public.agent_submit_command(p_run_id uuid,p_request_id text,p_mode text,p_message jsonb)
+RETURNS public.agent_run_commands LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
+DECLARE r public.agent_runs; cmd public.agent_run_commands; messages jsonb; previous_write text;
+BEGIN
+  SELECT * INTO r FROM public.agent_runs WHERE id=p_run_id FOR UPDATE;
+  IF NOT FOUND OR (r.user_id IS DISTINCT FROM auth.uid() AND NOT coalesce(public.is_admin_user(),false) AND coalesce(auth.role(),'')<>'service_role') THEN
+    RAISE EXCEPTION 'AGENT_RUN_NOT_FOUND' USING ERRCODE='42501';
+  END IF;
+  SELECT * INTO cmd FROM public.agent_run_commands WHERE run_id=p_run_id AND request_id=p_request_id;
+  IF FOUND THEN
+    IF cmd.original_message->>'content' IS DISTINCT FROM p_message->>'content' OR cmd.original_mode<>p_mode
+      OR cmd.original_message#>'{metadata,agentAnswers}' IS DISTINCT FROM p_message#>'{metadata,agentAnswers}'
+      OR cmd.original_message->'attachments' IS DISTINCT FROM p_message->'attachments' THEN
+      RAISE EXCEPTION 'AGENT_REQUEST_MISMATCH' USING ERRCODE='22023';
+    END IF;
+    RETURN cmd;
+  END IF;
+  IF r.status NOT IN ('queued','running','awaiting_input') OR r.cancel_requested THEN RAISE EXCEPTION 'AGENT_RUN_CLOSED' USING ERRCODE='22023'; END IF;
+  IF p_mode NOT IN ('steer','follow_up','reply') OR p_message->>'role'<>'user' OR coalesce(btrim(p_message->>'content'),'')='' OR length(p_message->>'content')>32000 THEN RAISE EXCEPTION 'AGENT_INVALID_MESSAGE' USING ERRCODE='22023'; END IF;
+  IF (SELECT count(*) FROM public.agent_run_commands WHERE run_id=p_run_id AND NOT consumed)>=50 THEN RAISE EXCEPTION 'AGENT_QUEUE_FULL' USING ERRCODE='22023'; END IF;
+  IF p_mode='reply' AND r.checkpoint->>'questionId' IS NOT NULL AND r.checkpoint->>'questionId' IS DISTINCT FROM p_message#>>'{metadata,agentQuestionId}' THEN RAISE EXCEPTION 'AGENT_QUESTION_CHANGED' USING ERRCODE='40001'; END IF;
+  INSERT INTO public.agent_run_commands(run_id,request_id,mode,message,original_message,original_mode,sort_order)
+    VALUES(p_run_id,p_request_id,p_mode,p_message,p_message,p_mode,(SELECT coalesce(max(sort_order),0)+1024 FROM public.agent_run_commands WHERE run_id=p_run_id)) RETURNING * INTO cmd;
+  -- Pending inputs stay in the business queue until the worker freezes them.
+  UPDATE public.agent_runs SET status=CASE WHEN status='awaiting_input' AND p_mode='reply' THEN 'queued' ELSE status END,updated_at=now() WHERE id=p_run_id;
+  PERFORM public.agent_emit(p_run_id,'command');
+  RETURN cmd;
+END;
+$$;
+
+CREATE FUNCTION public.agent_claim_command(p_run_id uuid,p_worker_id text,p_fence bigint,p_sequence bigint)
+RETURNS public.agent_run_commands LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
+DECLARE r public.agent_runs; cmd public.agent_run_commands; messages jsonb; previous_write text;
+BEGIN
+  r:=public.agent_require_lease(p_run_id,p_worker_id,p_fence);
+  IF r.cancel_requested THEN RETURN NULL; END IF;
+  SELECT * INTO cmd FROM public.agent_run_commands WHERE run_id=p_run_id AND sequence=p_sequence FOR UPDATE;
+  IF NOT FOUND OR cmd.delivery_state NOT IN ('pending','claimed') THEN RETURN NULL; END IF;
+  IF cmd.delivery_state='pending' THEN UPDATE public.agent_run_commands SET delivery_state='claimed',revision=revision+1 WHERE sequence=p_sequence RETURNING * INTO cmd; END IF;
+  SELECT coalesce(c.messages,'[]') INTO messages FROM public.conversations c WHERE c.id=r.conversation_id FOR UPDATE;
+  IF NOT EXISTS(SELECT 1 FROM jsonb_array_elements(messages) m WHERE m->>'id'=cmd.message->>'id') THEN
+    previous_write:=current_setting('taibu.agent_write',true); PERFORM set_config('taibu.agent_write','true',true);
+    PERFORM public.replace_conversation_messages(r.conversation_id,messages||jsonb_build_array(cmd.message));
+    PERFORM set_config('taibu.agent_write',coalesce(previous_write,''),true);
+  END IF;
+  PERFORM public.agent_emit(p_run_id,'command_claimed');
+  RETURN cmd;
+END;
+$$;
+
+CREATE FUNCTION public.agent_change_command(p_run_id uuid,p_sequence bigint,p_revision integer,p_action text,p_payload jsonb DEFAULT '{}')
+RETURNS public.agent_run_commands LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
+DECLARE r public.agent_runs; cmd public.agent_run_commands;
+BEGIN
+  SELECT * INTO r FROM public.agent_runs WHERE id=p_run_id FOR UPDATE;
+  IF NOT FOUND OR r.user_id IS DISTINCT FROM auth.uid() THEN RAISE EXCEPTION 'AGENT_RUN_NOT_FOUND' USING ERRCODE='42501'; END IF;
+  SELECT * INTO cmd FROM public.agent_run_commands WHERE run_id=p_run_id AND sequence=p_sequence FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'AGENT_COMMAND_NOT_FOUND'; END IF;
+  IF cmd.delivery_state<>'pending' OR cmd.revision<>p_revision OR r.cancel_requested OR r.status NOT IN ('queued','running','awaiting_input') THEN RAISE EXCEPTION 'AGENT_COMMAND_LOCKED' USING ERRCODE='40001'; END IF;
+  IF p_action='edit' THEN
+    IF coalesce(btrim(p_payload->>'content'),'')='' OR length(p_payload->>'content')>32000 THEN RAISE EXCEPTION 'AGENT_INVALID_MESSAGE'; END IF;
+    cmd.message:=jsonb_set(cmd.message,'{content}',to_jsonb(p_payload->>'content'));
+  ELSIF p_action='withdraw' THEN cmd.delivery_state:='cancelled'; cmd.consumed:=true;
+  ELSIF p_action='order' THEN
+    IF jsonb_typeof(p_payload->'sortOrder')<>'number' OR abs((p_payload->>'sortOrder')::numeric)>9007199254740991 THEN RAISE EXCEPTION 'AGENT_INVALID_ORDER'; END IF;
+    cmd.sort_order:=(p_payload->>'sortOrder')::bigint;
+  ELSIF p_action='promote' THEN
+    IF cmd.mode='reply' THEN RAISE EXCEPTION 'AGENT_QUESTION_REPLY_LOCKED'; END IF;
+    cmd.mode:='steer'; SELECT coalesce(min(sort_order),0)-1024 INTO cmd.sort_order FROM public.agent_run_commands WHERE run_id=p_run_id;
+  ELSE RAISE EXCEPTION 'AGENT_INVALID_ACTION'; END IF;
+  UPDATE public.agent_run_commands SET message=cmd.message,mode=cmd.mode,delivery_state=cmd.delivery_state,consumed=cmd.consumed,sort_order=cmd.sort_order,revision=revision+1 WHERE sequence=p_sequence RETURNING * INTO cmd;
+  PERFORM public.agent_emit(p_run_id,'queue_changed');
+  RETURN cmd;
+END;
+$$;
+
+CREATE FUNCTION public.agent_command_delivery_state() RETURNS trigger LANGUAGE plpgsql SET search_path=public,pg_temp AS $$
+BEGIN
+  IF NEW.delivery_state<>'cancelled' THEN
+    IF NEW.consumed THEN NEW.delivery_state:='consumed'; ELSIF NEW.durable_admitted THEN NEW.delivery_state:='admitted'; END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+CREATE TRIGGER agent_command_delivery BEFORE UPDATE ON public.agent_run_commands FOR EACH ROW EXECUTE FUNCTION public.agent_command_delivery_state();
+CREATE FUNCTION public.agent_cancel_pending_commands() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
+BEGIN
+  IF NEW.cancel_requested OR NEW.status IN ('cancelled','failed') THEN
+    UPDATE public.agent_run_commands SET consumed=true,delivery_state='cancelled',revision=revision+1 WHERE run_id=NEW.id AND (delivery_state='pending' OR (NEW.status IN ('cancelled','failed') AND delivery_state='claimed' AND NOT durable_admitted));
+  END IF;
+  RETURN NEW;
+END;
+$$;
+CREATE TRIGGER agent_cancel_pending AFTER UPDATE OF cancel_requested,status ON public.agent_runs FOR EACH ROW EXECUTE FUNCTION public.agent_cancel_pending_commands();
+REVOKE ALL ON FUNCTION public.agent_claim_command(uuid,text,bigint,bigint),public.agent_change_command(uuid,bigint,integer,text,jsonb),public.agent_command_delivery_state(),public.agent_cancel_pending_commands() FROM public,anon;
+GRANT EXECUTE ON FUNCTION public.agent_claim_command(uuid,text,bigint,bigint) TO service_role,authenticated;
+GRANT EXECUTE ON FUNCTION public.agent_change_command(uuid,bigint,integer,text,jsonb) TO authenticated;
+
+
+-- Waiting for input must not repeatedly lease a run just because a follow-up is held.
+DO $migration$
+DECLARE definition text; old_guard text := 'AND NOT (final_status=''awaiting_input'' AND p_checkpoint#>>''{durable,engine}''=''pi-durable/1.0.4'' AND durable_admitted)';
+BEGIN
+  SELECT pg_catalog.pg_get_functiondef('public.agent_finish_run(uuid,text,bigint,text,jsonb,jsonb,jsonb)'::regprocedure) INTO definition;
+  IF position(old_guard IN definition)=0 THEN RAISE EXCEPTION 'Review agent_finish_run before replacing question queue guard'; END IF;
+  EXECUTE replace(definition,old_guard,'AND (final_status<>''awaiting_input'' OR (mode=''reply'' AND NOT durable_admitted))');
+END; $migration$;
+
+ALTER TABLE public.notifications ADD COLUMN IF NOT EXISTS event_key text, ADD COLUMN IF NOT EXISTS event_data jsonb, ADD COLUMN IF NOT EXISTS popup_claimed_at timestamptz;
+CREATE UNIQUE INDEX notifications_owner_event ON public.notifications(user_id,event_key) WHERE event_key IS NOT NULL;
+CREATE FUNCTION public.agent_task_notification() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
+DECLARE event text; heading text; target_message text;
+BEGIN
+  IF NEW.status IS NOT DISTINCT FROM OLD.status OR NEW.status NOT IN ('completed','failed','awaiting_input') THEN RETURN NEW; END IF;
+  IF NOT coalesce((SELECT notifications_enabled AND notify_site FROM public.user_settings WHERE user_id=NEW.user_id),true) THEN RETURN NEW; END IF;
+  event:='agent:'||NEW.id::text||':'||NEW.status||CASE WHEN NEW.status='awaiting_input' THEN ':'||coalesce(NEW.checkpoint->>'questionId','legacy') ELSE '' END;
+  heading:=CASE NEW.status WHEN 'completed' THEN '太卜任务完成' WHEN 'failed' THEN '太卜任务未完成' ELSE '太卜需要你补充信息' END;
+  target_message:=NEW.public_message->>'id';
+  INSERT INTO public.notifications(user_id,type,title,content,link,event_key,event_data)
+    VALUES(NEW.user_id,'system',heading,coalesce(NEW.input->>'title','打开对话查看任务'),'/chat?id='||NEW.conversation_id::text||'&message='||coalesce(target_message,''),event,jsonb_build_object('kind','agent','conversationId',NEW.conversation_id,'messageId',target_message,'questionId',NEW.checkpoint->>'questionId','status',NEW.status))
+    ON CONFLICT(user_id,event_key) WHERE event_key IS NOT NULL DO NOTHING;
+  RETURN NEW;
+END;
+$$;
+CREATE TRIGGER agent_task_notice AFTER UPDATE OF status ON public.agent_runs FOR EACH ROW EXECUTE FUNCTION public.agent_task_notification();
+CREATE FUNCTION public.claim_notification_popup(p_id uuid) RETURNS boolean LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
+DECLARE affected integer;
+BEGIN
+  IF auth.uid() IS NULL THEN RAISE EXCEPTION 'authentication required' USING ERRCODE='42501'; END IF;
+  UPDATE public.notifications SET popup_claimed_at=now() WHERE id=p_id AND user_id=auth.uid() AND NOT is_read AND popup_claimed_at IS NULL AND event_key IS NOT NULL;
+  GET DIAGNOSTICS affected=ROW_COUNT; RETURN affected=1;
+END;
+$$;
+REVOKE ALL ON FUNCTION public.agent_task_notification(),public.claim_notification_popup(uuid) FROM public,anon;
+GRANT EXECUTE ON FUNCTION public.claim_notification_popup(uuid) TO authenticated;
+
+
+DO $$ BEGIN
+ IF to_regclass('storage.buckets') IS NOT NULL THEN
+  INSERT INTO storage.buckets(id,name,public,file_size_limit,allowed_mime_types) VALUES('agent-attachments','agent-attachments',false,10485760,ARRAY['image/jpeg','image/png','image/webp','text/plain']) ON CONFLICT(id) DO NOTHING;
+ END IF;
+END $$;
+CREATE TABLE public.agent_attachments (
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+ object_path text NOT NULL UNIQUE, name text NOT NULL, kind text NOT NULL CHECK(kind IN ('image','text')),
+ mime_type text NOT NULL, size integer NOT NULL CHECK(size>0 AND size<=10485760), sha256 text NOT NULL,
+ width integer, height integer, status text NOT NULL DEFAULT 'uploading' CHECK(status IN ('uploading','ready','deleting')),
+ created_at timestamptz NOT NULL DEFAULT now(), orphaned_at timestamptz DEFAULT now()
+);
+CREATE TABLE public.agent_attachment_refs (
+ attachment_id uuid NOT NULL REFERENCES public.agent_attachments(id) ON DELETE CASCADE,
+ conversation_id uuid REFERENCES public.conversations(id) ON DELETE CASCADE,
+ command_sequence bigint REFERENCES public.agent_run_commands(sequence) ON DELETE CASCADE,
+ CHECK((conversation_id IS NULL)<>(command_sequence IS NULL))
+);
+CREATE UNIQUE INDEX agent_attachment_conversation_ref ON public.agent_attachment_refs(attachment_id,conversation_id) WHERE conversation_id IS NOT NULL;
+CREATE UNIQUE INDEX agent_attachment_command_ref ON public.agent_attachment_refs(attachment_id,command_sequence) WHERE command_sequence IS NOT NULL;
+ALTER TABLE public.agent_attachments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.agent_attachment_refs ENABLE ROW LEVEL SECURITY;
+CREATE POLICY attachment_owner_read ON public.agent_attachments FOR SELECT TO authenticated USING(user_id=auth.uid() AND status='ready');
+REVOKE ALL ON TABLE public.agent_attachments FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON TABLE public.agent_attachment_refs FROM PUBLIC, anon, authenticated;
+GRANT SELECT ON public.agent_attachments TO authenticated;
+REVOKE ALL ON public.agent_attachment_refs FROM anon,authenticated;
+GRANT ALL ON public.agent_attachments,public.agent_attachment_refs TO service_role;
+
+CREATE FUNCTION public.sync_agent_attachment_refs() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
+DECLARE owner_id uuid; document jsonb; ids uuid[]; a public.agent_attachments;
+BEGIN
+ IF TG_TABLE_NAME='conversations' THEN owner_id:=NEW.user_id; document:=coalesce(NEW.messages,'[]');
+ ELSE SELECT user_id INTO owner_id FROM public.agent_runs WHERE id=NEW.run_id; document:=NEW.message; END IF;
+ SELECT coalesce(array_agg(DISTINCT value::uuid),'{}') INTO ids FROM jsonb_path_query(document,'lax $.**.attachments.ids[*]') valueset(element),LATERAL (SELECT element#>>'{}' AS value) extracted
+ WHERE value ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$';
+ FOR a IN SELECT * FROM public.agent_attachments WHERE id=ANY(ids) OR id IN (
+   SELECT attachment_id FROM public.agent_attachment_refs WHERE
+    (TG_TABLE_NAME='conversations' AND conversation_id=(to_jsonb(NEW)->>'id')::uuid) OR
+    (TG_TABLE_NAME='agent_run_commands' AND command_sequence=(to_jsonb(NEW)->>'sequence')::bigint)
+ ) ORDER BY id FOR UPDATE LOOP
+   IF a.id=ANY(ids) AND (a.user_id IS DISTINCT FROM owner_id OR a.status<>'ready') THEN RAISE EXCEPTION 'ATTACHMENT_NOT_AVAILABLE' USING ERRCODE='42501'; END IF;
+ END LOOP;
+ IF (SELECT count(*) FROM public.agent_attachments WHERE id=ANY(ids) AND user_id=owner_id AND status='ready')<>cardinality(ids) THEN RAISE EXCEPTION 'ATTACHMENT_NOT_AVAILABLE' USING ERRCODE='42501'; END IF;
+ IF TG_TABLE_NAME='conversations' THEN
+   DELETE FROM public.agent_attachment_refs WHERE conversation_id=NEW.id AND NOT attachment_id=ANY(ids);
+   INSERT INTO public.agent_attachment_refs(attachment_id,conversation_id) SELECT unnest(ids),NEW.id ON CONFLICT DO NOTHING;
+ ELSE
+   DELETE FROM public.agent_attachment_refs WHERE command_sequence=NEW.sequence AND (NOT attachment_id=ANY(ids) OR NEW.delivery_state IN ('cancelled','consumed'));
+   IF NEW.delivery_state NOT IN ('cancelled','consumed') THEN INSERT INTO public.agent_attachment_refs(attachment_id,command_sequence) SELECT unnest(ids),NEW.sequence ON CONFLICT DO NOTHING; END IF;
+ END IF;
+ UPDATE public.agent_attachments SET orphaned_at=NULL WHERE id=ANY(ids) AND EXISTS(SELECT 1 FROM public.agent_attachment_refs WHERE attachment_id=id);
+ RETURN NEW;
+END;
+$$;
+CREATE TRIGGER conversation_attachment_refs AFTER INSERT OR UPDATE OF messages ON public.conversations FOR EACH ROW EXECUTE FUNCTION public.sync_agent_attachment_refs();
+CREATE TRIGGER command_attachment_refs AFTER INSERT OR UPDATE OF message,delivery_state ON public.agent_run_commands FOR EACH ROW EXECUTE FUNCTION public.sync_agent_attachment_refs();
+CREATE FUNCTION public.orphan_agent_attachment() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
+BEGIN
+ UPDATE public.agent_attachments SET orphaned_at=now() WHERE id=OLD.attachment_id AND NOT EXISTS(SELECT 1 FROM public.agent_attachment_refs WHERE attachment_id=OLD.attachment_id);
+ RETURN OLD;
+END;
+$$;
+CREATE TRIGGER attachment_ref_removed AFTER DELETE ON public.agent_attachment_refs FOR EACH ROW EXECUTE FUNCTION public.orphan_agent_attachment();
+CREATE FUNCTION public.claim_agent_attachment_cleanup(p_limit integer DEFAULT 50) RETURNS SETOF public.agent_attachments
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
+BEGIN
+ PERFORM public.agent_require_admin();
+ RETURN QUERY UPDATE public.agent_attachments SET status='deleting' WHERE id IN (
+   SELECT a.id FROM public.agent_attachments a WHERE (a.status='deleting' OR a.orphaned_at<now()-interval '24 hours') AND NOT EXISTS(SELECT 1 FROM public.agent_attachment_refs r WHERE r.attachment_id=a.id)
+   ORDER BY a.created_at LIMIT least(greatest(p_limit,1),100) FOR UPDATE SKIP LOCKED
+ ) RETURNING *;
+END;
+$$;
+REVOKE ALL ON FUNCTION public.sync_agent_attachment_refs(),public.orphan_agent_attachment(),public.claim_agent_attachment_cleanup(integer) FROM public,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.claim_agent_attachment_cleanup(integer) TO service_role;
+
+-- Preserve attachment IDs with both legacy version snapshots and new Agent versions.
+DO $migration$
+DECLARE definition text;
+BEGIN
+ SELECT pg_get_functiondef('public.agent_sync_message(uuid)'::regprocedure) INTO definition;
+ definition:=replace(definition,'''userContent'',user_message->>''content'',''mentions''','''userContent'',user_message->>''content'',''attachments'',user_message->''attachments'',''mentions''');
+ EXECUTE definition;
+ SELECT pg_get_functiondef('public.agent_create_run(uuid,uuid,uuid,text,text,jsonb,jsonb,jsonb,jsonb,boolean)'::regprocedure) INTO definition;
+ definition:=replace(definition,'''userContent'',anchor_message->>''content'',''mentions''','''userContent'',anchor_message->>''content'',''attachments'',anchor_message->''attachments'',''mentions''');
+ EXECUTE definition;
+END $migration$;
+
+
+ALTER TABLE public.user_settings ADD COLUMN IF NOT EXISTS daily_briefing_settings jsonb NOT NULL DEFAULT '{}';
+-- Keep the existing (user_id,reminder_type) subscription uniqueness.
+DO $$ DECLARE item record; BEGIN
+ FOR item IN SELECT conname FROM pg_constraint WHERE conrelid='public.reminder_subscriptions'::regclass AND contype='c' AND pg_get_constraintdef(oid) LIKE '%reminder_type%' LOOP
+  EXECUTE format('ALTER TABLE public.reminder_subscriptions DROP CONSTRAINT %I',item.conname);
+ END LOOP;
+END $$;
+ALTER TABLE public.reminder_subscriptions ADD CONSTRAINT reminder_subscription_type CHECK(reminder_type IN ('solar_term','fortune','key_date','daily_briefing'));
+
+CREATE TABLE public.daily_briefing_jobs (
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+ local_date date NOT NULL, timezone text NOT NULL, deadline timestamptz NOT NULL,
+ status text NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','generating','completed','failed','cancelled','skipped')),
+ billing text NOT NULL DEFAULT 'none' CHECK(billing IN ('none','reserved','settled','refunded')),
+ attempts integer NOT NULL DEFAULT 0 CHECK(attempts BETWEEN 0 AND 3), lease_token uuid, lease_until timestamptz,
+ result_conversation_id uuid REFERENCES public.conversations(id) ON DELETE SET NULL, content text, error text,
+ notification_pending boolean NOT NULL DEFAULT false, created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(),
+ UNIQUE(user_id,local_date)
+);
+CREATE INDEX daily_briefing_pending ON public.daily_briefing_jobs(status,lease_until,created_at);
+ALTER TABLE public.daily_briefing_jobs ENABLE ROW LEVEL SECURITY;
+CREATE POLICY briefing_owner_read ON public.daily_briefing_jobs FOR SELECT TO authenticated USING(user_id=auth.uid());
+REVOKE ALL ON TABLE public.daily_briefing_jobs FROM PUBLIC, anon, authenticated;
+GRANT SELECT ON public.daily_briefing_jobs TO authenticated;
+GRANT ALL ON public.daily_briefing_jobs TO service_role;
+
+CREATE FUNCTION public.claim_daily_briefings(p_limit integer DEFAULT 2,p_enabled boolean DEFAULT true) RETURNS SETOF public.daily_briefing_jobs
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
+DECLARE job public.daily_briefing_jobs; balance integer; local_now timestamp; item record;
+BEGIN
+ PERFORM public.agent_require_admin();
+ -- Cancel expired or disabled work. Row locks and billing state fence each refund.
+ FOR job IN SELECT j.* FROM public.daily_briefing_jobs j WHERE j.status IN ('pending','generating') AND
+ (NOT p_enabled OR j.deadline<=now() OR NOT EXISTS(SELECT 1 FROM public.reminder_subscriptions s WHERE s.user_id=j.user_id AND s.reminder_type='daily_briefing' AND s.enabled))
+ ORDER BY j.created_at LIMIT 100 FOR UPDATE SKIP LOCKED LOOP
+  IF job.billing='reserved' THEN PERFORM public.increment_ai_chat_count(job.user_id,1); END IF;
+  UPDATE public.daily_briefing_jobs SET status='cancelled',billing=CASE WHEN billing='reserved' THEN 'refunded' ELSE billing END,lease_token=NULL,lease_until=NULL,updated_at=now() WHERE id=job.id;
+ END LOOP;
+ IF NOT p_enabled THEN RETURN; END IF;
+ FOR item IN
+  SELECT s.user_id,coalesce(tz.name,'Asia/Shanghai') AS zone,
+    CASE WHEN u.daily_briefing_settings->>'time' ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$' THEN (u.daily_briefing_settings->>'time')::time ELSE time '08:00' END AS delivery_time
+  FROM public.reminder_subscriptions s LEFT JOIN public.user_settings u ON u.user_id=s.user_id
+  LEFT JOIN pg_timezone_names tz ON tz.name=coalesce(u.daily_briefing_settings->>'timezone','Asia/Shanghai')
+  WHERE s.reminder_type='daily_briefing' AND s.enabled AND
+    (now() AT TIME ZONE coalesce(tz.name,'Asia/Shanghai'))::time >= CASE WHEN u.daily_briefing_settings->>'time' ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$' THEN (u.daily_briefing_settings->>'time')::time ELSE time '08:00' END
+    AND NOT EXISTS(SELECT 1 FROM public.daily_briefing_jobs j WHERE j.user_id=s.user_id AND j.local_date=(now() AT TIME ZONE coalesce(tz.name,'Asia/Shanghai'))::date)
+  ORDER BY s.user_id LIMIT least(greatest(p_limit,1),10)
+ LOOP
+  local_now:=now() AT TIME ZONE item.zone;
+  INSERT INTO public.daily_briefing_jobs(user_id,local_date,timezone,deadline) VALUES(item.user_id,local_now::date,item.zone,((local_now::date+1)::timestamp AT TIME ZONE item.zone)) ON CONFLICT(user_id,local_date) DO NOTHING;
+ END LOOP;
+ FOR job IN SELECT j.* FROM public.daily_briefing_jobs j WHERE j.deadline>now() AND
+ (j.status='pending' OR (j.status='generating' AND j.lease_until<now()))
+ ORDER BY j.created_at LIMIT least(greatest(p_limit,1),10) FOR UPDATE SKIP LOCKED LOOP
+  IF job.attempts>=3 THEN
+   IF job.billing='reserved' THEN PERFORM public.increment_ai_chat_count(job.user_id,1); END IF;
+   UPDATE public.daily_briefing_jobs SET status='failed',billing=CASE WHEN billing='reserved' THEN 'refunded' ELSE billing END,lease_token=NULL,lease_until=NULL,error='生成重试耗尽',updated_at=now() WHERE id=job.id;
+   CONTINUE;
+  END IF;
+  IF job.billing='none' THEN
+   balance:=public.decrement_ai_chat_count(job.user_id);
+   IF balance IS NULL THEN UPDATE public.daily_briefing_jobs SET status='skipped',error='余额不足',updated_at=now() WHERE id=job.id; CONTINUE; END IF;
+  END IF;
+  UPDATE public.daily_briefing_jobs SET status='generating',billing='reserved',attempts=attempts+1,lease_token=gen_random_uuid(),lease_until=now()+interval '3 minutes',updated_at=now() WHERE id=job.id RETURNING * INTO job;
+  RETURN NEXT job;
+ END LOOP;
+END;
+$$;
+
+CREATE FUNCTION public.settle_daily_briefing(p_id uuid,p_token uuid,p_content text,p_error text DEFAULT NULL) RETURNS boolean
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
+DECLARE job public.daily_briefing_jobs; conversation uuid;
+BEGIN
+ PERFORM public.agent_require_admin();
+ SELECT * INTO job FROM public.daily_briefing_jobs WHERE id=p_id FOR UPDATE;
+ IF job.id IS NULL OR job.status<>'generating' OR job.lease_token IS DISTINCT FROM p_token OR job.lease_until<=now() THEN RETURN false; END IF;
+ IF job.deadline<=now() OR NOT EXISTS(SELECT 1 FROM public.reminder_subscriptions WHERE user_id=job.user_id AND reminder_type='daily_briefing' AND enabled) THEN
+  p_content:=NULL; p_error:='当天截止或订阅已关闭'; job.attempts:=3;
+ END IF;
+ IF p_error IS NULL AND length(btrim(coalesce(p_content,'')))>=20 AND length(p_content)<=64000 THEN
+  conversation:=public.create_conversation_with_messages(job.user_id,'早报 · '||job.local_date::text,'general',NULL,jsonb_build_object('kind','daily_briefing','jobId',job.id,'localDate',job.local_date,'timezone',job.timezone),
+    jsonb_build_array(jsonb_build_object('id',gen_random_uuid(),'role','assistant','content',p_content,'createdAt',now(),'metadata',jsonb_build_object('dailyBriefingJobId',job.id))));
+  UPDATE public.daily_briefing_jobs SET status='completed',billing='settled',content=p_content,result_conversation_id=conversation,notification_pending=true,lease_token=NULL,lease_until=NULL,error=NULL,updated_at=now() WHERE id=job.id;
+ ELSE
+  IF job.attempts>=3 AND job.billing='reserved' THEN PERFORM public.increment_ai_chat_count(job.user_id,1); END IF;
+  UPDATE public.daily_briefing_jobs SET status=CASE WHEN job.attempts>=3 THEN 'failed' ELSE 'pending' END,billing=CASE WHEN job.attempts>=3 AND billing='reserved' THEN 'refunded' ELSE billing END,lease_token=NULL,lease_until=NULL,error=left(coalesce(p_error,'早报内容为空或无效'),500),updated_at=now() WHERE id=job.id;
+ END IF;
+ RETURN true;
+END;
+$$;
+
+CREATE FUNCTION public.deliver_daily_briefing_notices(p_limit integer DEFAULT 50) RETURNS integer
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
+DECLARE job public.daily_briefing_jobs; count_sent integer:=0;
+BEGIN
+ PERFORM public.agent_require_admin();
+ FOR job IN SELECT * FROM public.daily_briefing_jobs WHERE status='completed' AND notification_pending ORDER BY created_at LIMIT least(greatest(p_limit,1),100) FOR UPDATE SKIP LOCKED LOOP
+  BEGIN
+   IF NOT EXISTS(SELECT 1 FROM public.user_settings WHERE user_id=job.user_id AND (NOT notifications_enabled OR NOT notify_site)) AND job.result_conversation_id IS NOT NULL THEN
+    INSERT INTO public.notifications(user_id,type,title,content,link,event_key,event_data) VALUES(job.user_id,'system','你的早报已生成',job.local_date::text||' 的早报已送达，消耗 1 积分。','/chat?id='||job.result_conversation_id,'briefing:'||job.id,jsonb_build_object('conversationId',job.result_conversation_id,'briefingId',job.id)) ON CONFLICT(user_id,event_key) WHERE event_key IS NOT NULL DO NOTHING;
+   END IF;
+   UPDATE public.daily_briefing_jobs SET notification_pending=false WHERE id=job.id; count_sent:=count_sent+1;
+  EXCEPTION WHEN OTHERS THEN NULL; -- Retry delivery only; keep the saved result and settled charge.
+  END;
+ END LOOP;
+ RETURN count_sent;
+END;
+$$;
+REVOKE ALL ON FUNCTION public.claim_daily_briefings(integer,boolean),public.settle_daily_briefing(uuid,uuid,text,text),public.deliver_daily_briefing_notices(integer) FROM public,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.claim_daily_briefings(integer,boolean),public.settle_daily_briefing(uuid,uuid,text,text),public.deliver_daily_briefing_notices(integer) TO service_role;
+
+
+CREATE FUNCTION public.fork_conversation_snapshot(p_parent uuid,p_through text,p_source_messages jsonb,p_messages jsonb) RETURNS uuid
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
+DECLARE parent public.conversations; target jsonb;
+BEGIN
+ SELECT * INTO parent FROM public.conversations WHERE id=p_parent AND user_id=auth.uid() FOR UPDATE;
+ IF parent.id IS NULL THEN RAISE EXCEPTION 'CONVERSATION_NOT_FOUND' USING ERRCODE='42501'; END IF;
+ IF parent.messages IS DISTINCT FROM p_source_messages THEN RAISE EXCEPTION 'BRANCH_CHANGED' USING ERRCODE='40001'; END IF;
+ SELECT value INTO target FROM jsonb_array_elements(parent.messages) WHERE value->>'id'=p_through;
+ IF target IS NULL OR target->>'role'<>'assistant' OR (target->'agent' IS NOT NULL AND target#>>'{agent,status}'<>'completed') THEN RAISE EXCEPTION 'ANSWER_NOT_COMPLETED' USING ERRCODE='22023'; END IF;
+ RETURN public.create_conversation_with_messages(auth.uid(),coalesce(parent.title,'对话')||' · 分叉',parent.personality,NULL,jsonb_build_object('kind','fork','parentConversationId',p_parent,'parentMessageId',p_through),p_messages);
+END;
+$$;
+REVOKE ALL ON FUNCTION public.fork_conversation_snapshot(uuid,text,jsonb,jsonb) FROM public,anon;
+GRANT EXECUTE ON FUNCTION public.fork_conversation_snapshot(uuid,text,jsonb,jsonb) TO authenticated;
+
+-- Protect copied history through ordinary saves and Agent edits alike.
+CREATE FUNCTION public.protect_fork_history() RETURNS trigger
+LANGUAGE plpgsql SECURITY INVOKER SET search_path=public,pg_temp AS $$
+DECLARE original jsonb; replacement jsonb;
+BEGIN
+ FOR original IN SELECT value FROM jsonb_array_elements(coalesce(OLD.messages,'[]')) WHERE value#>>'{metadata,forkHistory}'='true' LOOP
+  SELECT value INTO replacement FROM jsonb_array_elements(coalesce(NEW.messages,'[]')) WHERE value->>'id'=original->>'id';
+  IF replacement IS DISTINCT FROM original THEN RAISE EXCEPTION 'FORK_HISTORY_READ_ONLY' USING ERRCODE='22023'; END IF;
+ END LOOP;
+ RETURN NEW;
+END;
+$$;
+REVOKE ALL ON FUNCTION public.protect_fork_history() FROM public,anon,authenticated;
+CREATE TRIGGER fork_history_read_only BEFORE UPDATE OF messages ON public.conversations FOR EACH ROW EXECUTE FUNCTION public.protect_fork_history();
+
+
+-- The application uses an authenticated system administrator session for backend I/O.
+-- Keep ordinary callers read-only and reuse the existing protected admin predicate.
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.agent_attachments TO authenticated;
+CREATE POLICY attachment_backend_admin ON public.agent_attachments FOR ALL TO authenticated
+  USING (public.is_admin_user()) WITH CHECK (public.is_admin_user());
+GRANT SELECT ON public.agent_attachment_refs TO authenticated;
+CREATE POLICY attachment_refs_backend_read ON public.agent_attachment_refs FOR SELECT TO authenticated
+  USING (public.is_admin_user());
+CREATE POLICY briefing_backend_read ON public.daily_briefing_jobs FOR SELECT TO authenticated
+  USING (public.is_admin_user());
+GRANT EXECUTE ON FUNCTION public.claim_agent_attachment_cleanup(integer),
+  public.claim_daily_briefings(integer,boolean), public.settle_daily_briefing(uuid,uuid,text,text),
+  public.deliver_daily_briefing_notices(integer) TO authenticated;
+
+-- Only migration owners can invoke the shared Storage setup. A fresh local stack
+-- runs it after Storage creates its real tables; an existing stack runs it here.
+CREATE FUNCTION public.configure_agent_attachment_storage() RETURNS void
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
+BEGIN
+  IF to_regclass('storage.buckets') IS NULL OR to_regclass('storage.objects') IS NULL THEN RETURN; END IF;
+  INSERT INTO storage.buckets(id,name,public,file_size_limit,allowed_mime_types)
+  VALUES('agent-attachments','agent-attachments',false,10485760,ARRAY['image/jpeg','image/png','image/webp','text/plain'])
+  ON CONFLICT(id) DO NOTHING;
+  IF EXISTS(SELECT 1 FROM storage.buckets WHERE id='agent-attachments' AND public) THEN
+    RAISE EXCEPTION 'Agent attachment bucket must be private';
+  END IF;
+  GRANT SELECT, INSERT, UPDATE, DELETE ON storage.objects TO authenticated;
+  IF NOT EXISTS(SELECT 1 FROM pg_policies WHERE schemaname='storage' AND tablename='objects' AND policyname='agent_attachment_backend') THEN
+    CREATE POLICY agent_attachment_backend ON storage.objects FOR ALL TO authenticated
+      USING (bucket_id='agent-attachments' AND public.is_admin_user())
+      WITH CHECK (bucket_id='agent-attachments' AND public.is_admin_user());
+  END IF;
+END;
+$$;
+REVOKE ALL ON FUNCTION public.configure_agent_attachment_storage() FROM public,anon,authenticated,service_role;
+SELECT public.configure_agent_attachment_storage();
+NOTIFY pgrst, 'reload schema';
 
 
 -- BLOCKED increment_community_post_view_count: Community prototype blocked pending counter/moderation contract.
@@ -5261,6 +6480,6 @@ GRANT SELECT ON public.conversations_with_archive_status, public.ming_records_wi
 -- Explicit local feature block; no user/model/credential seeds.
 INSERT INTO public.app_settings (setting_key, setting_value) VALUES ('feature_disabled:community', true);
 
-COMMENT ON SCHEMA public IS 'taibu-selfhost-v1:2d796f8d381f05f96b98abf630affd6635d677a4397dad073288d05801852c58';
+COMMENT ON SCHEMA public IS 'taibu-selfhost-v1:c37d2ec4315d56a3a409de4015583d6676a8d99542bd41e6c751b19b12ee9ef3';
 
 NOTIFY pgrst, 'reload schema';

@@ -7,13 +7,13 @@
  */
 'use client';
 
-import { useRef, useEffect, useCallback } from 'react';
+import { useEffect, type MutableRefObject } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { ChatMessage, Mention } from '@/types';
 import { ChatMessageItem } from '@/components/chat/ChatMessageItem';
-import { isNearBottom } from '@/lib/chat/chat-scroll';
 
 interface VirtualizedChatMessageListProps {
+    scrollContainerRef: MutableRefObject<HTMLDivElement | null>;
     messages: ChatMessage[];
     isLoading: boolean;
     onEditMessage?: (messageId: string, newContent: string, mentions?: Mention[]) => void;
@@ -44,6 +44,7 @@ function estimateMessageHeight(message: ChatMessage): number {
 }
 
 export function VirtualizedChatMessageList({
+    scrollContainerRef: parentRef,
     messages,
     isLoading,
     onEditMessage,
@@ -52,11 +53,6 @@ export function VirtualizedChatMessageList({
     onArchiveMessage,
     disabled = false,
 }: VirtualizedChatMessageListProps) {
-    const parentRef = useRef<HTMLDivElement>(null);
-    const lastMessageCountRef = useRef(0);
-    const hasInitialScrollRef = useRef(false);
-    const conversationIdRef = useRef<string | null>(null); // 通过首条消息 ID 追踪当前对话
-    const shouldAutoFollowRef = useRef(true);
 
     // 找到最后一条正在流式输出的AI消息
     const lastMessage = messages[messages.length - 1];
@@ -71,86 +67,31 @@ export function VirtualizedChatMessageList({
         getItemKey: (index) => messages[index]?.id || `msg-${index}`,
     });
 
-    // 滚动到底部
-    const scrollToBottom = useCallback((behavior: 'auto' | 'smooth' = 'smooth') => {
-        if (messages.length > 0) {
-            virtualizer.scrollToIndex(messages.length - 1, {
-                align: 'end',
-                behavior,
-            });
-        }
-    }, [messages.length, virtualizer]);
-
-    const handleScroll = useCallback(() => {
-        const container = parentRef.current;
-        if (!container) return;
-        shouldAutoFollowRef.current = isNearBottom({
-            scrollHeight: container.scrollHeight,
-            scrollTop: container.scrollTop,
-            clientHeight: container.clientHeight,
-        });
-    }, []);
-
-    // 新消息时自动滚动到底部
-    useEffect(() => {
-        // 通过首条消息 ID 检测对话切换
-        const currentConversationId = messages[0]?.id || null;
-        const isConversationChanged = currentConversationId !== conversationIdRef.current;
-
-        if (isConversationChanged) {
-            // 对话切换，重置状态
-            conversationIdRef.current = currentConversationId;
-            hasInitialScrollRef.current = false;
-            lastMessageCountRef.current = 0;
-            shouldAutoFollowRef.current = true;
-        }
-
-        // 首次渲染或切换对话时，立即滚动到底部
-        if (!hasInitialScrollRef.current && messages.length > 0) {
-            hasInitialScrollRef.current = true;
-            scrollToBottom('auto');
-            lastMessageCountRef.current = messages.length;
-            return;
-        }
-
-        if (messages.length > lastMessageCountRef.current && shouldAutoFollowRef.current) {
-            // 新消息添加，滚动到底部
-            scrollToBottom('smooth');
-        }
-        lastMessageCountRef.current = messages.length;
-    }, [messages, scrollToBottom]);
-
-    // 流式输出时，监听最后一条消息内容变化来滚动（包括 reasoning 和 content）
-    const lastMessageContent = lastMessage?.content;
-    const lastMessageReasoning = lastMessage?.reasoning;
-    const lastMessageTotalLengthRef = useRef(0);
-
-    useEffect(() => {
-        if (isStreamingAI && shouldAutoFollowRef.current) {
-            // 计算 content + reasoning 的总长度
-            const totalLength = (lastMessageContent?.length || 0) + (lastMessageReasoning?.length || 0);
-            // 只在内容实际增加时滚动
-            if (totalLength > lastMessageTotalLengthRef.current) {
-                lastMessageTotalLengthRef.current = totalLength;
-                scrollToBottom('auto');
-            }
-        } else {
-            // 流式结束，重置长度记录
-            lastMessageTotalLengthRef.current = 0;
-        }
-    }, [isStreamingAI, lastMessageContent, lastMessageReasoning, scrollToBottom]);
-
     const virtualItems = virtualizer.getVirtualItems();
+    useEffect(() => {
+        const element = parentRef.current;
+        const locate = (event: Event) => {
+            const id = (event as CustomEvent<string>).detail;
+            const index = messages.findIndex(message => message.id === id);
+            if (index < 0) return;
+            virtualizer.scrollToIndex(index, { align: 'start' });
+            // Remeasure after the target mounts; no guessed scroll offsets.
+            requestAnimationFrame(() => virtualizer.scrollToIndex(index, { align: 'start' }));
+        };
+        element?.addEventListener('taibu:locate-message', locate);
+        return () => element?.removeEventListener('taibu:locate-message', locate);
+    }, [messages, parentRef, virtualizer]);
 
     return (
         <div
             ref={parentRef}
-            onScroll={handleScroll}
-            className="h-full overflow-auto"
+            className="chat-virtual-scroller h-full overflow-auto"
+            aria-label="聊天记录"
+            tabIndex={0}
             style={{ contain: 'strict' }}
         >
             <div
-                className="max-w-3xl mx-auto relative"
+                className="chat-transcript-list max-w-3xl mx-auto relative"
                 style={{
                     height: `${virtualizer.getTotalSize()}px`,
                 }}
@@ -170,7 +111,7 @@ export function VirtualizedChatMessageList({
                                 key={virtualRow.key}
                                 data-index={virtualRow.index}
                                 ref={virtualizer.measureElement}
-                                className="py-3"
+                                className="chat-transcript-row"
                             >
                                 <ChatMessageItem
                                     message={message}

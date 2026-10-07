@@ -10,10 +10,9 @@
 'use client';
 
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import { createPortal } from 'react-dom';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import {
-    Search, Trash2, Archive, ArrowLeft, X, SquarePen,
+    Search, X,
 } from 'lucide-react';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import type { ConversationListItem, ConversationSourceType } from '@/types';
@@ -23,7 +22,7 @@ import { AddToKnowledgeBaseModal } from '@/components/knowledge-base/AddToKnowle
 import { ConversationGroup } from '@/components/chat/sidebar/ConversationGroup';
 import { SOURCE_TYPE_CONFIG, SOURCE_TYPE_ORDER } from '@/lib/chat/conversation-groups';
 import { resolveConversationRemainingTargetCount } from '@/lib/chat/conversation-list-window';
-import { formatConversationMenuTitle as formatMenuTitle } from '@/lib/chat/conversation-title-display';
+import { ConversationActions } from '@/components/chat/sidebar/ConversationActions';
 
 export function SidebarConversations() {
     const router = useRouter();
@@ -50,7 +49,7 @@ export function SidebarConversations() {
     const [collapsedGroups, setCollapsedGroups] = useState<Set<ConversationSourceType>>(new Set());
     const [actionConv, setActionConv] = useState<ConversationListItem | null>(null);
     const [actionView, setActionView] = useState<'menu' | 'rename' | 'delete'>('menu');
-    const [actionMenuPos, setActionMenuPos] = useState<{ top: number; left: number } | null>(null);
+    const actionAnchorRef = useRef<HTMLElement>(null);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [editTitle, setEditTitle] = useState('');
     const [archiveTarget, setArchiveTarget] = useState<ConversationListItem | null>(null);
@@ -111,16 +110,10 @@ export function SidebarConversations() {
     const closeActionSheet = useCallback(() => {
         setActionConv(null);
         setActionView('menu');
-        setActionMenuPos(null);
     }, []);
 
     const openActionSheet = useCallback((conv: ConversationListItem, e: React.MouseEvent) => {
-        const rect = e.currentTarget.getBoundingClientRect();
-        // Use fixed positioning and ensure it stays within viewport
-        setActionMenuPos({ 
-            top: rect.bottom + 4, 
-            left: rect.left 
-        });
+        actionAnchorRef.current = e.currentTarget as HTMLElement;
         setActionConv(conv);
         setActionView('menu');
     }, []);
@@ -467,101 +460,7 @@ export function SidebarConversations() {
                 </div>
             </div>
 
-            {/* Action menu - 使用 createPortal 渲染到 body 下，彻底解决遮挡问题 */}
-            {typeof document !== 'undefined' && actionConv && actionMenuPos && createPortal(
-                <div className="fixed inset-0 z-[1000]" onClick={closeActionSheet}>
-                    <div className="absolute inset-0 bg-transparent" />
-                    <div
-                        className={`fixed z-[1001] bg-background rounded-lg border border-border shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-100 origin-top-left text-foreground ${actionView === 'delete' ? 'min-w-[260px] max-w-[320px]' : 'min-w-[180px] max-w-[240px]'}`}
-                        style={{
-                            top: Math.min(actionMenuPos.top, window.innerHeight - (actionView === 'delete' ? 280 : 220)),
-                            left: Math.max(16, Math.min(actionMenuPos.left, window.innerWidth - (actionView === 'delete' ? 320 : 200))),
-                        }}
-                        onClick={(e) => e.stopPropagation()}
-                    >
-                        {actionView === 'menu' && (
-                            <div className="p-1.5">
-                                <div className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-foreground-secondary truncate border-b border-border mb-1">
-                                    {formatMenuTitle(actionConv)}
-                                </div>
-                                <div className="flex flex-col gap-0.5">
-                                    {actionConv.sourceType === 'chat' && (
-                                        <button
-                                            type="button"
-                                            onClick={startInlineRename}
-                                            className="w-full text-left px-2 py-1.5 rounded-md hover:bg-background-secondary active:bg-background-tertiary transition-colors duration-150 text-sm font-bold flex items-center gap-2"
-                                        >
-                                            <SquarePen className="w-4 h-4 text-foreground-secondary" />
-                                            <span>重命名</span>
-                                        </button>
-                                    )}
-                                    {knowledgeBaseEnabled && (
-                                        <button
-                                            type="button"
-                                            onClick={openArchive}
-                                            className="w-full text-left px-2 py-1.5 rounded-md hover:bg-background-secondary active:bg-background-tertiary transition-colors duration-150 text-sm font-bold flex items-center gap-2"
-                                        >
-                                            <Archive className="w-4 h-4 text-foreground-secondary" />
-                                            <span>{actionConv.isArchived ? '已归档' : '归档'}</span>
-                                        </button>
-                                    )}
-                                    <button
-                                        type="button"
-                                        onClick={() => setActionView('delete')}
-                                        className="w-full text-left px-2 py-1.5 rounded-md hover:bg-destructive/10 transition-colors duration-150 text-destructive text-sm font-bold flex items-center gap-2"
-                                    >
-                                        <Trash2 className="w-4 h-4" />
-                                        <span>删除</span>
-                                    </button>
-                                </div>
-                            </div>
-                        )}
-
-                        {actionView === 'delete' && actionConv && (
-                            <div className="p-1.5">
-                                <div className="flex items-center gap-2">
-                                    <button
-                                        type="button"
-                                        onClick={() => setActionView('menu')}
-                                        disabled={deleteLoading}
-                                        className="p-1 rounded-md hover:bg-background-secondary transition-colors duration-150 disabled:opacity-50"
-                                    >
-                                        <ArrowLeft className="w-4 h-4" />
-                                    </button>
-                                    <div className="font-bold text-sm text-destructive">删除此聊天</div>
-                                </div>
-
-                                <div className="rounded-md border-destructive/20 bg-destructive/5 px-3 py-3">
-                                    <div className="text-sm font-semibold text-foreground truncate">
-                                        {formatMenuTitle(actionConv)}
-                                    </div>
-                                </div>
-
-                                <div className="flex items-center justify-end gap-2">
-                                    <button
-                                        type="button"
-                                        onClick={() => setActionView('menu')}
-                                        disabled={deleteLoading}
-                                        className="px-3 py-1.5 text-xs font-medium rounded-md border-border hover:bg-background-secondary transition-colors disabled:opacity-50"
-                                    >
-                                        取消
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={confirmDelete}
-                                        disabled={deleteLoading}
-                                        className="px-3 py-1.5 text-xs font-bold rounded-md bg-destructive hover:bg-destructive/90 transition-all duration-150 disabled:opacity-50 flex items-center gap-2"
-                                    >
-                                        {deleteLoading && <SoundWaveLoader variant="inline" />}
-                                        删除
-                                    </button>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                </div>,
-                document.body
-            )}
+            <ConversationActions conversation={actionConv} anchorRef={actionAnchorRef} view={actionView} onViewChange={setActionView} onClose={closeActionSheet} onRename={startInlineRename} onArchive={openArchive} onDelete={confirmDelete} deleting={deleteLoading} knowledgeBaseEnabled={knowledgeBaseEnabled} />
 
             {/* Knowledge base archive modal */}
             {knowledgeBaseEnabled && archiveTarget && (

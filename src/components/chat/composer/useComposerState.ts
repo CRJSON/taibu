@@ -38,6 +38,7 @@ function getMentionCacheKeys(userId: string) {
 }
 
 export interface UseComposerStateOptions {
+    agentMode?: boolean;
     userId?: string | null;
     membershipType?: MembershipType;
     selectedModel?: string;
@@ -54,6 +55,7 @@ export interface UseComposerStateOptions {
 
 export function useComposerState(opts: UseComposerStateOptions) {
     const {
+        agentMode = false,
         userId,
         membershipType = 'free',
         selectedModel = DEFAULT_MODEL_ID,
@@ -134,7 +136,7 @@ export function useComposerState(opts: UseComposerStateOptions) {
         () => filterMentionsByFeature(mentions, { knowledgeBaseEnabled: canUseKnowledgeBase, enabledDataSourceTypes }),
         [canUseKnowledgeBase, enabledDataSourceTypes, mentions]
     );
-    const canRequestPreview = shouldRequestChatPreview({ userId, isLoading, isSendingToList });
+    const canRequestPreview = shouldRequestChatPreview({ userId, isLoading, isSendingToList, agentMode });
     const promptKbIdSet = useMemo(() => new Set(promptKnowledgeBases.map(kb => kb.id)), [promptKnowledgeBases]);
     const mentionMap = useMemo(() => new Map(mentions.map(m => [m.id, m])), [mentions]);
     const kbNameMap = useMemo(() => new Map(promptKnowledgeBases.map(kb => [kb.id, kb.name])), [promptKnowledgeBases]);
@@ -215,7 +217,7 @@ export function useComposerState(opts: UseComposerStateOptions) {
     // --- Effects ---
     // Prompt preview fetch
     useEffect(() => {
-        if (!userId) {
+        if (!userId || agentMode) {
             setPromptPreviewTokens(0);
             setPromptPreviewBudget(0);
             setPromptPreviewLayers([]);
@@ -223,6 +225,7 @@ export function useComposerState(opts: UseComposerStateOptions) {
             setPromptHistoryTokens(0);
             setPromptContextTotal(0);
             setPromptPreviewLoading(false);
+            setPromptDiagnosticsOpen(false);
             return;
         }
         if (!canRequestPreview) {
@@ -275,7 +278,7 @@ export function useComposerState(opts: UseComposerStateOptions) {
         return () => {
             abortController.abort();
         };
-    }, [canRequestPreview, contextMessages, chatMode, previewMentions, reasoningEnabled, selectedModel, userId]);
+    }, [agentMode, canRequestPreview, contextMessages, chatMode, previewMentions, reasoningEnabled, selectedModel, userId]);
 
     // Close diagnostics when no data
     useEffect(() => {

@@ -38,3 +38,4 @@ CREATE POLICY selfhost_avatar_delete ON storage.objects FOR DELETE TO authentica
 -- Public avatar downloads use Storage's public bucket endpoint; no anonymous
 -- object metadata/list or write policy is granted here.
 NOTIFY pgrst, 'reload schema';
+SELECT public.configure_agent_attachment_storage();

@@ -16,6 +16,9 @@ import { getLinuxDoAuthErrorMessage } from '@/lib/auth-feedback';
 import { createAppQueryClient, registerBrowserQueryClient } from '@/lib/query/client';
 import { invalidateQueriesForPath } from '@/lib/query/invalidation';
 import { queryKeys } from '@/lib/query/keys';
+import dynamic from 'next/dynamic';
+import { AgentNotificationBridge } from './AgentNotificationBridge';
+const ConversationSearchHost = dynamic(() => import('./ConversationSearchHost').then(module => module.ConversationSearchHost), { ssr: false });
 
 interface ClientProvidersProps {
     children: ReactNode;
@@ -145,6 +148,8 @@ export function ClientProviders({ children }: ClientProvidersProps) {
                 <AuthCallbackFeedback />
                 <ChatTaskToastBridge />
                 <SessionContext.Provider value={state}>
+                    <ConversationSearchHost userId={state.user?.id ?? null} />
+                    <AgentNotificationBridge userId={state.user?.id ?? null} />
                     <AnnouncementPopupHost userId={state.user?.id ?? null} authLoading={state.loading}>
                         {children}
                     </AnnouncementPopupHost>

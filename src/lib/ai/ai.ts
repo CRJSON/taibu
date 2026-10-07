@@ -390,6 +390,8 @@ export const AI_PERSONALITIES: Record<AIPersonality, AIPersonalityConfig> = {
 // ===== API 调用函数 =====
 
 export interface AICallOptions {
+    abortSignal?: AbortSignal;
+    beforeModelAttempt?: () => Promise<void>;
     reasoning?: boolean;  // 开启推理模式
     temperature?: number;
     maxTokens?: number;
@@ -415,7 +417,7 @@ async function runWithSourceFallback<T>(
 
     let lastError: unknown = null;
 
-    for (const source of sources) {
+    for (const source of sources.slice(0, 3)) {
         const runtimeConfig = applySourceToModel(config, source);
 
         if (!isModelAvailable(runtimeConfig)) {
@@ -426,6 +428,7 @@ async function runWithSourceFallback<T>(
             const result = await run(runtimeConfig);
             return result;
         } catch (error) {
+            if ((error as { code?: string })?.code === 'MODEL_ATTEMPT_BLOCKED' || (error as Error)?.name === 'AbortError') throw error;
             console.warn(`[ai] source=${source.sourceKey} model=${config.id} failed:`, error instanceof Error ? error.message : error);
             lastError = error;
         }
@@ -475,7 +478,9 @@ export async function callAI(
         const reasoning = runtimeConfig.isReasoningDefault || options?.reasoning;
         const model = createModelFromConfig(runtimeConfig, { reasoning });
         const coreMessages = toCoreMessages(messages);
+        try { await options?.beforeModelAttempt?.(); } catch (cause) { throw Object.assign(new Error(cause instanceof Error ? cause.message : '模型调用被阻止'), { code: 'MODEL_ATTEMPT_BLOCKED' }); }
         const result = await callWithAISDK(model, coreMessages, systemPrompt, runtimeConfig, {
+            abortSignal: options?.abortSignal,
             reasoning,
             temperature: options?.temperature,
             maxTokens: options?.maxTokens,

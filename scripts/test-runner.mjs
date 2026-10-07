@@ -65,6 +65,7 @@ export function verificationSteps(files, complete = false, useInstalledChrome = 
     pnpmStep('Lint and architecture', ['lint']),
     pnpmStep('Strict application types', ['exec', 'tsc', '--noEmit', '--incremental', 'false']),
     unitStep(files),
+    pnpmStep('Agent worker build', ['build:agent']),
     pnpmStep('Next production build', ['exec', 'next', 'build']),
     nodeStep('Package, license and Skill artifacts', ['--test', ...ARTIFACT_TESTS]),
     nodeStep('Isolated PostgreSQL contracts', ['--test', 'scripts/tests/postgres-contracts.test.mjs']),

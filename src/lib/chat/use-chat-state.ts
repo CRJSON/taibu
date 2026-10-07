@@ -24,6 +24,7 @@ import {
     useConversationList,
 } from '@/lib/chat/ConversationListContext';
 import type { AttachmentState } from '@/types';
+import { useConversationDraft } from './use-conversation-draft';
 
 export type ChatMode = 'normal' | 'dream' | 'mangpai';
 
@@ -50,6 +51,8 @@ export interface ChatStateReturn {
     activeConversationIdRef: React.MutableRefObject<string | null>;
     conversationValidatedRef: React.MutableRefObject<boolean>;
     conversationSelectRequestRef: React.MutableRefObject<number>;
+    // Selection lifetime; reloading the same conversation does not invalidate it.
+    conversationEpochRef: React.MutableRefObject<number>;
     hasLoadedConversationsRef: React.MutableRefObject<boolean>;
     manualRenamedConversationIdsRef: React.MutableRefObject<Set<string>>;
     conversationsRef: React.MutableRefObject<ConversationListItem[]>;
@@ -59,6 +62,8 @@ export interface ChatStateReturn {
     setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
     inputValue: string;
     setInputValue: React.Dispatch<React.SetStateAction<string>>;
+    moveDraft: (conversationId: string) => void;
+    captureSubmittedDraft: (clearAttachment?: boolean) => () => void;
     isSendingToList: boolean;
     setIsSendingToList: React.Dispatch<React.SetStateAction<boolean>>;
     messagesEndRef: React.MutableRefObject<HTMLDivElement | null>;
@@ -151,13 +156,14 @@ export function useChatState({
 
     // Active conversation state (local to chat page)
     const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+    const conversationEpochRef = useRef(0);
     const [conversationLoading, setConversationLoading] = useState(false);
     const [conversationError, setConversationError] = useState<string | null>(null);
     const [showCreditsModal, setShowCreditsModal] = useState(false);
 
     // Messages state
     const [messages, setMessages] = useState<ChatMessage[]>([]);
-    const [inputValue, setInputValue] = useState('');
+    const { inputValue, setInputValue, mentions, setMentions, attachmentState, setAttachmentState, removeDraft, moveDraft, captureSubmittedDraft } = useConversationDraft(userId, activeConversationId);
     const [isSendingToList, setIsSendingToList] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement | null>(null);
     const messageScrollContainerRef = useRef<HTMLDivElement | null>(null);
@@ -174,11 +180,9 @@ export function useChatState({
     // Model & reasoning
     const [selectedModel, setSelectedModel] = useState<string>(DEFAULT_MODEL_ID);
     const [reasoningEnabled, setReasoningEnabled] = useState(false);
-    const [customProviderConfig, setCustomProviderConfig] = useState<CustomProviderConfig | null>(() => getCustomProvider());
+    const [customProviderConfig, setCustomProviderConfig] = useState<CustomProviderConfig | null>(null);
 
     // Attachments & mentions
-    const [attachmentState, setAttachmentState] = useState<AttachmentState>({ file: undefined, webSearchEnabled: false });
-    const [mentions, setMentions] = useState<Mention[]>([]);
     const [kbModalOpen, setKbModalOpen] = useState(false);
     const [kbTargetMessage, setKbTargetMessage] = useState<ChatMessage | null>(null);
 
@@ -254,6 +258,7 @@ export function useChatState({
     }, []);
 
     const resetDeletedConversationState = useCallback((conversationId: string) => {
+        removeDraft(conversationId);
         removeConversationDetail(conversationId);
         if (
             activeConversationIdRef.current !== conversationId
@@ -262,6 +267,7 @@ export function useChatState({
             return;
         }
 
+        conversationEpochRef.current += 1;
         activeConversationIdRef.current = null;
         setActiveConversationId(null);
         setConversationLoading(false);
@@ -271,7 +277,7 @@ export function useChatState({
         if (searchParams.get('id') === conversationId) {
             router.replace('/chat');
         }
-    }, [removeConversationDetail, router, searchParams]);
+    }, [removeConversationDetail, removeDraft, router, searchParams]);
 
     // Init: reset on logout
     useEffect(() => {
@@ -279,6 +285,7 @@ export function useChatState({
         if (!userId) {
             setMessages([]); // eslint-disable-line react-hooks/set-state-in-effect -- intentional: reset on logout
             activeConversationIdRef.current = null;
+            conversationEpochRef.current += 1;
             conversationSelectRequestRef.current += 1;
             setConversationLoading(false);
             setConversationError(null);
@@ -296,6 +303,7 @@ export function useChatState({
         const requestId = conversationSelectRequestRef.current + 1;
         conversationSelectRequestRef.current = requestId;
 
+        if (activeConversationIdRef.current !== id) conversationEpochRef.current += 1;
         activeConversationIdRef.current = id;
         setActiveConversationId(id);
         setConversationError(null);
@@ -309,7 +317,10 @@ export function useChatState({
         } else {
             const cachedConversation = conversationDetailsRef.current.get(id);
             const cachedMessages = cachedConversation?.messages || [];
-            const hasCachedDetail = cachedMessages.length > 0;
+            // An owned, loaded conversation with zero messages is valid too.
+            // Treating it as missing while skipping its cached fetch leaves the
+            // loading flag stuck and prevents Agent restoration on return.
+            const hasCachedDetail = !!cachedConversation;
             setConversationLoading(!hasCachedDetail);
             setMessages(cachedMessages);
             if (hasCachedDetail) {
@@ -334,6 +345,7 @@ export function useChatState({
                 return;
             }
             activeConversationIdRef.current = null;
+            conversationEpochRef.current += 1;
             setConversationLoading(false);
             setActiveConversationId(null);
             setMessages([]);
@@ -363,6 +375,7 @@ export function useChatState({
     const handleNewChat = useCallback(async () => {
         shouldAutoScrollRef.current = true;
         conversationSelectRequestRef.current += 1;
+        conversationEpochRef.current += 1;
         activeConversationIdRef.current = null;
         setConversationLoading(false);
         setConversationError(null);
@@ -460,10 +473,11 @@ export function useChatState({
         pendingSidebarTitle, setPendingSidebarTitle,
         activeConversationId, setActiveConversationId,
         activeConversationIdRef, conversationValidatedRef,
-        conversationSelectRequestRef, hasLoadedConversationsRef,
+        conversationSelectRequestRef, conversationEpochRef, hasLoadedConversationsRef,
         manualRenamedConversationIdsRef, conversationsRef,
         messages, setMessages,
         inputValue, setInputValue,
+        moveDraft, captureSubmittedDraft,
         isSendingToList, setIsSendingToList,
         messagesEndRef, messageScrollContainerRef, shouldAutoScrollRef,
         chatMode, setChatMode,
