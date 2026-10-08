@@ -190,6 +190,11 @@ export async function agentEndpoint(action: () => Promise<Response>) {
         409,
         "REQUEST_MISMATCH",
       ],
+      AGENT_QUESTION_ALREADY_ANSWERED: [
+        "该问题已经提交过答案，请等待任务继续",
+        409,
+        "QUESTION_ALREADY_ANSWERED",
+      ],
       AGENT_RUN_CLOSED: ["任务已结束，请重新发送", 409, "AGENT_RUN_CLOSED"],
       AGENT_CREDENTIAL_KEY_NOT_CONFIGURED: [
         "自定义模型任务的加密服务未配置",

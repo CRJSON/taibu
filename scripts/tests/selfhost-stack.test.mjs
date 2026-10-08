@@ -31,12 +31,15 @@ test('only reviewed Agent baselines can apply the ordered experience migrations'
   const upgrade = reviewedSchemaUpgrade(previous, bundle);
   assert.ok(upgrade);
   assert.equal(upgrade.files[0].file, 'supabase/migrations/20261007_100000_agent_chat_results.sql');
-  assert.equal(upgrade.files.length, 10);
+  assert.equal(upgrade.files.length, 11);
   for (const entry of upgrade.files) assert.equal(entry.sha256, createHash('sha256').update(await readFile(new URL(`../../${entry.file}`, import.meta.url))).digest('hex'));
   const current = reviewedSchemaUpgrade('e639cd6d5a7d70ed5450bd5ee5cc7cd44f3a0924b5b91ce33d719df2c99cec9f', bundle);
-  assert.equal(current.files.length, 9);
+  assert.equal(current.files.length, 10);
+  const previousExperience = reviewedSchemaUpgrade('6072a25ccaae42b489af7f836ec52d80e806906fa4e722d1a343577502afe3be', bundle);
+  assert.equal(previousExperience.files.length, 1);
+  assert.equal(previousExperience.files[0].file, 'supabase/migrations/20261008_100000_agent_question_dedupe.sql');
   const backend = reviewedSchemaUpgrade('aa23300ca84196b4c6e3a5ab0669168420c78be450c4ea8f5cc273ccc3687fc2', bundle);
-  assert.equal(backend.files.length, 1);
+  assert.equal(backend.files.length, 2);
   assert.equal(backend.files[0].file, 'supabase/migrations/20261007_190000_agent_backend_access.sql');
   assert.equal(reviewedSchemaUpgrade('f'.repeat(64), bundle), null);
   assert.equal(reviewedSchemaUpgrade(previous, { ...bundle, fingerprint: 'f'.repeat(64) }), null);

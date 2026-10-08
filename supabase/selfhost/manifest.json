@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
   "baselineRevision": "5725dde",
-  "sourceFingerprint": "c37d2ec4315d56a3a409de4015583d6676a8d99542bd41e6c751b19b12ee9ef3",
+  "sourceFingerprint": "d3d50ddd409fab2baa9ea3a46a62db23c9db52fb9d14da09322841fa3eb149ee",
   "target": "empty local self-hosted application schema; NOT production parity or a migration replay",
   "bootstrapOrder": [
     "platform roles/extensions",
@@ -181,6 +181,10 @@
       "sha256": "26bf8dd2d1e758a1dbc3467c051fb4d8fd03c994c1856314b7c221181397e84d"
     },
     {
+      "file": "supabase/migrations/20261008_100000_agent_question_dedupe.sql",
+      "sha256": "ed9806aa50e8c009390c39ed4d50ffa654097d40a4162009f5d3c644170d3c17"
+    },
+    {
       "file": "supabase/selfhost/source-views.sql",
       "sha256": "3ec59bffedd43530835e728dd9e9fac580ed09bbacb23e64fe460cb2775c6342"
     },
@@ -202,7 +206,7 @@
     },
     {
       "file": "scripts/selfhost-schema.mjs",
-      "sha256": "2ad7d8ce87c7b10da993d5f73aeda83ca272842650974f6cdb71858789ee7068"
+      "sha256": "5e347bf5665a527202dc59fc5de805d5cdafce74eea07d975f017adbea26b7e6"
     },
     {
       "file": "src/app/api/supabase/storage/route.ts",
@@ -708,7 +712,7 @@
       "callers": [
         "src/lib/agent/api.server.ts"
       ],
-      "source": "supabase/migrations/20261007_140000_agent_queue.sql",
+      "source": "supabase/migrations/20261008_100000_agent_question_dedupe.sql",
       "status": "defined",
       "reason": null
     },
@@ -2495,7 +2499,7 @@
   "artifacts": [
     {
       "file": "supabase/selfhost/001-application.sql",
-      "sha256": "0b80105ddaef164c5580ae89b197fe73bbdf9745a78b13ecdd897154cfbf064e"
+      "sha256": "ebb3781e38106ce654d59163182ca5c8791a714b343b50da1ca201f0cf25f4f5"
     },
     {
       "file": "supabase/selfhost/002-storage.sql",

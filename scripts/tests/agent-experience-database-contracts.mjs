@@ -23,7 +23,7 @@ export async function agentExperienceDatabaseContracts(t, { sql, asActor, asOwne
   }
   const lease = r => `${quote(r.id)},${quote(r.worker_id)},${r.fence}`;
   const finish = (r,status='cancelled', checkpoint=cp, output=assistant(r.id)) => admin(`SELECT public.agent_finish_run(${lease(r)},${quote(status)},${json(checkpoint)},${json(output)},NULL);`);
-  const submit = async(r, request=randomUUID(), content='待发送',mode='follow_up',attachments) => JSON.parse(await asActor(owner,`SELECT to_jsonb(public.agent_submit_command(${quote(r.id)},${quote(request)},${quote(mode)},${json({...message(randomUUID(),content),attachments})}));`));
+  const submit = async(r, request=randomUUID(), content='待发送',mode='follow_up',attachments,metadata) => JSON.parse(await asActor(owner,`SELECT to_jsonb(public.agent_submit_command(${quote(r.id)},${quote(request)},${quote(mode)},${json({...message(randomUUID(),content),attachments,metadata})}));`));
 
   await t.test('literal branch search stays owner-isolated and does not search inactive version trees',async()=>{
     const cid=await conversation(); const marker=`literal_%_${randomUUID()}`;
@@ -61,6 +61,17 @@ export async function agentExperienceDatabaseContracts(t, { sql, asActor, asOwne
     assert.equal(await asOwner(`SELECT count(*) FROM public.agent_run_commands WHERE sequence IN (${first.sequence},${second.sequence}) AND delivery_state='cancelled';`),'2');
     await assert.rejects(submit(r),/AGENT_RUN_CLOSED/);
     await finish(r);
+  });
+  await t.test('structured question replies deduplicate across request IDs and reject conflicting answers',async()=>{
+    const r=await run(); const questionId='same-question'; const question={...cp,question:'请补充出生日期',questionId,questions:[{id:'birth',question:'出生日期',allowCustom:true}]};
+    await finish(r,'awaiting_input',question,{...assistant(r.id),agent:{version:1,runId:r.id,status:'awaiting_input',parts:[{type:'question',id:questionId,question:'请补充出生日期'}]}});
+    const metadata={agentQuestionId:questionId,agentAnswers:{birth:'1990-01-15'}};
+    const first=await submit(r,randomUUID(),'1990-01-15','reply',undefined,metadata);
+    const duplicate=await submit(r,randomUUID(),'1990-01-15','reply',undefined,metadata);
+    assert.equal(duplicate.sequence,first.sequence);
+    assert.equal(await asOwner(`SELECT count(*) FROM public.agent_run_commands WHERE run_id=${quote(r.id)} AND mode='reply';`),'1');
+    await assert.rejects(submit(r,randomUUID(),'1991-01-15','reply',undefined,{...metadata,agentAnswers:{birth:'1991-01-15'}}),/AGENT_QUESTION_ALREADY_ANSWERED/);
+    await asActor(owner,`SELECT public.agent_cancel_run(${quote(r.id)});`); const cancelled=await parsed("SELECT to_jsonb(public.agent_claim_run('experience-db')); "); await finish(cancelled);
   });
   await t.test('task notices and popup claims are idempotent across concurrent tabs',async()=>{
     const r=await run(); const question={...cp,question:'补充信息',questionId:'call-a',questions:[{id:'birth',question:'出生日期',allowCustom:true}]};

@@ -243,8 +243,10 @@ const EXPERIENCE_MIGRATIONS = [
   ['170000_daily_briefing', '4fa35a28d49e8f74ec770e09832cde23efd55755a118d0bc4b6833c6c88976ba'],
   ['180000_conversation_fork', 'e3bb2317479f95523b6079bf0a5e388802907cb8134771525179132174a9409d'],
   ['190000_agent_backend_access', '26bf8dd2d1e758a1dbc3467c051fb4d8fd03c994c1856314b7c221181397e84d'],
-].map(([name, sha256]) => ({ file: `supabase/migrations/20261007_${name}.sql`, sha256 }));
-const EXPERIENCE_FINGERPRINT = '6072a25ccaae42b489af7f836ec52d80e806906fa4e722d1a343577502afe3be';
+  ['20261008_100000_agent_question_dedupe', 'ed9806aa50e8c009390c39ed4d50ffa654097d40a4162009f5d3c644170d3c17'],
+].map(([name, sha256]) => ({ file: `supabase/migrations/${name.startsWith('2026') ? name : `20261007_${name}`}.sql`, sha256 }));
+const PREVIOUS_EXPERIENCE_FINGERPRINT = '6072a25ccaae42b489af7f836ec52d80e806906fa4e722d1a343577502afe3be';
+const EXPERIENCE_FINGERPRINT = 'abacc80319e797bcbe1a0bb40434f301d48c93492f2e3cd81dcc60bfb8c19f9b';
 const REVIEWED_SCHEMA_UPGRADES = [{
   previous: '9a6fd07d2d17f61ee6669d20d4910f2b3b7c621d3d07d9ceeba2b0af26df90be',
   current: 'e639cd6d5a7d70ed5450bd5ee5cc7cd44f3a0924b5b91ce33d719df2c99cec9f',
@@ -259,9 +261,13 @@ const REVIEWED_SCHEMA_UPGRADES = [{
   current: EXPERIENCE_FINGERPRINT,
   files: [{ file: 'supabase/migrations/20261007_100000_agent_chat_results.sql', sha256: '462a8badd3f41fa1f5f5b389f2e2fa4320bc7911d0e125da6d06a8dee27effe8' }, ...EXPERIENCE_MIGRATIONS],
 }, {
-  previous: 'aa23300ca84196b4c6e3a5ab0669168420c78be450c4ea8f5cc273ccc3687fc2',
+  previous: PREVIOUS_EXPERIENCE_FINGERPRINT,
   current: EXPERIENCE_FINGERPRINT,
   files: EXPERIENCE_MIGRATIONS.slice(-1),
+}, {
+  previous: 'aa23300ca84196b4c6e3a5ab0669168420c78be450c4ea8f5cc273ccc3687fc2',
+  current: EXPERIENCE_FINGERPRINT,
+  files: EXPERIENCE_MIGRATIONS.slice(-2),
 }];
 
 export function reviewedSchemaUpgrade(fingerprint, bundle) {
