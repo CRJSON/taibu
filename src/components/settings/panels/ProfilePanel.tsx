@@ -12,6 +12,7 @@ import { StatusBanner } from '@/components/profile/StatusBanner';
 import { PasswordSection } from '@/components/profile/PasswordSection';
 import { SettingsLoginRequired } from '@/components/settings/SettingsLoginRequired';
 import { useCurrentUserProfile } from '@/lib/hooks/useCurrentUserProfile';
+import { useUnsavedSettingsGuard } from '@/lib/hooks/useUnsavedSettingsGuard';
 
 function Avatar({ src, alt }: { src: string | null; alt: string }) {
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
@@ -51,6 +52,7 @@ export default function ProfilePanel() {
   const [success, setSuccess] = useState('');
   const [error, setError] = useState('');
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  useUnsavedSettingsGuard(!loading && !!user && nickname !== originalNickname);
 
   useEffect(() => {
     if (sessionLoading) return;
@@ -166,7 +168,7 @@ export default function ProfilePanel() {
       <StatusBanner error={error} success={success} />
 
       <section className="space-y-3">
-        <h2 className="px-1 text-xs font-semibold uppercase tracking-wider text-foreground/50">账户信息</h2>
+        <h2 className="px-1 text-xs font-semibold uppercase tracking-wider text-foreground-secondary">账户信息</h2>
         <div className="rounded-md border border-border bg-background p-6">
           <div className="flex flex-col gap-6 md:flex-row md:items-center">
             <div className="flex flex-col items-center gap-3 md:w-32 md:flex-shrink-0 md:self-center">
@@ -175,7 +177,7 @@ export default function ProfilePanel() {
                 <button
                   type="button"
                   onClick={handleAvatarClick}
-                  className="absolute inset-0 flex items-center justify-center rounded-full bg-[#2383e2]/85 text-white opacity-0 transition-opacity duration-150 group-hover:opacity-100"
+                  className="absolute inset-0 flex items-center justify-center rounded-full bg-accent/85 text-on-accent opacity-0 transition-opacity duration-150 group-hover:opacity-100"
                 >
                   <Camera className="h-5 w-5" />
                 </button>
@@ -203,14 +205,14 @@ export default function ProfilePanel() {
                     type="text"
                     value={nickname}
                     onChange={(event) => setNickname(event.target.value)}
-                    className="w-48 rounded-md border border-border bg-background-secondary px-3 py-2 text-sm outline-none transition-colors duration-150 focus:ring-2 focus:ring-blue-500/30"
+                    className="w-48 rounded-md border border-border bg-background-secondary px-3 py-2 text-sm outline-none transition-colors duration-150 focus:ring-2 focus:ring-accent/30"
                   />
                   {hasNicknameChanges ? (
                     <button
                       type="button"
                       onClick={handleSave}
                       disabled={saving}
-                      className="rounded-md border border-border bg-transparent px-3 py-2 text-xs font-medium text-foreground transition-colors duration-150 hover:bg-[#efedea] active:bg-[#e3e1db] disabled:opacity-50 dark:hover:bg-background-secondary dark:active:bg-background-tertiary"
+                      className="rounded-md border border-border bg-transparent px-3 py-2 text-xs font-medium text-foreground transition-colors duration-150 hover:bg-background-secondary active:bg-background-tertiary disabled:opacity-50 dark:hover:bg-background-secondary dark:active:bg-background-tertiary"
                     >
                       {saving ? '保存中...' : '保存'}
                     </button>
@@ -222,7 +224,7 @@ export default function ProfilePanel() {
                 <div className="space-y-0.5">
                   <p className="text-sm font-medium text-foreground">电子邮箱</p>
                 </div>
-                <div className="rounded-md bg-background-secondary/50 px-3 py-2 font-mono text-sm text-foreground/50">
+                <div className="rounded-md bg-background-secondary/50 px-3 py-2 font-mono text-sm text-foreground-secondary">
                   {displayEmail}
                 </div>
               </div>
@@ -232,7 +234,7 @@ export default function ProfilePanel() {
       </section>
 
       <section className="space-y-3">
-        <h2 className="px-1 text-xs font-semibold uppercase tracking-wider text-foreground/50">安全设置</h2>
+        <h2 className="px-1 text-xs font-semibold uppercase tracking-wider text-foreground-secondary">安全设置</h2>
         <div className="rounded-md border border-border bg-background p-4">
           <div className="mb-4 space-y-0.5">
             <p className="text-sm font-medium text-foreground">重置密码</p>

@@ -66,7 +66,7 @@ function SectionTitle({
   children: ReactNode;
 }) {
   return (
-    <h2 className="flex items-center gap-2 px-1 text-xs font-semibold uppercase tracking-wider text-foreground/50">
+    <h2 className="flex items-center gap-2 px-1 text-xs font-semibold uppercase tracking-wider text-foreground-secondary">
       <span>{children}</span>
     </h2>
   );
@@ -80,7 +80,7 @@ function Row({
   control: ReactNode;
 }) {
   return (
-    <div className="flex items-center justify-between gap-4 rounded-md border border-border bg-background px-4 py-2">
+    <div className="settings-preference-row flex items-center justify-between gap-4 rounded-md border border-border bg-background px-4 py-2">
       <div className="min-w-0 flex-1">
         <p className="text-sm font-medium text-foreground">{title}</p>
       </div>
@@ -107,8 +107,8 @@ function PreferenceSwitch({
       disabled={disabled}
       className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full p-1 transition-colors duration-150 ${
         checked
-          ? 'bg-[#2383e2]'
-          : 'bg-[#d8d2c8] dark:bg-background-tertiary'
+          ? 'bg-accent'
+          : 'bg-background-secondary dark:bg-background-tertiary'
       } ${disabled ? 'cursor-not-allowed opacity-50' : ''}`}
     >
       <span
@@ -350,7 +350,7 @@ function AccountGeneralSettingsPanel() {
                 value={settings.language}
                 onChange={(event) => updateSetting('language', event.target.value as 'zh' | 'en')}
                 disabled={Boolean(loadError) || pending.has('language')}
-                className="rounded-md border border-border bg-background px-3 py-2 text-xs font-medium text-foreground outline-none transition-colors duration-150 focus:ring-2 focus:ring-blue-500/30"
+                className="rounded-md border border-border bg-background px-3 py-2 text-xs font-medium text-foreground outline-none transition-colors duration-150 focus:ring-2 focus:ring-accent/30"
               >
                 <option value="zh">简体中文</option>
                 <option value="en" disabled>English (即将上线)</option>

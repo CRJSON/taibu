@@ -137,8 +137,8 @@ function ActionButton({
 }) {
   const className = `inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium transition-colors duration-150 ${
     disabled
-      ? 'cursor-not-allowed border-[#e7e2d9] bg-[#f1efeb] text-[#37352f]/42'
-      : 'border-[#e2ddd4] bg-[#efedea] text-[#37352f] hover:bg-[#e7e4de] active:bg-[#dfdbd4]'
+      ? 'cursor-not-allowed border-border bg-background-secondary text-foreground/42'
+      : 'border-border bg-background-secondary text-foreground hover:bg-background-secondary active:bg-background-secondary'
   }`;
 
   if (href && !disabled) {
@@ -506,12 +506,12 @@ export default function UpgradePanel() {
     return (
       <div className={containerClass}>
         <div className="space-y-2">
-          <div className="h-3 w-20 rounded bg-[#37352f]/10 animate-pulse" />
-          <div className="h-7 w-36 rounded bg-[#37352f]/10 animate-pulse" />
-          <div className="h-4 w-64 rounded bg-[#37352f]/5 animate-pulse" />
+          <div className="h-3 w-20 rounded bg-foreground/10 animate-pulse" />
+          <div className="h-7 w-36 rounded bg-foreground/10 animate-pulse" />
+          <div className="h-4 w-64 rounded bg-foreground/5 animate-pulse" />
         </div>
-        <div className="h-36 rounded-lg border border-gray-200 bg-[#f7f6f3] animate-pulse" />
-        <div className="h-28 rounded-lg border border-gray-200 bg-[#f7f6f3] animate-pulse" />
+        <div className="h-36 rounded-lg border border-gray-200 bg-background animate-pulse" />
+        <div className="h-28 rounded-lg border border-gray-200 bg-background animate-pulse" />
       </div>
     );
   }
@@ -538,7 +538,7 @@ export default function UpgradePanel() {
         />
       )}
 
-      <div className="rounded-lg border border-[#ebe8e2] bg-[#f7f6f3] px-4 py-4">
+      <div className="rounded-lg border border-border bg-background px-4 py-4">
         <div className="flex flex-wrap gap-2">
           {hasLinuxDoLogin ? (
             <ActionButton
@@ -572,7 +572,7 @@ export default function UpgradePanel() {
                 <button
                   type="button"
                   onClick={() => setShowCheckinModal(true)}
-                  className="text-xs font-medium text-[#37352f]/55 transition-colors duration-150 hover:text-[#37352f]"
+                  className="text-xs font-medium text-foreground-secondary transition-colors duration-150 hover:text-foreground"
                 >
                   查看详情
                 </button>

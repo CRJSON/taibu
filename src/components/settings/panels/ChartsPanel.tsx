@@ -18,7 +18,6 @@ import { useToast } from '@/components/ui/Toast';
 import { SettingsLoginRequired } from '@/components/settings/SettingsLoginRequired';
 import { useChartMutation, useUserCharts } from '@/lib/hooks/useUserCharts';
 import { getNavItemById } from '@/lib/navigation/registry';
-import { closeSettingsCenter, getSettingsCenterCloseMode } from '@/lib/settings-center';
 import { deleteUserChart, setDefaultUserChart, type UserChartRecord } from '@/lib/user/charts-client';
 
 type ChartType = 'bazi' | 'ziwei';
@@ -65,7 +64,7 @@ function SectionTitle({
   return (
     <div className="flex items-center justify-between gap-3 px-1">
       <h2 className="flex items-center gap-1 text-sm font-semibold text-foreground">
-        <span className="flex h-8 w-8 items-center justify-center rounded-md text-foreground/60">
+        <span className="flex h-8 w-8 items-center justify-center rounded-md text-foreground-secondary">
           {Icon ? <Icon className="h-5 w-5" /> : null}
         </span>
         <span>{title}</span>
@@ -93,7 +92,7 @@ function ChartRow({
     <Link
       href={href}
       onClick={(event) => onNavigate?.(event, href)}
-      className="group relative flex items-center justify-between gap-4 rounded-md border border-border bg-background px-4 py-3 transition-colors duration-150 hover:bg-[#efedea] active:bg-[#e3e1db] dark:hover:bg-background-secondary dark:active:bg-background-tertiary"
+      className="group relative flex items-center justify-between gap-4 rounded-md border border-border bg-background px-4 py-3 transition-colors duration-150 hover:bg-background-secondary active:bg-background-tertiary dark:hover:bg-background-secondary dark:active:bg-background-tertiary"
     >
       <div className="absolute left-[6px] top-1/2 -translate-y-1/2 select-none text-foreground/20 opacity-0 transition-opacity duration-150 group-hover:opacity-100">
         ⋮⋮
@@ -102,11 +101,11 @@ function ChartRow({
       <div className="min-w-0 flex-1 pl-4">
         <div className="flex flex-wrap items-center gap-2">
           <h3 className="truncate text-sm font-medium text-foreground">{chart.name}</h3>
-          <span className="rounded-md px-1.5 py-0.5 text-[10px] font-semibold text-foreground/60">
+          <span className="rounded-md px-1.5 py-0.5 text-[10px] font-semibold text-foreground-secondary">
             {getGenderLabel(chart.gender)}
           </span>
           {chart.is_default ? (
-            <span className="inline-flex items-center gap-1 rounded-md border border-[#dfab01]/20 bg-yellow-50 px-2 py-0.5 text-[10px] font-semibold text-[#9a7300]">
+            <span className="inline-flex items-center gap-1 rounded-md border border-warning/20 bg-yellow-50 px-2 py-0.5 text-[10px] font-semibold text-[#9a7300]">
               <Star className="h-3 w-3 fill-current" />
               默认
             </span>
@@ -133,7 +132,7 @@ function ChartRow({
             type="button"
             disabled={pending}
             onClick={(event) => onSetDefault(chart.id, chart.type, event)}
-            className="rounded-md p-2 text-foreground/50 transition-colors duration-150 hover:bg-background-secondary hover:text-[#dfab01]"
+            className="rounded-md p-2 text-foreground-secondary transition-colors duration-150 hover:bg-background-secondary hover:text-warning"
             title="设为默认"
           >
             <Star className="h-4 w-4" />
@@ -143,12 +142,12 @@ function ChartRow({
           type="button"
           disabled={pending}
           onClick={(event) => onDelete(chart.id, chart.type, event)}
-          className="rounded-md p-2 text-foreground/50 transition-colors duration-150 hover:bg-background-secondary hover:text-[#eb5757]"
+          className="rounded-md p-2 text-foreground-secondary transition-colors duration-150 hover:bg-background-secondary hover:text-danger"
           title="删除命盘"
         >
           <Trash2 className="h-4 w-4" />
         </button>
-        <ChevronRight className="h-4 w-4 text-foreground/30" />
+        <ChevronRight className="h-4 w-4 text-foreground-secondary" />
       </div>
     </Link>
   );
@@ -218,23 +217,7 @@ export default function ChartsPanel() {
 
     event.preventDefault();
 
-    if (typeof window === 'undefined') {
-      router.push(href);
-      return;
-    }
-
-    if (getSettingsCenterCloseMode() === 'replace') {
-      closeSettingsCenter();
-      router.push(href);
-      return;
-    }
-
-    const handlePopState = () => {
-      router.push(href);
-    };
-
-    window.addEventListener('popstate', handlePopState, { once: true });
-    closeSettingsCenter();
+    router.push(href);
   }, [router]);
 
   const handleDelete = (id: string, type: ChartType) => run(

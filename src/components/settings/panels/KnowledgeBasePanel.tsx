@@ -32,6 +32,7 @@ import {
     uploadKnowledgeBaseFile,
 } from '@/lib/knowledge-base/browser-client';
 import { getCurrentUserSettings, updateCurrentUserSettings } from '@/lib/user/settings';
+import { useUnsavedSettingsGuard } from '@/lib/hooks/useUnsavedSettingsGuard';
 
 type KnowledgeBase = KnowledgeBaseSummary & {
     weight: 'low' | 'normal' | 'high';
@@ -110,6 +111,7 @@ export default function KnowledgeBasePanel() {
     const [listError, setListError] = useState<string | null>(null);
     const [createError, setCreateError] = useState<string | null>(null);
     const [kbs, setKbs] = useState<KnowledgeBase[]>([]);
+    const [savedKbs, setSavedKbs] = useState<KnowledgeBase[]>([]);
     const [expandedKbId, setExpandedKbId] = useState<string | null>(null);
     const [archives, setArchives] = useState<Record<string, ArchiveBucket>>({});
     const [creating, setCreating] = useState(false);
@@ -127,6 +129,7 @@ export default function KnowledgeBasePanel() {
     const [promptSavingId, setPromptSavingId] = useState<string | null>(null);
     const [pendingDeleteKbId, setPendingDeleteKbId] = useState<string | null>(null);
     const archiveLoadMoreRef = useRef<HTMLDivElement | null>(null);
+    useUnsavedSettingsGuard(!!newName || !!newDescription || !!uploadFile || !loading && JSON.stringify(kbs) !== JSON.stringify(savedKbs));
     const initializedUserIdRef = useRef<string | null>(null);
     const archivesRef = useRef<Record<string, ArchiveBucket>>({});
     const archiveRequestKeyRef = useRef<Record<string, string>>({});
@@ -141,9 +144,11 @@ export default function KnowledgeBasePanel() {
         try {
             const kbList = await listKnowledgeBases();
             setKbs(kbList as KnowledgeBase[]);
+            setSavedKbs(kbList as KnowledgeBase[]);
         } catch (loadError) {
             setListError(loadError instanceof Error ? loadError.message : '获取知识库失败');
             setKbs([]);
+            setSavedKbs([]);
         }
     }, []);
 
@@ -506,7 +511,7 @@ export default function KnowledgeBasePanel() {
                                 type="button"
                                 onClick={createKb}
                                 disabled={creating || !newName.trim()}
-                                className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-md border border-border bg-transparent text-foreground hover:bg-[#efedea] active:bg-[#e3e1db] disabled:opacity-50 transition-colors duration-150 font-medium text-sm"
+                                className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-md border border-border bg-transparent text-foreground hover:bg-background-secondary active:bg-background-tertiary disabled:opacity-50 transition-colors duration-150 font-medium text-sm"
                             >
                                 {creating ? <SoundWaveLoader variant="inline" /> : <Plus className="w-3.5 h-3.5" />}
                                 创建知识库
@@ -528,7 +533,7 @@ export default function KnowledgeBasePanel() {
                                     <select
                                         value={uploadKbId ?? ''}
                                         onChange={(e) => setUploadKbId(e.target.value)}
-                                        className="w-full appearance-none bg-background border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500/50 transition-colors duration-150"
+                                        className="w-full appearance-none bg-background border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent/50 transition-colors duration-150"
                                         disabled={kbs.length === 0}
                                     >
                                         {kbs.length === 0 ? (
@@ -552,7 +557,7 @@ export default function KnowledgeBasePanel() {
                                         file:rounded-md file:border file:border-border
                                         file:text-xs file:font-medium
                                         file:bg-transparent file:text-foreground
-                                        hover:file:bg-[#efedea]
+                                        hover:file:bg-background-secondary
                                         transition-colors duration-150"
                                     />
                                 </div>
@@ -572,7 +577,7 @@ export default function KnowledgeBasePanel() {
                                     type="button"
                                     onClick={uploadKnowledgeFile}
                                     disabled={uploading || !uploadKbId || !uploadFile}
-                                    className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-md border border-border bg-transparent text-foreground hover:bg-[#efedea] active:bg-[#e3e1db] disabled:opacity-50 transition-colors duration-150 font-medium text-sm"
+                                    className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-md border border-border bg-transparent text-foreground hover:bg-background-secondary active:bg-background-tertiary disabled:opacity-50 transition-colors duration-150 font-medium text-sm"
                                 >
                                     {uploading ? <SoundWaveLoader variant="inline" /> : <Upload className="w-3.5 h-3.5" />}
                                     开始上传
@@ -649,7 +654,7 @@ export default function KnowledgeBasePanel() {
                                     key={kb.id}
                                     className={`bg-background rounded-md border transition-colors duration-150 overflow-hidden ${expandedKbId === kb.id
                                             ? 'border-emerald-500/30 bg-background-secondary/40'
-                                            : 'border-border hover:bg-[#efedea] dark:hover:bg-background-secondary'
+                                            : 'border-border hover:bg-background-secondary dark:hover:bg-background-secondary'
                                         }`}
                                 >
                                     <div className="p-4 sm:p-5">
@@ -694,8 +699,8 @@ export default function KnowledgeBasePanel() {
                                                     onClick={() => togglePromptKb(kb.id)}
                                                     disabled={membershipLoading || membershipType === 'free'}
                                                     className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border text-xs font-medium transition-colors duration-150 ${promptKbIds.includes(kb.id)
-                                                            ? 'bg-[#e3e1db] border-border text-foreground dark:bg-background-tertiary dark:text-foreground'
-                                                            : 'bg-background border-border text-foreground-secondary hover:bg-[#efedea] dark:hover:bg-background-secondary'
+                                                            ? 'bg-background-tertiary border-border text-foreground dark:bg-background-tertiary dark:text-foreground'
+                                                            : 'bg-background border-border text-foreground-secondary hover:bg-background-secondary dark:hover:bg-background-secondary'
                                                         } ${(membershipLoading || membershipType === 'free') ? 'opacity-60 cursor-not-allowed' : ''}`}
                                                     title={membershipLoading ? '会员状态加载中' : membershipType === 'free' ? '仅限 Plus 以上会员使用' : '启用知识库搜索'}
                                                 >
@@ -710,7 +715,7 @@ export default function KnowledgeBasePanel() {
                                                     type="button"
                                                     onClick={() => updateKb(kb)}
                                                     disabled={savingKbId === kb.id}
-                                                    className="p-1.5 rounded-md bg-background border border-border text-foreground-secondary hover:bg-[#efedea] hover:text-foreground disabled:opacity-50 transition-colors duration-150"
+                                                    className="p-1.5 rounded-md bg-background border border-border text-foreground-secondary hover:bg-background-secondary hover:text-foreground disabled:opacity-50 transition-colors duration-150"
                                                     title="保存更改"
                                                 >
                                                     {savingKbId === kb.id ? <SoundWaveLoader variant="inline" /> : <Save className="w-3.5 h-3.5" />}
@@ -720,8 +725,8 @@ export default function KnowledgeBasePanel() {
                                                     type="button"
                                                     onClick={() => toggleExpand(kb.id)}
                                                     className={`p-1.5 rounded-md border transition-colors duration-150 ${expandedKbId === kb.id
-                                                            ? 'bg-[#e3e1db] border-border text-foreground dark:bg-background-tertiary dark:text-foreground'
-                                                            : 'bg-background border-border text-foreground-secondary hover:bg-[#efedea] dark:hover:bg-background-secondary'
+                                                            ? 'bg-background-tertiary border-border text-foreground dark:bg-background-tertiary dark:text-foreground'
+                                                            : 'bg-background border-border text-foreground-secondary hover:bg-background-secondary dark:hover:bg-background-secondary'
                                                         }`}
                                                     title={expandedKbId === kb.id ? "收起归档" : "查看归档"}
                                                 >
@@ -788,7 +793,7 @@ export default function KnowledgeBasePanel() {
                                             ) : (
                                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                                     {archiveState.items.map(a => (
-                                                        <div key={a.id} className="group flex items-start justify-between gap-2 p-2.5 rounded-md bg-background border border-border hover:bg-[#efedea] dark:hover:bg-background-secondary transition-colors duration-150">
+                                                        <div key={a.id} className="group flex items-start justify-between gap-2 p-2.5 rounded-md bg-background border border-border hover:bg-background-secondary dark:hover:bg-background-secondary transition-colors duration-150">
                                                             <div className="min-w-0 flex-1">
                                                                 <div className="flex items-center gap-1.5 mb-0.5">
                                                                     <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-background-secondary text-foreground-secondary border border-border">

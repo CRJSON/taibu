@@ -124,6 +124,7 @@ docs/manual/*
 !docs/manual/Self-Hosting.md
 !docs/manual/Agent.md
 !docs/agent-experience-implementation.md
+!docs/ui-settings-agent.md
 
 # AI
 .claude

@@ -14,6 +14,8 @@ import {
   getSettingsCenterRouteTargetForPath,
   getSettingsCenterTabs,
   parseSettingsCenterHash,
+  parseSettingsCenterPath,
+  SETTINGS_CENTER_NAVIGATE_EVENT,
   openSettingsCenter,
   closeSettingsCenter,
 } from '../lib/settings-center';
@@ -52,51 +54,48 @@ test('settings center keeps only the merged membership tab and rejects removed l
   assert.equal(parseSettingsCenterHash('#settings/credits'), null);
   assert.equal(
     getSettingsCenterRouteTarget('upgrade', { search: '?claim=ok' }),
-    '/bazi?claim=ok#settings/upgrade',
+    '/settings/upgrade?claim=ok',
   );
   assert.equal(
     getSettingsCenterRouteTargetForPath('/daliuren', 'upgrade', { search: '?foo=bar' }),
-    '/daliuren?foo=bar#settings/upgrade',
+    '/settings/upgrade?foo=bar',
   );
   assert.equal(
     getSettingsCenterRouteTargetForPath('/', 'general'),
-    '/#settings/general',
+    '/settings/general',
   );
   assert.equal(tabs.findIndex((tab) => tab.id === 'byok'), tabs.findIndex((tab) => tab.id === 'personalization') + 1);
   assert.equal(tabs.at(-1)?.id, 'help');
-  assert.equal(getSettingsCenterRouteTarget('byok'), '/bazi#settings/byok');
+  assert.equal(getSettingsCenterRouteTarget('byok'), '/settings/byok');
 });
 
-test('settings navigation uses the current path, replaces tabs and closes through browser history', (t) => {
+test('settings routes dispatch framework navigation without writing history themselves', (t) => {
   const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
-  const writes: Array<{ method: string; url: string }> = [];
-  let state: unknown = null;
-  let backCalls = 0;
-  const location = new URL('https://fixture.invalid/daliuren?step=2');
-  const change = (method: string, next: unknown, url: string) => { state = next; writes.push({ method, url }); };
+  const navigation: unknown[] = [];
   Object.defineProperty(globalThis, 'window', { configurable: true, value: {
-    location,
-    history: {
-      get state() { return state; },
-      pushState: (next: unknown, _unused: string, url: string) => change('push', next, url),
-      replaceState: (next: unknown, _unused: string, url: string) => change('replace', next, url),
-      back: () => { backCalls++; },
-    },
-    dispatchEvent: () => true,
+    location: new URL('https://fixture.invalid/daliuren?step=2'),
+    dispatchEvent: (event: CustomEvent) => { assert.equal(event.type, SETTINGS_CENTER_NAVIGATE_EVENT); navigation.push(event.detail); return true; },
   } });
-  t.after(() => originalWindow
-    ? Object.defineProperty(globalThis, 'window', originalWindow)
-    : Reflect.deleteProperty(globalThis, 'window'));
-
-  assert.equal(getCurrentSettingsCenterRouteTarget('general'), '/daliuren?step=2#settings/general');
+  t.after(() => originalWindow ? Object.defineProperty(globalThis, 'window', originalWindow) : Reflect.deleteProperty(globalThis, 'window'));
+  assert.equal(getCurrentSettingsCenterRouteTarget('general'), '/settings/general');
   openSettingsCenter('personalization');
-  openSettingsCenter('byok', { replace: true });
+  openSettingsCenter('admin-ai-services', { replace: true, subpath: 'gateways' });
   closeSettingsCenter();
-  assert.deepEqual(writes, [
-    { method: 'push', url: '/daliuren?step=2#settings/personalization' },
-    { method: 'replace', url: '/daliuren?step=2#settings/byok' },
+  assert.deepEqual(navigation, [
+    { href: '/settings/personalization', replace: false },
+    { href: '/settings/admin-ai-services/gateways', replace: true },
+    { href: '/bazi', replace: false },
   ]);
-  assert.equal(backCalls, 1);
+});
+
+test('settings page addresses and legacy hashes resolve to the same categories', () => {
+  for (const tab of ['general', 'personalization', 'byok', 'charts', 'admin-features'] as const) {
+    assert.equal(parseSettingsCenterPath('/settings/' + tab)?.tab, parseSettingsCenterHash('#settings/' + tab));
+  }
+  assert.deepEqual(parseSettingsCenterPath('/settings/admin-features/keys'), { tab: 'admin-features', subpath: 'keys' });
+  assert.equal(parseSettingsCenterPath('/settings/unknown'), null);
+  assert.equal(parseSettingsCenterPath('/bazi'), null);
+  assert.equal(getSettingsCenterRouteTarget('admin-ai-services', { subpath: 'gateways' }), '/settings/admin-ai-services/gateways');
 });
 
 test('disabled membership is unavailable in both tab projection and explanation', () => {
@@ -135,7 +134,7 @@ test('personalization registry and rendered link resolve the canonical settings 
   assert.equal(NAV_REGISTRY.some(item => item.href === '/user/ai-settings' || item.id === 'user/settings/ai'), false);
   const linkProps = { tab: 'personalization' as const, children: 'Preferences' };
   const html = renderToStaticMarkup(createElement(SettingsCenterLink, linkProps));
-  assert.match(html, /href="\/bazi#settings\/personalization"/u);
+  assert.match(html, /href="\/settings\/personalization"/u);
 });
 
 test('settings panels retain route boundaries, Linux.do claims and private account affordances', () => {
@@ -157,11 +156,11 @@ test('settings panels retain route boundaries, Linux.do claims and private accou
   assert.equal(userMenuSource.includes('{user.email}'), false);
 });
 
-test('settings center host renders disabled tabs as locked non-clickable controls and falls back to general', () => {
-  const hostSource = readFileSync(resolve(process.cwd(), 'src/components/settings/SettingsCenterHost.tsx'), 'utf8');
+test('settings page renders disabled categories as locked non-clickable controls and falls back after flags load', () => {
+  const hostSource = readFileSync(resolve(process.cwd(), 'src/components/settings/SettingsCenterPage.tsx'), 'utf8');
 
   assert.equal(hostSource.includes('loaded: featureTogglesLoaded'), true);
-  assert.equal(hostSource.includes("openSettingsCenter('general', { replace: true })"), true);
+  assert.equal(hostSource.includes("router.replace(getSettingsCenterRouteTarget('general'))"), true);
   assert.equal(hostSource.includes('disabled={tab.disabled}'), true);
   assert.equal(hostSource.includes('aria-disabled={tab.disabled}'), true);
   assert.equal(hostSource.includes('cursor-not-allowed'), true);

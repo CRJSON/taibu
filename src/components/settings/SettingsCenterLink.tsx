@@ -1,8 +1,8 @@
 'use client';
 
-import type { MouseEvent, MouseEventHandler, ReactNode } from 'react';
+import type { MouseEventHandler, ReactNode } from 'react';
 import Link from 'next/link';
-import { getSettingsCenterRouteTarget, openSettingsCenter, type SettingsCenterTab } from '@/lib/settings-center';
+import { getSettingsCenterRouteTarget, type SettingsCenterTab } from '@/lib/settings-center';
 
 interface SettingsCenterLinkProps {
   tab: SettingsCenterTab;
@@ -10,10 +10,6 @@ interface SettingsCenterLinkProps {
   children: ReactNode;
   title?: string;
   onClick?: MouseEventHandler<HTMLAnchorElement>;
-}
-
-function isModifiedEvent(event: MouseEvent<HTMLAnchorElement>) {
-  return event.metaKey || event.altKey || event.ctrlKey || event.shiftKey;
 }
 
 export function SettingsCenterLink({
@@ -28,14 +24,7 @@ export function SettingsCenterLink({
       href={getSettingsCenterRouteTarget(tab)}
       className={className}
       title={title}
-      onClick={(event) => {
-        onClick?.(event);
-        if (event.defaultPrevented) return;
-        if (isModifiedEvent(event)) return;
-
-        event.preventDefault();
-        openSettingsCenter(tab);
-      }}
+      onClick={onClick}
     >
       {children}
     </Link>

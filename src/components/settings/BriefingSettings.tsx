@@ -3,16 +3,19 @@ import { useEffect, useState } from 'react';
 import { getCurrentUserSettings, updateCurrentUserSettings } from '@/lib/user/settings';
 import { loadReminderSubscriptions, updateReminderSubscriptionClient } from '@/lib/reminders-client';
 import { DEFAULT_BRIEFING_PREFERENCES, initialBriefingPreferences, validBriefingPreferences, type BriefingPreferences } from '@/lib/briefing-preferences';
+import { useUnsavedSettingsGuard } from '@/lib/hooks/useUnsavedSettingsGuard';
 export function BriefingSettings({ userId, initialPreferences, initialEnabled = false }: { userId: string; initialPreferences?: BriefingPreferences; initialEnabled?: boolean }) {
     const [preferences, setPreferences] = useState<BriefingPreferences>(initialPreferences ?? DEFAULT_BRIEFING_PREFERENCES);
+    const [savedPreferences, setSavedPreferences] = useState<BriefingPreferences>(initialPreferences ?? DEFAULT_BRIEFING_PREFERENCES);
     const [enabled, setEnabled] = useState(initialEnabled);
     const [busy, setBusy] = useState(!initialPreferences);
     const [error, setError] = useState('');
     const [loaded, setLoaded] = useState(false);
     const [retry, setRetry] = useState(0);
+    useUnsavedSettingsGuard(loaded && JSON.stringify(preferences) !== JSON.stringify(savedPreferences));
     useEffect(() => {
         if (initialPreferences) {
-            setPreferences(initialPreferences); setEnabled(initialEnabled); setLoaded(true); setBusy(false); setError('');
+            setPreferences(initialPreferences); setSavedPreferences(initialPreferences); setEnabled(initialEnabled); setLoaded(true); setBusy(false); setError('');
             return;
         }
         const controller = new AbortController(); const scope = { expectedUserId: userId, signal: controller.signal };
@@ -21,7 +24,8 @@ export function BriefingSettings({ userId, initialPreferences, initialEnabled = 
             if (controller.signal.aborted) return;
             if (!settings.settings || !subscriptions.ok) throw new Error('加载早报设置失败');
             let timezone = 'Asia/Shanghai'; try { timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || timezone; } catch { /* fallback */ }
-            setPreferences(initialBriefingPreferences(settings.settings.briefingPreferences, settings.settings.briefingConfigured ?? false, timezone));
+            const initial = initialBriefingPreferences(settings.settings.briefingPreferences, settings.settings.briefingConfigured ?? false, timezone);
+            setPreferences(initial); setSavedPreferences(initial);
             setEnabled(subscriptions.subscriptions.find(item => item.reminderType === 'daily_briefing')?.enabled ?? false);
             setLoaded(true);
         }).catch(cause => { if (!controller.signal.aborted) setError(cause.message); }).finally(() => { if (!controller.signal.aborted) setBusy(false); });
@@ -36,6 +40,7 @@ export function BriefingSettings({ userId, initialPreferences, initialEnabled = 
             const result = await updateReminderSubscriptionClient({ reminderType: 'daily_briefing', enabled: nextEnabled, notifySite: true }, { expectedUserId: userId });
             if (!result.ok) throw new Error(result.error.message);
             setEnabled(nextEnabled);
+            setSavedPreferences(preferences);
         } catch (cause) { setError(cause instanceof Error ? cause.message : '保存失败'); }
         finally { setBusy(false); }
     }

@@ -39,7 +39,7 @@ export function SegmentedChoice<T extends string>({
     >
       <span
         aria-hidden="true"
-        className="pointer-events-none absolute inset-y-1 left-1 rounded-full bg-[#2383e2] shadow-sm transition-transform duration-150"
+        className="pointer-events-none absolute inset-y-1 left-1 rounded-full bg-accent shadow-sm transition-transform duration-150"
         style={indicatorStyle}
       />
       {options.map((option) => {
@@ -54,7 +54,7 @@ export function SegmentedChoice<T extends string>({
             onClick={() => onChange(option.value)}
             className={`relative z-10 rounded-full px-3 py-1.5 text-xs font-medium transition-colors duration-150 ${
               active
-                ? 'text-white'
+                ? 'text-on-accent'
                 : 'text-foreground-secondary hover:text-foreground'
             }`}
           >

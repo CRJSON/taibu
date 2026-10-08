@@ -141,6 +141,8 @@ export function getSettingsCenterDisabledState(
 }
 
 export const SETTINGS_CENTER_EVENT = 'taibu:settings-center:change';
+export const SETTINGS_CENTER_NAVIGATE_EVENT = 'taibu:settings-center:navigate';
+export const SETTINGS_CENTER_LEAVE_EVENT = 'taibu:settings-center:leave';
 const SETTINGS_CENTER_STATE_KEY = '__taibuSettingsCenter';
 export type SettingsCenterCloseMode = 'back' | 'replace';
 
@@ -213,11 +215,14 @@ export function readSettingsCenterHashFromWindow(): string {
 }
 
 export function readSettingsCenterTabFromWindow(): SettingsCenterTab | null {
-  return parseSettingsCenterHash(readSettingsCenterHashFromWindow());
+  if (typeof window === 'undefined') return null;
+  return parseSettingsCenterPath(window.location.pathname)?.tab ?? parseSettingsCenterHash(readSettingsCenterHashFromWindow());
 }
 
 export function readSettingsCenterSubpathFromWindow(): string | null {
-  return parseSettingsCenterHashSubpath(readSettingsCenterHashFromWindow());
+  if (typeof window === 'undefined') return null;
+  const route = parseSettingsCenterPath(window.location.pathname);
+  return route ? route.subpath : parseSettingsCenterHashSubpath(readSettingsCenterHashFromWindow());
 }
 
 export function subscribeSettingsCenterLocation(listener: () => void): () => void {
@@ -235,11 +240,6 @@ export function subscribeSettingsCenterLocation(listener: () => void): () => voi
   };
 }
 
-function emitSettingsCenterChange() {
-  if (typeof window === 'undefined') return;
-  window.dispatchEvent(new CustomEvent(SETTINGS_CENTER_EVENT));
-}
-
 export function getSettingsCenterCloseMode(
   state: unknown = typeof window !== 'undefined' ? window.history.state : null,
 ): SettingsCenterCloseMode {
@@ -247,29 +247,24 @@ export function getSettingsCenterCloseMode(
   return currentState?.[SETTINGS_CENTER_STATE_KEY] === true ? 'back' : 'replace';
 }
 
-function buildCurrentUrlWithoutHash() {
-  const url = new URL(window.location.href);
-  return `${url.pathname}${url.search}`;
-}
-
-function normalizeSettingsCenterBasePath(pathname?: string | null): string {
-  const normalized = pathname?.trim();
-  if (!normalized) {
-    return '/bazi';
-  }
-  return normalized.startsWith('/') ? normalized : `/${normalized}`;
+export function parseSettingsCenterPath(pathname: string | null | undefined): { tab: SettingsCenterTab; subpath: string | null } | null {
+  const parts = pathname?.split('/').filter(Boolean) ?? [];
+  if (parts[0] !== SETTINGS_CENTER_NAMESPACE || !isSettingsCenterTab(parts[1])) return null;
+  return { tab: parts[1], subpath: parts.slice(2).join('/') || null };
 }
 
 export function getSettingsCenterRouteTargetForPath(
-  pathname: string | null | undefined,
+  _pathname: string | null | undefined,
   tab: SettingsCenterTab,
   options?: {
     subpath?: string | null;
     search?: string | null;
   },
 ): string {
+  const subpath = normalizeSettingsCenterSubpath(options?.subpath);
   const search = options?.search?.trim() || '';
-  return `${normalizeSettingsCenterBasePath(pathname)}${search}${buildSettingsCenterHash(tab, options)}`;
+  const query = search ? (search.startsWith('?') ? search : `?${search}`) : '';
+  return `/settings/${tab}${subpath ? `/${subpath.split('/').map(encodeURIComponent).join('/')}` : ''}${query}`;
 }
 
 export function getCurrentSettingsCenterRouteTarget(
@@ -283,10 +278,7 @@ export function getCurrentSettingsCenterRouteTarget(
     return getSettingsCenterRouteTarget(tab, options);
   }
 
-  return getSettingsCenterRouteTargetForPath(window.location.pathname, tab, {
-    subpath: options?.subpath,
-    search: options?.search ?? window.location.search,
-  });
+  return getSettingsCenterRouteTarget(tab, options);
 }
 
 export function openSettingsCenter(
@@ -298,38 +290,15 @@ export function openSettingsCenter(
 ) {
   if (typeof window === 'undefined') return;
 
-  const nextState = {
-    ...(window.history.state ?? {}),
-    [SETTINGS_CENTER_STATE_KEY]: true,
-  };
-  const method = options?.replace ? 'replaceState' : 'pushState';
-  window.history[method](nextState, '', getCurrentSettingsCenterRouteTarget(tab, {
-    subpath: options?.subpath,
+  window.dispatchEvent(new CustomEvent(SETTINGS_CENTER_NAVIGATE_EVENT, {
+    detail: { href: getSettingsCenterRouteTarget(tab, options), replace: options?.replace === true },
   }));
-  emitSettingsCenterChange();
 }
 
 export function closeSettingsCenter() {
   if (typeof window === 'undefined') return;
 
-  const currentState = window.history.state as Record<string, unknown> | null;
-  if (getSettingsCenterCloseMode(currentState) === 'back') {
-    window.history.back();
-    return;
-  }
-
-  const nextState = currentState ? { ...currentState } : null;
-  if (nextState && SETTINGS_CENTER_STATE_KEY in nextState) {
-    delete nextState[SETTINGS_CENTER_STATE_KEY];
-  }
-  if (nextState && 'tab' in nextState) {
-    delete nextState.tab;
-  }
-  if (nextState && 'subpath' in nextState) {
-    delete nextState.subpath;
-  }
-  window.history.replaceState(nextState, '', buildCurrentUrlWithoutHash());
-  emitSettingsCenterChange();
+  window.dispatchEvent(new CustomEvent(SETTINGS_CENTER_NAVIGATE_EVENT, { detail: { href: '/bazi', replace: false } }));
 }
 
 export function getSettingsCenterRouteTarget(
@@ -343,6 +312,9 @@ export function getSettingsCenterRouteTarget(
 }
 
 export function getSettingsCenterTabFromRouteTarget(href: string): SettingsCenterTab | null {
+  const path = href.split(/[?#]/u)[0];
+  const route = parseSettingsCenterPath(path);
+  if (route) return route.tab;
   const hashIndex = href.indexOf('#');
   if (hashIndex < 0) {
     return null;
