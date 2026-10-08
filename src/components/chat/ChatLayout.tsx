@@ -8,7 +8,7 @@
  */
 'use client';
 
-import { useMemo, useRef, useState, useEffect, type ReactNode } from 'react';
+import { useMemo, useRef, useState, useEffect, useCallback, type ReactNode } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { scrollToMessageId } from '@/lib/chat/message-navigation';
 import { requestBrowserJson } from '@/lib/browser-api';
@@ -31,6 +31,8 @@ import type { ChatMode } from '@/lib/chat/use-chat-state';
 import { getSettingsCenterRouteTarget, openSettingsCenter } from '@/lib/settings-center';
 import { AgentStatus } from './agent/AgentStatus';
 import { AgentWorkspacePanel } from './agent/AgentWorkspacePanel';
+import { AgentResultContext } from './agent/AgentResultContext';
+import { getAgentUnrepresentedArtifacts, isAgentChartTool } from '@/lib/agent/tool-presentation';
 import { AgentQuestionDialog } from './agent/AgentQuestionDialog';
 import { collectAgentArtifacts } from './agent/presentation';
 import type { AgentPart } from '@/lib/agent/types';
@@ -126,6 +128,21 @@ export function ChatLayout(props: ChatLayoutProps) {
     const workspaceButtonRef = useRef<HTMLButtonElement>(null);
     const [openWorkspaceKey, setOpenWorkspaceKey] = useState<string | null>(null);
     const workspaceKey = `${userId ?? 'anonymous'}:${activeConversationId ?? 'new'}`;
+    const [resourceRequest, setResourceRequest] = useState<{ scope: string; id: string; version: number } | null>(null);
+    const openResource = useCallback((id: string) => {
+        setResourceRequest(previous => ({ scope: workspaceKey, id, version: (previous?.version ?? 0) + 1 }));
+        setOpenWorkspaceKey(workspaceKey);
+        try { sessionStorage.setItem(`taibu.workspace-open:${workspaceKey}`, '1'); } catch { /* optional */ }
+    }, [workspaceKey]);
+    const resultWorkspace = useMemo(() => ({ openResource }), [openResource]);
+    useEffect(() => {
+        let current = true;
+        queueMicrotask(() => {
+            if (!current) return;
+            try { setOpenWorkspaceKey(sessionStorage.getItem(`taibu.workspace-open:${workspaceKey}`) === '1' ? workspaceKey : null); } catch { setOpenWorkspaceKey(null); }
+        });
+        return () => { current = false; };
+    }, [workspaceKey]);
     const router = useRouter();
     const searchParams = useSearchParams();
     const { showToast } = useToast();
@@ -189,9 +206,13 @@ export function ChatLayout(props: ChatLayoutProps) {
         ? [...props.agent.run.message.agent?.parts ?? []].reverse().find((part): part is Extract<AgentPart, { type: 'question' }> => part.type === 'question') : undefined;
     const hasWorkspace = isAgentMode || Boolean(latestAgentData);
     const workspaceOpen = hasWorkspace && openWorkspaceKey === workspaceKey;
+    const chartCount = historyTools.filter(tool => tool.status === 'completed' && isAgentChartTool(tool.name)).length;
+    const resultCount = chartCount + getAgentUnrepresentedArtifacts(historyTools, artifacts).length;
     const closeWorkspace = () => {
         const previous = document.activeElement;
         setOpenWorkspaceKey(null);
+        setResourceRequest(null);
+        try { sessionStorage.removeItem(`taibu.workspace-open:${workspaceKey}`); } catch { /* optional */ }
         requestAnimationFrame(() => {
             const active = document.activeElement;
             if (!active || active === document.body || active === previous) workspaceButtonRef.current?.focus();
@@ -222,7 +243,7 @@ export function ChatLayout(props: ChatLayoutProps) {
     };
 
     return (
-        <div className="chat-workspace flex bg-background" style={{ '--chat-column': `${preferences.width}px` } as CSSProperties}>
+        <AgentResultContext.Provider value={resultWorkspace}><div className="chat-workspace flex bg-background" style={{ '--chat-column': `${preferences.width}px` } as CSSProperties}>
             {/* 移动端对话抽屉 */}
             <MobileChatDrawer />
 
@@ -235,8 +256,11 @@ export function ChatLayout(props: ChatLayoutProps) {
                 >
                     {activeConversationId && <ConversationExportDialog conversationId={activeConversationId} />}
                     <label className="chat-reading-width" title="调整阅读宽度"><span>列宽</span><input type="range" aria-label="阅读列宽" min="560" max="1200" step="20" value={preferences.width} onChange={event => updatePreferences({ width: Number(event.target.value) })} /></label>
-                    {hasWorkspace && <button type="button" ref={workspaceButtonRef} className="chat-workspace-toggle" aria-label="任务工作区" aria-expanded={workspaceOpen} aria-controls="agent-workspace-panel" onClick={() => setOpenWorkspaceKey(workspaceOpen ? null : workspaceKey)}>
-                        <Files size={16} aria-hidden="true" /><span>工作区</span>{artifacts.length > 0 && <span className="chat-result-count">{artifacts.length}</span>}
+                    {hasWorkspace && <button type="button" ref={workspaceButtonRef} className="chat-workspace-toggle" aria-label="任务工作区" aria-expanded={workspaceOpen} aria-controls="agent-workspace-panel" onClick={() => {
+                        if (workspaceOpen) closeWorkspace();
+                        else { setOpenWorkspaceKey(workspaceKey); try { sessionStorage.setItem(`taibu.workspace-open:${workspaceKey}`, '1'); } catch { /* optional */ } }
+                    }}>
+                        <Files size={16} aria-hidden="true" /><span>工作区</span>{resultCount > 0 && <span className="chat-result-count">{resultCount}</span>}
                     </button>}
                 </ChatHeader>
                 {props.agent && (
@@ -325,11 +349,11 @@ export function ChatLayout(props: ChatLayoutProps) {
                     </>
                 )}
             </div>
-            {workspaceOpen && <AgentWorkspacePanel key={workspaceKey} workspaceKey={workspaceKey} artifacts={artifacts} sources={sources} historyTools={historyTools} attachmentIds={attachmentIds} data={latestAgentData} onClose={closeWorkspace} />}
+            {workspaceOpen && <AgentWorkspacePanel key={workspaceKey} workspaceKey={workspaceKey} artifacts={artifacts} sources={sources} historyTools={historyTools} attachmentIds={attachmentIds} data={latestAgentData} onClose={closeWorkspace} requestedResource={resourceRequest?.scope === workspaceKey ? resourceRequest : undefined} />}
 
             {children}
             <AnalysisMethodPicker onSelect={text => onInputChange(inputValue.trim() ? `${inputValue}\n${text}` : text)} />
-        </div>
+        </div></AgentResultContext.Provider>
     );
 }
 
@@ -350,7 +374,7 @@ function CreditLockBanner({ inline }: { inline?: boolean }) {
                         event.preventDefault();
                         openSettingsCenter('upgrade');
                     }}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-accent text-white rounded-lg text-sm hover:bg-accent/90 transition-colors"
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-accent text-on-accent rounded-lg text-sm hover:bg-accent/90 transition-colors"
                 >
                     <Sparkles className="w-3.5 h-3.5" />
                     获取积分

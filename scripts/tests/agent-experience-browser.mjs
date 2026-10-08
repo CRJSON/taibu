@@ -13,12 +13,13 @@ export async function verifyAgentExperience({ page, context, origin, directory, 
     assert.ok(response.ok(), `experience read ${route}: ${response.status()}`);
     return response.json();
   };
+  const chatBeforeSettings = page.url();
   const originalSettings = (await read('/api/user/settings')).settings;
   const originalReminders = (await read('/api/reminders')).data.subscriptions;
   try {
     await page.getByRole('link', { name: '个性化', exact: true }).click();
-    const settings = page.getByRole('dialog', { name: '设置中心', exact: true });
-    await settings.getByRole('button', { name: '常规', exact: true }).click();
+    const settings = page.locator('.settings-page');
+    await settings.getByRole('link', { name: '常规', exact: true }).click();
     const scale = settings.getByLabel('全站字号');
     for (const value of [85, 100, 115, 125]) {
       if (await scale.inputValue() !== String(value)) {
@@ -34,19 +35,19 @@ export async function verifyAgentExperience({ page, context, origin, directory, 
       assert.equal(await settings.getByLabel('早报时区').inputValue(), browserZone || 'Asia/Shanghai', 'unconfigured briefing starts in browser timezone');
     }
     assert.equal(await settings.getByRole('switch', { name: '每日早报', exact: true }).getAttribute('aria-checked'), String(originalReminders.find(item => item.reminderType === 'daily_briefing')?.enabled ?? false), 'acceptance preserves the paid subscription state');
-    await page.keyboard.press('Escape');
+    await page.goto(chatBeforeSettings);
     await settings.waitFor({ state: 'hidden' });
     await page.setViewportSize({ width: 320, height: 844 });
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), '320px with 125% global fonts stays within viewport');
     await page.setViewportSize({ width: 1440, height: 1100 });
     await page.getByRole('link', { name: '个性化', exact: true }).click();
-    await settings.getByRole('button', { name: '常规', exact: true }).click();
+    await settings.getByRole('link', { name: '常规', exact: true }).click();
     if (await scale.inputValue() !== String(originalSettings.chatPreferences.fontScale)) {
       const restoreScale = page.waitForResponse(response => new URL(response.url()).pathname === '/api/user/settings' && response.request().method() === 'PATCH');
       await scale.selectOption(String(originalSettings.chatPreferences.fontScale));
       assert.ok((await restoreScale).ok());
     }
-    await page.keyboard.press('Escape');
+    await page.goto(chatBeforeSettings);
     await settings.waitFor({ state: 'hidden' });
   } finally {
     // Preserve preferences even when an assertion interrupts the UI restore.
@@ -68,11 +69,11 @@ export async function verifyAgentExperience({ page, context, origin, directory, 
   for (let value = 560; value < Number(previousWidth); value += 20) await width.press('ArrowRight');
   await page.getByRole('button', { name: '任务工作区', exact: true }).click();
   const workspace = page.locator('aside#agent-workspace-panel');
-  await workspace.getByRole('button', { name: '预览命盘', exact: true }).first().click();
+  await workspace.locator('.agent-workspace-chart-link').first().click();
   const firstTab = await workspace.getByRole('tab').first().textContent();
   await workspace.getByRole('tabpanel').waitFor();
   await workspace.getByRole('button', { name: '成果', exact: false }).first().click();
-  await workspace.getByRole('button', { name: '预览命盘', exact: true }).last().click();
+  await workspace.locator('.agent-workspace-chart-link').last().click();
   assert.equal(await workspace.getByRole('tab').count(), 2);
   await workspace.getByRole('tab').last().press('ArrowLeft');
   assert.equal(await workspace.getByRole('tab', { selected: true }).textContent(), firstTab, 'resource tabs have keyboard navigation');

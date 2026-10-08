@@ -6,6 +6,7 @@ import type { AgentMessageData } from '@/lib/agent/types';
 import { MarkdownContent } from '@/components/ui/MarkdownContent';
 import { ThinkingBlock } from '../ThinkingBlock';
 import { AgentToolCard } from './AgentToolCard';
+import { AgentToolResult } from './AgentToolResult';
 import { getAgentActivityLabel, type AgentProcessPart } from './presentation';
 
 export function AgentActivityIndicator({ data }: { data: AgentMessageData }) {
@@ -36,11 +37,12 @@ export function AgentActivityGroup({ parts, data, active = false }: { parts: Age
             {open && parts.map(part => <div key={part.id} className="agent-activity-step">
                 <span className="agent-step-marker" aria-hidden="true">{part.type === 'tool' ? toolNumbers.get(part.id) : part.type === 'reasoning' ? <Sparkles size={11} /> : <CircleHelp size={11} />}</span>
                 <div className="min-w-0 flex-1">
-                    {part.type === 'tool' ? <AgentToolCard tool={part} runStatus={data.status} />
+                    {part.type === 'tool' ? <AgentToolCard tool={part} runStatus={data.status} showResult={false} />
                         : part.type === 'reasoning' ? <ThinkingBlock content={part.text} isStreaming={active && data.status === 'running'} />
                             : <details className="agent-question"><summary><CircleHelp size={14} /><span>向你确认信息</span><ChevronRight size={13} /></summary><div><MarkdownContent content={part.question} className="text-sm" /></div></details>}
                 </div>
             </div>)}
         </div>
+        <div className="agent-activity-results">{tools.map(tool => <AgentToolResult key={tool.id} tool={tool} />)}</div>
     </section>;
 }

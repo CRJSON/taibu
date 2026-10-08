@@ -11,6 +11,7 @@ import { Modal } from '@/components/ui/Modal';
 import { MarkdownContent } from '@/components/ui/MarkdownContent';
 import { AgentToolCard } from './AgentToolCard';
 import { PrivateAttachmentPreview } from './PrivateAttachments';
+import { getAgentChart, getAgentUnrepresentedArtifacts, isAgentChartTool } from '@/lib/agent/tool-presentation';
 const ChartPreview = lazy(() => import('./AgentChartPreview').then(module => ({ default: module.AgentChartPreview })));
 
 const desktopQuery = '(min-width: 1280px)';
@@ -20,7 +21,7 @@ function subscribeToViewport(onChange: () => void) {
     return () => media.removeEventListener('change', onChange);
 }
 
-export function AgentWorkspacePanel({ artifacts, sources, data, historyTools, attachmentIds, onClose, workspaceKey }: {
+export function AgentWorkspacePanel({ artifacts, sources, data, historyTools, attachmentIds, onClose, workspaceKey, requestedResource }: {
     workspaceKey: string;
     artifacts: AgentArtifact[];
     sources: Extract<AgentPart, { type: 'source' }>[];
@@ -28,6 +29,7 @@ export function AgentWorkspacePanel({ artifacts, sources, data, historyTools, at
     historyTools: Extract<AgentPart, { type: 'tool' }>[];
     attachmentIds: string[];
     onClose: () => void;
+    requestedResource?: { id: string; version: number };
 }) {
     const desktop = useSyncExternalStore(subscribeToViewport,
         () => window.matchMedia(desktopQuery).matches, () => false);
@@ -39,19 +41,32 @@ export function AgentWorkspacePanel({ artifacts, sources, data, historyTools, at
         try { const saved = JSON.parse(sessionStorage.getItem(`taibu.workspace:${workspaceKey}`) ?? 'null'); return Array.isArray(saved?.tabs) ? saved.tabs.filter((id: unknown): id is string => typeof id === 'string').slice(0, 20) : []; } catch { return []; }
     });
     const [selected, setSelected] = useState<string | null>(() => {
+        if (requestedResource) return requestedResource.id;
         try { return JSON.parse(sessionStorage.getItem(`taibu.workspace:${workspaceKey}`) ?? 'null')?.selected ?? null; } catch { return null; }
     });
     const scrollRef = useRef<HTMLDivElement>(null);
     const tools = historyTools;
+    const charts = tools.filter(tool => tool.status === 'completed' && isAgentChartTool(tool.name));
+    const savedOnlyArtifacts = getAgentUnrepresentedArtifacts(tools, artifacts);
     const resources = [
-        ...artifacts.map(artifact => ({ id: `chart:${artifact.id}`, title: artifact.title, body: <Suspense fallback={<p>加载预览…</p>}><ChartPreview artifact={artifact} userId={workspaceKey.split(':')[0]} /></Suspense> })),
+        ...artifacts.map(artifact => ({ id: `chart:${artifact.id}`, title: artifact.title, body: <Suspense fallback={<p>加载预览…</p>}><ChartPreview artifact={artifact} tools={tools} /></Suspense> })),
         ...sources.map(source => ({ id: `source:${source.id}`, title: source.title || '来源', body: <><a href={source.url} target="_blank" rel="noopener noreferrer" className="agent-source-link">打开原始来源 <ArrowUpRight size={14} /></a><MarkdownContent content={source.content || '此来源未提供摘要。'} /></> })),
-        ...tools.map(tool => ({ id: `tool:${tool.id}`, title: tool.title, body: <AgentToolCard tool={tool} runStatus={data?.status ?? 'completed'} /> })),
+        ...tools.map(tool => ({ id: `tool:${tool.id}`, title: getAgentChart(tool)?.title ?? tool.title, body: <AgentToolCard tool={tool} runStatus={data?.status ?? 'completed'} fullResult /> })),
         ...attachmentIds.map((id, index) => ({ id: `attachment:${id}`, title: `资料 ${index + 1}`, body: <PrivateAttachmentPreview key={id} id={id} inline /> })),
     ];
     const visibleTabs = tabs.filter(id => resources.some(resource => resource.id === id));
     const activeResource = resources.find(resource => resource.id === selected);
     const openResource = (id: string) => { setTabs(current => current.includes(id) ? current : [...current.slice(-19), id]); setSelected(id); };
+    useEffect(() => {
+        if (!requestedResource) return;
+        let current = true;
+        queueMicrotask(() => {
+            if (!current) return;
+            setTabs(tabs => tabs.includes(requestedResource.id) ? tabs : [...tabs.slice(-19), requestedResource.id]);
+            setSelected(requestedResource.id);
+        });
+        return () => { current = false; };
+    }, [requestedResource]);
     useEffect(() => { try { sessionStorage.setItem(`taibu.workspace:${workspaceKey}`, JSON.stringify({ tabs, selected })); } catch { /* Storage may be unavailable. */ } }, [tabs, selected, workspaceKey]);
     useEffect(() => {
         const element = scrollRef.current;
@@ -70,7 +85,7 @@ export function AgentWorkspacePanel({ artifacts, sources, data, historyTools, at
             <button type="button" onClick={onClose} aria-label="关闭任务工作区" className="agent-icon-button"><X size={18} /></button>
         </div>
         <div className="agent-panel-tabs" role="group" aria-label="工作区内容">
-            <button type="button" aria-pressed={!activeResource && section === 'results'} onClick={() => { setSection('results'); setSelected(null); }}><Files size={14} />成果<span>{artifacts.length}</span></button>
+            <button type="button" aria-pressed={!activeResource && section === 'results'} onClick={() => { setSection('results'); setSelected(null); }}><Files size={14} />成果<span>{charts.length + savedOnlyArtifacts.length}</span></button>
             <button type="button" aria-pressed={!activeResource && section === 'activity'} onClick={() => { setSection('activity'); setSelected(null); }}><ListChecks size={14} />过程<span>{tools.length}</span></button>
         </div>
         {visibleTabs.length > 0 && <div className="agent-resource-tabs" role="tablist" aria-label="资源标签页">{visibleTabs.map((id, index) => {
@@ -88,9 +103,10 @@ export function AgentWorkspacePanel({ artifacts, sources, data, historyTools, at
         <div ref={scrollRef} className="agent-panel-scroll" role={activeResource ? 'tabpanel' : undefined} aria-label={activeResource?.title}>
             {activeResource ? activeResource.body : section === 'results' ? <>
                 <p className="agent-panel-description">本次对话的命盘与来源。分析和任务过程保留在聊天中。</p>
-                {artifacts.length ? <div className="agent-panel-artifacts">
-                    {artifacts.map(artifact => <div key={getAgentArtifactHref(artifact)}><AgentArtifactCard artifact={artifact} /><button type="button" className="agent-secondary-button mt-2" onClick={() => openResource(`chart:${artifact.id}`)}>预览命盘</button></div>)}
-                </div> : <div className="agent-panel-empty"><Files size={28} /><h3>还没有成果</h3><p>任务生成的命盘会显示在这里。</p></div>}
+                {charts.length > 0 && <div className="agent-panel-artifacts">{charts.map(tool => <button type="button" key={tool.id} className="agent-workspace-chart-link" onClick={() => openResource(`tool:${tool.id}`)}><span>{getAgentChart(tool)?.title ?? tool.title}</span><small>{getAgentChart(tool)?.summary ?? '查看工具返回内容'}</small><ArrowUpRight size={14} /></button>)}</div>}
+                {savedOnlyArtifacts.length ? <div className="agent-panel-artifacts">
+                    {savedOnlyArtifacts.map(artifact => <div key={getAgentArtifactHref(artifact)}><AgentArtifactCard artifact={artifact} /><button type="button" className="agent-secondary-button mt-2" onClick={() => openResource(`chart:${artifact.id}`)}>预览命盘</button></div>)}
+                </div> : !charts.length && <div className="agent-panel-empty"><Files size={28} /><h3>还没有成果</h3><p>任务生成的命盘会显示在这里。</p></div>}
                 {sources.length > 0 && <section className="agent-panel-sources">
                     <h3>参考来源 <span>{sources.length}</span></h3>
                     {sources.map(source => <button type="button" key={source.url} onClick={() => openResource(`source:${source.id}`)} className="agent-source-link py-2"><Globe size={14} /><span>{source.title || source.url}</span><ArrowUpRight size={12} /></button>)}

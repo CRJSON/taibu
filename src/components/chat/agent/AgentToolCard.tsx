@@ -6,6 +6,7 @@ import type { AgentRunStatus } from '@/lib/agent/types';
 import { MarkdownContent } from '@/components/ui/MarkdownContent';
 import { useToast } from '@/components/ui/Toast';
 import { formatAgentValue, getAgentToolState, summarizeAgentTool, type AgentTool } from './presentation';
+import { AgentToolResult } from './AgentToolResult';
 
 function ToolValue({ value }: { value: unknown }) {
     if (Array.isArray(value) && value.length > 0 && value.every(item => item?.type === 'text' && typeof item.text === 'string')) {
@@ -44,7 +45,7 @@ function ToolSection({ label, value }: { label: string; value: unknown }) {
     </section>;
 }
 
-export function AgentToolCard({ tool, runStatus }: { tool: AgentTool; runStatus: AgentRunStatus }) {
+export function AgentToolCard({ tool, runStatus, showResult = true, fullResult = false }: { tool: AgentTool; runStatus: AgentRunStatus; showResult?: boolean; fullResult?: boolean }) {
     const [expanded, setExpanded] = useState<boolean | null>(null);
     const state = getAgentToolState(tool, runStatus);
     const summary = summarizeAgentTool(tool);
@@ -53,7 +54,7 @@ export function AgentToolCard({ tool, runStatus }: { tool: AgentTool; runStatus:
     const Icon = state.status === 'running' ? LoaderCircle : state.status === 'failed' ? CircleAlert
         : state.status === 'completed' ? Check : ToolIcon;
     const open = expanded ?? state.status === 'failed';
-    return <details className={`agent-tool-card agent-tool-card--${state.status}`} open={open}>
+    return <div><details className={`agent-tool-card agent-tool-card--${state.status}`} open={open}>
         <summary onClick={event => { event.preventDefault(); setExpanded(!open); }}>
             <span className="agent-tool-indicator">
                 <Icon size={14} className={state.status === 'running' ? 'animate-spin motion-reduce:animate-none' : undefined} aria-hidden="true" />
@@ -67,5 +68,5 @@ export function AgentToolCard({ tool, runStatus }: { tool: AgentTool; runStatus:
             {tool.output !== undefined && <ToolSection label="工具结果" value={tool.output} />}
             {tool.input === undefined && tool.output === undefined && <p className="p-3 text-xs text-foreground-secondary">{state.status === 'running' ? '正在等待工具返回结果…' : '该步骤没有返回详情。'}</p>}
         </div>}
-    </details>;
+    </details>{showResult && <AgentToolResult tool={tool} full={fullResult} />}</div>;
 }

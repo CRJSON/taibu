@@ -21,7 +21,7 @@ function normalizeTraditionalYaoPositionLabel(position?: string): string | null 
     return normalized || null;
 }
 
-function parseTraditionalYaoPosition(position?: string): number | null {
+export function parseTraditionalYaoPosition(position?: string): number | null {
     const normalized = normalizeTraditionalYaoPositionLabel(position);
     if (!normalized) return null;
 

@@ -202,7 +202,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                             <button
                                 onClick={handleSaveEdit}
                                 disabled={editSaving || !editContent.trim()}
-                                className="flex items-center gap-1.5 px-4 py-1.5 rounded-md bg-accent text-white text-xs font-bold hover:bg-accent/90 active:bg-accent/80 transition-all duration-150"
+                                className="flex items-center gap-1.5 px-4 py-1.5 rounded-md bg-accent text-on-accent text-xs font-bold hover:bg-accent/90 active:bg-accent/80 transition-all duration-150"
                             >
                                 <Check className="w-3.5 h-3.5" />
                                 {editSaving ? '正在发送' : '发送'}
