@@ -250,7 +250,7 @@ export function DailyAIChat({ date, userId }: DailyAIChatProps) {
                     <button
                         onClick={handleSubmit}
                         disabled={!inputValue.trim() || isLoading || !userId}
-                        className="px-4 py-2.5 rounded-xl bg-accent text-white font-medium flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 transition-opacity"
+                        className="px-4 py-2.5 rounded-xl bg-accent text-on-accent font-medium flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 transition-opacity"
                     >
                         <Send className="w-4 h-4" />
                         提问

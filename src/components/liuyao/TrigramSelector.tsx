@@ -42,7 +42,7 @@ export function TrigramSelector({ label, value, onChange }: TrigramSelectorProps
                         onClick={() => onChange(t.code)}
                         className={`flex flex-col items-center gap-0.5 py-2 px-1 rounded-lg transition-all
                             ${value === t.code
-                                ? 'bg-accent text-white ring-2 ring-accent/50'
+                                ? 'bg-accent text-on-accent ring-2 ring-accent/50'
                                 : 'bg-background/5 border border-white/10 text-foreground hover:bg-background/10'
                             }`}
                     >

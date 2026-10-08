@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useUnsavedSettingsGuard } from '@/lib/hooks/useUnsavedSettingsGuard';
 import { Eye, EyeOff, Lock, Mail, RefreshCw } from 'lucide-react';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { sendOTP, verifyOTP } from '@/lib/auth';
@@ -25,6 +26,7 @@ export function PasswordSection({
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
     const [countdown, setCountdown] = useState(0);
+    useUnsavedSettingsGuard(!!verificationCode || !!newPassword || !!confirmPassword);
 
     // 倒计时效果
     useEffect(() => {
@@ -186,7 +188,7 @@ export function PasswordSection({
                         <button
                             onClick={handleSendCode}
                             disabled={loading}
-                            className="flex-1 py-2.5 rounded-lg bg-accent text-white font-medium hover:bg-accent/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                            className="flex-1 py-2.5 rounded-lg bg-accent text-on-accent font-medium hover:bg-accent/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                         >
                             {loading && <SoundWaveLoader variant="inline" />}
                             发送验证码
@@ -237,7 +239,7 @@ export function PasswordSection({
                         <button
                             onClick={handleVerifyCode}
                             disabled={loading || verificationCode.length !== 6}
-                            className="flex-1 py-2.5 rounded-lg bg-accent text-white font-medium hover:bg-accent/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                            className="flex-1 py-2.5 rounded-lg bg-accent text-on-accent font-medium hover:bg-accent/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                         >
                             {loading && <SoundWaveLoader variant="inline" />}
                             验证
@@ -321,7 +323,7 @@ export function PasswordSection({
                         <button
                             onClick={handleChangePassword}
                             disabled={loading || !newPassword || !confirmPassword}
-                            className="flex-1 py-2.5 rounded-lg bg-accent text-white font-medium hover:bg-accent/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                            className="flex-1 py-2.5 rounded-lg bg-accent text-on-accent font-medium hover:bg-accent/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                         >
                             {loading && <SoundWaveLoader variant="inline" />}
                             确认修改

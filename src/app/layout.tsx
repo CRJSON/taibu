@@ -18,9 +18,7 @@ import Loading from "./loading";
 import { ThemeProvider } from "@/components/ui/ThemeProvider";
 import { HeaderMenuProvider } from "@/components/layout/HeaderMenuContext";
 import { ConversationListProvider } from "@/lib/chat/ConversationListContext";
-import { Sidebar } from "@/components/layout/Sidebar";
-import { Header } from "@/components/layout/Header";
-import { MobileNav } from "@/components/layout/MobileNav";
+import { AppShell } from "@/components/layout/AppShell";
 import { ClientProviders } from "@/components/providers/ClientProviders";
 import { isSelfHosted } from "@/lib/runtime-env";
 import { Analytics } from "@vercel/analytics/react";
@@ -69,7 +67,7 @@ const themeInitScript = `
 
   const themeColorMetas = document.querySelectorAll('meta[name="theme-color"]');
   themeColorMetas.forEach((meta) => {
-    meta.setAttribute('content', theme === 'dark' ? '#0a0a0a' : '#f7f6f3');
+    meta.setAttribute('content', theme === 'dark' ? '#262624' : '#faf8f5');
   });
 })();
 `;
@@ -123,8 +121,8 @@ export const viewport: Viewport = {
   maximumScale: 1,
   viewportFit: "cover",
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f7f6f3" },
-    { media: "(prefers-color-scheme: dark)", color: "#0a0a0a" },
+    { media: "(prefers-color-scheme: light)", color: "#faf8f5" },
+    { media: "(prefers-color-scheme: dark)", color: "#262624" },
   ],
 };
 
@@ -151,29 +149,12 @@ export default function RootLayout({
           <ClientProviders>
             <ConversationListProvider>
               <HeaderMenuProvider>
-                <div className="flex min-h-screen">
-                  {/* 左侧导航栏 - 仅桌面端显示 */}
-                  <Sidebar />
-
-                  {/* 主内容区 */}
-                  <div className="flex-1 flex flex-col min-w-0 min-h-screen">
-                    {/* 顶部 Header 占位 - 仅移动端显示 */}
-                    <div className="lg:hidden h-[var(--mobile-header-height)] safe-top flex-shrink-0">
-                      <Header />
-                    </div>
-
-                    {/* 页面内容 */}
-                    <main className="flex-1 pb-20 lg:pb-0 overflow-x-hidden">
+                <AppShell>
                       {/* Give streamed route children their own hydration boundary. */}
                       <Suspense fallback={<Loading />}>
                         {children}
                       </Suspense>
-                    </main>
-                  </div>
-                </div>
-
-                {/* 移动端底部导航 - 仅移动端显示 */}
-                <MobileNav />
+                </AppShell>
                 <SettingsCenterHost />
             </HeaderMenuProvider>
           </ConversationListProvider>

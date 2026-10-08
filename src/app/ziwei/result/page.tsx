@@ -326,16 +326,16 @@ function ZiweiResultContent() {
     if (notFound) {
         return (
             <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4 text-center">
-                <p className="text-sm text-foreground/40 mb-6">未找到该命盘，请返回重新选择</p>
-                <SettingsCenterLink tab="charts" className="px-4 py-2 bg-[#2383e2] text-white text-sm font-medium rounded-md hover:bg-[#2383e2]/90 transition-colors">返回我的命盘</SettingsCenterLink>
+                <p className="text-sm text-foreground-secondary mb-6">未找到该命盘，请返回重新选择</p>
+                <SettingsCenterLink tab="charts" className="px-4 py-2 bg-accent text-on-accent text-sm font-medium rounded-md hover:bg-accent/90 transition-colors">返回我的命盘</SettingsCenterLink>
             </div>
         );
     }
     if (!resolvedFormData || loadError || !output || !astrolabe || !canonicalChart) {
         return (
             <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4 text-center">
-                <p className="text-sm text-foreground/40 mb-6">{loadError || '紫微斗数必须提供出生时辰，请返回重新输入'}</p>
-                <Link href="/ziwei" className="px-4 py-2 bg-[#2383e2] text-white text-sm font-medium rounded-md hover:bg-[#2383e2]/90 transition-colors">返回重新输入</Link>
+                <p className="text-sm text-foreground-secondary mb-6">{loadError || '紫微斗数必须提供出生时辰，请返回重新输入'}</p>
+                <Link href="/ziwei" className="px-4 py-2 bg-accent text-on-accent text-sm font-medium rounded-md hover:bg-accent/90 transition-colors">返回重新输入</Link>
             </div>
         );
     }
@@ -348,10 +348,10 @@ function ZiweiResultContent() {
             <div className="max-w-5xl mx-auto px-4 py-8 animate-fade-in space-y-8">
                 {/* 头部操作栏 */}
                 <div className="hidden md:flex items-center justify-between">
-                    <Link href="/ziwei" className="text-sm font-medium text-foreground/40 hover:text-foreground hover:bg-background-secondary px-2 py-1 rounded-md transition-colors">返回</Link>
+                    <Link href="/ziwei" className="text-sm font-medium text-foreground-secondary hover:text-foreground hover:bg-background-secondary px-2 py-1 rounded-md transition-colors">返回</Link>
                     <div className="flex items-center gap-2">
                         <button onClick={handleEdit} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium border border-border hover:bg-background-secondary transition-colors"><Edit3 className="w-3.5 h-3.5" />修改</button>
-                        <button onClick={handleSave} disabled={saving || saved} className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${saved ? 'text-[#0f7b6c] bg-[#0f7b6c]/5 border border-[#0f7b6c]/10' : 'bg-[#2383e2] text-white hover:bg-[#2383e2]/90'}`}>{saved ? <><Check className="w-3.5 h-3.5" />已保存</> : saving ? <><SoundWaveLoader variant="inline" />保存中</> : <><Save className="w-3.5 h-3.5" />保存</>}</button>
+                        <button onClick={handleSave} disabled={saving || saved} className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${saved ? 'text-success bg-success/5 border border-success/10' : 'bg-accent text-on-accent hover:bg-accent/90'}`}>{saved ? <><Check className="w-3.5 h-3.5" />已保存</> : saving ? <><SoundWaveLoader variant="inline" />保存中</> : <><Save className="w-3.5 h-3.5" />保存</>}</button>
                         <button onClick={handleShare} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium border border-border hover:bg-background-secondary transition-colors"><Share2 className="w-3.5 h-3.5" />分享</button>
                     </div>
                 </div>
@@ -367,29 +367,29 @@ function ZiweiResultContent() {
                             </span>
                         </div>
 
-                        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-foreground/60 lg:justify-end lg:min-w-0 lg:pl-6 lg:border-l lg:border-border/60">
+                        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-foreground-secondary lg:justify-end lg:min-w-0 lg:pl-6 lg:border-l lg:border-border/60">
                             <div className="flex items-center gap-1.5 min-w-0">
-                                <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-foreground/30 shrink-0">
+                                <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-foreground-secondary shrink-0">
                                     出生时间
                                 </span>
-                                <Clock className="w-3.5 h-3.5 text-foreground/35 shrink-0" />
+                                <Clock className="w-3.5 h-3.5 text-foreground-secondary shrink-0" />
                                 <span className="font-medium text-foreground/80 truncate">
                                     {displayFormData.birthYear}年{displayFormData.birthMonth}月{displayFormData.birthDay}日 {timeText}
                                 </span>
                                 {hourOffset !== 0 && (
-                                    <span className="text-xs font-medium text-[#2eaadc] shrink-0">
+                                    <span className="text-xs font-medium text-accent shrink-0">
                                         ({hourOffset > 0 ? '+' : ''}{hourOffset}h)
                                     </span>
                                 )}
                                 <div className="flex items-center bg-background-secondary rounded p-0.5 shrink-0">
                                     <button onClick={() => setHourOffset(prev => prev - 1)} className="p-0.5 hover:bg-background rounded transition-colors"><Minus className="w-3 h-3" /></button>
                                     <button onClick={() => setHourOffset(prev => prev + 1)} className="p-0.5 hover:bg-background rounded transition-colors"><Plus className="w-3 h-3" /></button>
-                                    {hourOffset !== 0 && <button onClick={() => setHourOffset(0)} className="px-1 text-[10px] font-bold text-foreground/40 hover:text-foreground">RESET</button>}
+                                    {hourOffset !== 0 && <button onClick={() => setHourOffset(0)} className="px-1 text-[10px] font-bold text-foreground-secondary hover:text-foreground">RESET</button>}
                                 </div>
                             </div>
 
                             <div className="flex items-center gap-1.5 min-w-0">
-                                <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-foreground/30 shrink-0">
+                                <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-foreground-secondary shrink-0">
                                     农历
                                 </span>
                                 <span className="font-medium text-foreground/80 truncate">{canonicalChart.基本信息.农历}</span>
@@ -397,7 +397,7 @@ function ZiweiResultContent() {
 
                             {trueSolarTimeText && (
                                 <div className="flex items-center gap-1.5 min-w-0">
-                                    <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-foreground/30 shrink-0">
+                                    <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-foreground-secondary shrink-0">
                                         真太阳时
                                     </span>
                                     <span className="font-medium text-foreground/80 truncate">{trueSolarTimeText}</span>
@@ -406,10 +406,10 @@ function ZiweiResultContent() {
 
                             {resolvedFormData.birthPlace && (
                                 <div className="flex items-center gap-1.5 min-w-0">
-                                    <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-foreground/30 shrink-0">
+                                    <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-foreground-secondary shrink-0">
                                         出生地点
                                     </span>
-                                    <MapPinned className="w-3.5 h-3.5 text-foreground/35 shrink-0" />
+                                    <MapPinned className="w-3.5 h-3.5 text-foreground-secondary shrink-0" />
                                     <span className="font-medium text-foreground/80 truncate">{resolvedFormData.birthPlace}</span>
                                 </div>
                             )}
@@ -439,7 +439,7 @@ function ZiweiResultContent() {
                 />
 
                 <footer className="py-12 text-center">
-                    <p className="text-[11px] text-foreground/30 font-medium italic">* 点击命盘宫位可查看三方四正与详细分析</p>
+                    <p className="text-[11px] text-foreground-secondary font-medium italic">* 点击命盘宫位可查看三方四正与详细分析</p>
                 </footer>
             </div>
 

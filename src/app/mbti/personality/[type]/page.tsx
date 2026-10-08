@@ -118,7 +118,7 @@ export default function PersonalityPage() {
                 <div className="text-center mt-10">
                     <Link
                         href="/mbti"
-                        className="inline-flex items-center gap-2 px-6 py-3 bg-accent text-white rounded-lg
+                        className="inline-flex items-center gap-2 px-6 py-3 bg-accent text-on-accent rounded-lg
                             hover:bg-accent/90 transition-all"
                     >
                         开始 MBTI 测试

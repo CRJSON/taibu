@@ -128,8 +128,8 @@ export function CanonicalAISection({
   return (
     <section className="bg-background border border-border rounded-md p-5 sm:p-6 space-y-6">
       <div className="flex items-center justify-between gap-3 border-b border-border/60 pb-4">
-        <h2 className="text-sm font-bold flex items-center gap-2 tracking-wider text-foreground/60">
-          <Brain className="w-4 h-4 text-[#2eaadc]" />
+        <h2 className="text-sm font-bold flex items-center gap-2 tracking-wider text-foreground-secondary">
+          <Brain className="w-4 h-4 text-accent" />
           AI 深度解读
         </h2>
         <div className="flex items-center gap-2">
@@ -158,7 +158,7 @@ export function CanonicalAISection({
         </div>
       </div>
 
-      {error && <div className="p-3 bg-red-50 text-[#eb5757] text-xs rounded-md border border-red-100">{error}</div>}
+      {error && <div className="p-3 bg-red-50 text-danger text-xs rounded-md border border-red-100">{error}</div>}
 
       {content ? (
         <div className="prose prose-sm max-w-none">
@@ -173,7 +173,7 @@ export function CanonicalAISection({
             <button
               type="button"
               onClick={() => setShowAuthModal(true)}
-              className="px-6 py-2.5 bg-[#2383e2] text-white text-sm font-bold rounded-md hover:bg-[#2383e2]/90 active:bg-[#1a65b0] transition-colors"
+              className="px-6 py-2.5 bg-accent text-on-accent text-sm font-bold rounded-md hover:bg-accent/90 active:bg-accent-hover transition-colors"
             >
               登录解锁 AI 解读
             </button>
@@ -182,7 +182,7 @@ export function CanonicalAISection({
               type="button"
               onClick={handleInterpret}
               disabled={membershipPending || streaming.isStreaming}
-              className="inline-flex items-center gap-2 px-6 py-2.5 bg-[#2383e2] text-white text-sm font-bold rounded-md hover:bg-[#2383e2]/90 active:bg-[#1a65b0] transition-colors disabled:opacity-50"
+              className="inline-flex items-center gap-2 px-6 py-2.5 bg-accent text-on-accent text-sm font-bold rounded-md hover:bg-accent/90 active:bg-accent-hover transition-colors disabled:opacity-50"
             >
               <Sparkles className="w-4 h-4" />
               获取 AI 解读

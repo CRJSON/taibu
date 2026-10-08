@@ -121,11 +121,11 @@ export function CreditTransactionsPanel({ pageSize = 5, refreshKey = 0 }: Credit
   }
 
   return (
-    <section className="overflow-hidden rounded-lg border border-[#ebe8e2] bg-[#f7f6f3]">
-      <div className="border-b border-[#ebe8e2] px-4 py-3">
+    <section className="overflow-hidden rounded-lg border border-border bg-background">
+      <div className="border-b border-border px-4 py-3">
         <div className="flex items-center justify-between gap-4">
-          <h2 className="text-sm font-medium text-[#37352f]">积分记录</h2>
-          <div className="text-xs text-[#37352f]/48">今日消耗 {todaySpent}</div>
+          <h2 className="text-sm font-medium text-foreground">积分记录</h2>
+          <div className="text-xs text-foreground/48">今日消耗 {todaySpent}</div>
         </div>
       </div>
 
@@ -134,7 +134,7 @@ export function CreditTransactionsPanel({ pageSize = 5, refreshKey = 0 }: Credit
           {Array.from({ length: Math.min(pageSize, 5) }).map((_, index) => (
             <div
               key={index}
-              className={`h-16 bg-[#37352f]/5 animate-pulse ${index > 0 ? 'border-t border-[#ebe8e2]' : ''}`}
+              className={`h-16 bg-foreground/5 animate-pulse ${index > 0 ? 'border-t border-border' : ''}`}
             />
           ))}
         </div>
@@ -148,15 +148,15 @@ export function CreditTransactionsPanel({ pageSize = 5, refreshKey = 0 }: Credit
             {transactions.map((item, index) => (
               <article
                 key={item.id}
-                className={`px-4 py-3 transition-colors duration-150 hover:bg-[#efedea] ${index > 0 ? 'border-t border-[#ebe8e2]' : ''}`}
+                className={`px-4 py-3 transition-colors duration-150 hover:bg-background-secondary ${index > 0 ? 'border-t border-border' : ''}`}
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
-                      <span className="truncate font-medium text-[#37352f]">
+                      <span className="truncate font-medium text-foreground">
                         {item.description || SOURCE_LABELS[item.source] || item.source}
                       </span>
-                      <span className="text-xs text-[#37352f]/48">
+                      <span className="text-xs text-foreground/48">
                         {formatDate(item.created_at)}
                       </span>
                     </div>
@@ -170,11 +170,11 @@ export function CreditTransactionsPanel({ pageSize = 5, refreshKey = 0 }: Credit
           </div>
 
           {hasMore ? (
-            <div className="border-t border-[#ebe8e2] px-4 py-3">
+            <div className="border-t border-border px-4 py-3">
               <button
                 type="button"
                 onClick={() => setVisibleCount((count) => count + pageSize)}
-                className="text-sm font-medium text-[#37352f]/68 transition-colors duration-150 hover:text-[#37352f]"
+                className="text-sm font-medium text-foreground/68 transition-colors duration-150 hover:text-foreground"
               >
                 查看更多
               </button>
@@ -182,7 +182,7 @@ export function CreditTransactionsPanel({ pageSize = 5, refreshKey = 0 }: Credit
           ) : null}
         </>
       ) : (
-        <div className="px-4 py-8 text-sm text-[#37352f]/55">
+        <div className="px-4 py-8 text-sm text-foreground-secondary">
           暂无积分记录。
         </div>
       )}

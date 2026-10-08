@@ -100,7 +100,7 @@ export default function ChatPage() {
                         <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-[#f4ead3] text-[#946c21]">
                             <RefreshCw className="h-5 w-5" />
                         </div>
-                        <h2 className="text-lg font-semibold text-[#37352f]">加载对话上下文失败</h2>
+                        <h2 className="text-lg font-semibold text-foreground">加载对话上下文失败</h2>
                         <p className="mt-2 text-sm text-[#6b665c]">{bootstrapErrorMessage}</p>
                         <button
                             type="button"
@@ -108,7 +108,7 @@ export default function ChatPage() {
                                 refreshBootstrap(),
                                 appBootstrap.refresh(),
                             ])}
-                            className="mt-5 inline-flex items-center gap-2 rounded-xl bg-[#efedea] px-4 py-2 text-sm font-medium text-[#37352f] transition-colors hover:bg-[#e7e4de]"
+                            className="mt-5 inline-flex items-center gap-2 rounded-xl bg-background-secondary px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-background-secondary"
                         >
                             <RefreshCw className="h-4 w-4" />
                             重新加载

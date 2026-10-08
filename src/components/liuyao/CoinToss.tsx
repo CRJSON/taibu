@@ -349,7 +349,7 @@ export function CoinToss({ onComplete, disabled = false }: CoinTossProps) {
                             onClick={goToNextAndToss}
                             disabled={isAnimating}
                             data-shake-next
-                            className="flex items-center gap-2 px-6 py-3 bg-accent text-white rounded-lg
+                            className="flex items-center gap-2 px-6 py-3 bg-accent text-on-accent rounded-lg
                                 hover:bg-accent/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                         >
                             <Coins className="w-5 h-5" />
@@ -361,7 +361,7 @@ export function CoinToss({ onComplete, disabled = false }: CoinTossProps) {
                             onClick={toss}
                             disabled={isAnimating || disabled}
                             data-shake-toss
-                            className="flex items-center gap-2 px-6 py-3 bg-accent text-white rounded-lg
+                            className="flex items-center gap-2 px-6 py-3 bg-accent text-on-accent rounded-lg
                                 hover:bg-accent/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                         >
                             <Coins className={`w-5 h-5 ${isAnimating ? 'animate-bounce' : ''}`} />

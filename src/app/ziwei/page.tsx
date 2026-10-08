@@ -177,7 +177,7 @@ function ZiweiPageContent() {
                 {/* 页面标题 - 移动端隐藏（顶栏已显示） */}
                 <div className="hidden md:block text-center mb-8">
                     <h1 className="text-2xl lg:text-3xl font-bold">紫微斗数排盘</h1>
-                    <p className="text-foreground/60 mt-2">
+                    <p className="text-foreground-secondary mt-2">
                         请填写您的出生信息，我们将为您生成紫微斗数命盘
                     </p>
                 </div>
@@ -192,13 +192,13 @@ function ZiweiPageContent() {
                     />
 
                     {requiresBirthTimeConfirmation && (
-                        <div className="rounded-md border border-[#dfab01]/15 bg-[#dfab01]/5 px-4 py-3 text-sm text-[#dfab01]">
+                        <div className="rounded-md border border-warning/15 bg-warning/5 px-4 py-3 text-sm text-warning">
                             检测到旧链接或非法参数未提供有效出生时辰。其他信息已恢复，请先明确选择出生时辰后再排盘。
                         </div>
                     )}
 
                     {/* 提示信息 */}
-                    <p className="text-center text-xs text-foreground/50">
+                    <p className="text-center text-xs text-foreground-secondary">
                         紫微斗数必须提供出生时辰，请尽量填写准确时间以获得可靠命盘
                     </p>
                 </div>

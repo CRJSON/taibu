@@ -36,7 +36,7 @@ export function ResultHeader({
         <div className="hidden md:flex items-center justify-between mb-6">
             <Link
                 href="/bazi"
-                className="text-sm font-medium text-foreground/40 hover:text-foreground hover:bg-background-secondary px-2 py-1 rounded-md transition-colors"
+                className="text-sm font-medium text-foreground-secondary hover:text-foreground hover:bg-background-secondary px-2 py-1 rounded-md transition-colors"
             >
                 返回
             </Link>
@@ -55,8 +55,8 @@ export function ResultHeader({
                     className={`
                         inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors
                         ${saved
-                            ? 'text-[#0f7b6c] bg-[#0f7b6c]/5 border border-[#0f7b6c]/10'
-                            : 'bg-[#2383e2] text-white hover:bg-[#2383e2]/90 disabled:opacity-50'
+                            ? 'text-success bg-success/5 border border-success/10'
+                            : 'bg-accent text-on-accent hover:bg-accent/90 disabled:opacity-50'
                         }
                     `}
                 >
@@ -72,7 +72,7 @@ export function ResultHeader({
                     onClick={onCopy}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium border border-border hover:bg-background-secondary transition-colors"
                 >
-                    {copied ? <Check className="w-3.5 h-3.5 text-[#0f7b6c]" /> : <Copy className="w-3.5 h-3.5" />}
+                    {copied ? <Check className="w-3.5 h-3.5 text-success" /> : <Copy className="w-3.5 h-3.5" />}
                     {copied ? '已复制' : '复制'}
                 </button>
                 {showJsonCopy && onCopyJson && (
@@ -80,7 +80,7 @@ export function ResultHeader({
                         onClick={onCopyJson}
                         className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium border border-border hover:bg-background-secondary transition-colors"
                     >
-                        {jsonCopied ? <Check className="w-3.5 h-3.5 text-[#0f7b6c]" /> : <Copy className="w-3.5 h-3.5" />}
+                        {jsonCopied ? <Check className="w-3.5 h-3.5 text-success" /> : <Copy className="w-3.5 h-3.5" />}
                         {jsonCopied ? 'JSON 已复制' : '复制 JSON'}
                     </button>
                 )}

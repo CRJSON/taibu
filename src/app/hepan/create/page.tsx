@@ -35,7 +35,7 @@ function BirthInput({
 }) {
     const theme = {
         love: { active: 'focus:border-rose-500', ring: 'focus:ring-rose-500/20', text: 'text-rose-500', bg: 'bg-rose-500' },
-        business: { active: 'focus:border-blue-500', ring: 'focus:ring-blue-500/20', text: 'text-blue-500', bg: 'bg-blue-500' },
+        business: { active: 'focus:border-accent', ring: 'focus:ring-accent/20', text: 'text-blue-500', bg: 'bg-blue-500' },
         family: { active: 'focus:border-emerald-500', ring: 'focus:ring-emerald-500/20', text: 'text-emerald-500', bg: 'bg-emerald-500' },
     }[type];
 

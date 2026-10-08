@@ -43,7 +43,7 @@ export function LoginOverlay({ children, message = '登录后查看完整内容'
             </p>
             <button
                 onClick={() => setShowAuthModal(true)}
-                className="inline-flex items-center gap-2 px-6 py-2.5 rounded-lg bg-accent text-white font-medium hover:bg-accent/90 transition-colors"
+                className="inline-flex items-center gap-2 px-6 py-2.5 rounded-lg bg-accent text-on-accent font-medium hover:bg-accent/90 transition-colors"
             >
                 <LogIn className="w-4 h-4" />
                 立即登录

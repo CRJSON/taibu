@@ -81,7 +81,7 @@ export function AIModelSources({ model, isUpdating, availableGatewayOptions, isA
                                     <div className="flex items-center gap-2 flex-wrap">
                                         <span className="font-medium text-sm">{source.sourceName}</span>
                                         {source.isActive && (
-                                            <span className="text-xs bg-accent text-white px-2 py-0.5 rounded-full">
+                                            <span className="text-xs bg-accent text-on-accent px-2 py-0.5 rounded-full">
                                                 首选
                                             </span>
                                         )}
@@ -311,7 +311,7 @@ export function AIModelSources({ model, isUpdating, availableGatewayOptions, isA
                                 type="button"
                                 onClick={() => addSource(model.id, model.modelKey)}
                                 disabled={isUpdating}
-                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm bg-accent text-white hover:bg-accent/90 disabled:opacity-50"
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm bg-accent text-on-accent hover:bg-accent/90 disabled:opacity-50"
                             >
                                 {isUpdating ? <SoundWaveLoader variant="inline" /> : <Save className="w-3.5 h-3.5" />}
                                 保存

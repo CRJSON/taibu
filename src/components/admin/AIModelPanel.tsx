@@ -22,6 +22,7 @@ import { requestBrowserData } from '@/lib/browser-api';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { useToast } from '@/components/ui/Toast';
+import { useUnsavedSettingsGuard } from '@/lib/hooks/useUnsavedSettingsGuard';
 import { getVendorIcon } from '@/lib/ai/vendor-config';
 import { getVendorName } from '@/lib/ai/vendor-labels';
 import { AIModelCreateForm } from '@/components/admin/AIModelCreateForm';
@@ -52,6 +53,7 @@ export function AIModelPanel() {
     const [addingToModel, setAddingToModel] = useState<string | null>(null);
     const [editingSourceId, setEditingSourceId] = useState<string | null>(null);
     const [editingDraft, setEditingDraft] = useState<SourceDraft | null>(null);
+    const [sourceBaseline, setSourceBaseline] = useState<SourceDraft | null>(null);
     const [deleteTarget, setDeleteTarget] = useState<{ modelId: string; sourceId: string } | null>(null);
     const [deleteModelTarget, setDeleteModelTarget] = useState<{ modelId: string; displayName: string } | null>(null);
     const { showToast } = useToast();
@@ -64,6 +66,13 @@ export function AIModelPanel() {
     const resetNewModel = () => {
         setNewModel(createInitialNewModel());
     };
+
+    useUnsavedSettingsGuard(
+        JSON.stringify(newModel) !== JSON.stringify(createInitialNewModel())
+        || JSON.stringify(newSource) !== JSON.stringify({ sourceKey: 'newapi', ...createInitialSourceDraft() })
+        || models.some(model => modelDrafts[model.id] && JSON.stringify(modelDrafts[model.id]) !== JSON.stringify(createEditModelDraft(model)))
+        || !!editingDraft && JSON.stringify(editingDraft) !== JSON.stringify(sourceBaseline),
+    );
 
     const resetNewSource = () => {
         setNewSource({
@@ -252,13 +261,15 @@ export function AIModelPanel() {
 
     const beginEditSource = (source: ModelSource, modelKey: string) => {
         setEditingSourceId(source.id);
-        setEditingDraft({
+        const draft = {
             modelIdOverride: normalizeSourceModelIdInput(source.modelIdOverride || '', modelKey) || '',
             reasoningModelId: source.reasoningModelId || '',
             priority: source.priority,
             isEnabled: source.isEnabled,
             notes: source.notes || '',
-        });
+        };
+        setEditingDraft(draft);
+        setSourceBaseline(draft);
     };
 
     const saveSource = async (modelId: string, sourceId: string, modelKey: string) => {
@@ -389,7 +400,7 @@ export function AIModelPanel() {
                 <p className="text-red-500 mb-4">{error}</p>
                 <button
                     onClick={loadModels}
-                    className="px-4 py-2 rounded-lg bg-accent text-white hover:bg-accent/90"
+                    className="px-4 py-2 rounded-lg bg-accent text-on-accent hover:bg-accent/90"
                 >
                     重试
                 </button>
@@ -407,7 +418,7 @@ export function AIModelPanel() {
                 <div className="flex gap-2">
                     <button
                         onClick={() => setShowCreateForm((value) => !value)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm bg-accent text-white hover:bg-accent/90 transition-colors"
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm bg-accent text-on-accent hover:bg-accent/90 transition-colors"
                     >
                         <Plus className="w-3.5 h-3.5" />
                         新增模型

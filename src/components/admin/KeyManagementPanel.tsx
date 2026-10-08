@@ -6,6 +6,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useUnsavedSettingsGuard } from '@/lib/hooks/useUnsavedSettingsGuard';
 import {
     Plus,
     Copy,
@@ -49,6 +50,7 @@ export function KeyManagementPanel() {
     const [createType, setCreateType] = useState<CreateKeyType>('plus');
     const [createCount, setCreateCount] = useState(1);
     const [creditsAmount, setCreditsAmount] = useState(10);
+    useUnsavedSettingsGuard(showCreateForm && (createType !== 'plus' || createCount !== 1 || creditsAmount !== 10));
 
     // 筛选
     const [filterUsed, setFilterUsed] = useState<boolean | null>(null);
@@ -183,7 +185,7 @@ export function KeyManagementPanel() {
                 </div>
                 <button
                     onClick={() => setShowCreateForm(!showCreateForm)}
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-accent text-white text-sm font-medium hover:bg-accent/90 transition-colors"
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-accent text-on-accent text-sm font-medium hover:bg-accent/90 transition-colors"
                 >
                     <Plus className="w-4 h-4" />
                     批量创建
@@ -247,7 +249,7 @@ export function KeyManagementPanel() {
                         <button
                             onClick={handleCreate}
                             disabled={creating}
-                            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-accent text-white text-sm font-medium hover:bg-accent/90 transition-colors disabled:opacity-50"
+                            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-accent text-on-accent text-sm font-medium hover:bg-accent/90 transition-colors disabled:opacity-50"
                         >
                             {creating && <SoundWaveLoader variant="inline" />}
                             创建
@@ -261,21 +263,21 @@ export function KeyManagementPanel() {
                 <Filter className="w-4 h-4 text-foreground-secondary" />
                 <button
                     onClick={() => setFilterUsed(null)}
-                    className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${filterUsed === null ? 'bg-accent text-white' : 'bg-background-secondary hover:bg-background-secondary/80'
+                    className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${filterUsed === null ? 'bg-accent text-on-accent' : 'bg-background-secondary hover:bg-background-secondary/80'
                         }`}
                 >
                     全部
                 </button>
                 <button
                     onClick={() => setFilterUsed(false)}
-                    className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${filterUsed === false ? 'bg-accent text-white' : 'bg-background-secondary hover:bg-background-secondary/80'
+                    className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${filterUsed === false ? 'bg-accent text-on-accent' : 'bg-background-secondary hover:bg-background-secondary/80'
                         }`}
                 >
                     未使用
                 </button>
                 <button
                     onClick={() => setFilterUsed(true)}
-                    className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${filterUsed === true ? 'bg-accent text-white' : 'bg-background-secondary hover:bg-background-secondary/80'
+                    className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${filterUsed === true ? 'bg-accent text-on-accent' : 'bg-background-secondary hover:bg-background-secondary/80'
                         }`}
                 >
                     已使用

@@ -60,7 +60,7 @@ export default function TarotPage() {
                 {/* 页面标题 - 移动端隐藏（顶栏已显示） */}
                 <div className="hidden md:block text-center py-8">
                     <h1 className="text-2xl lg:text-3xl font-bold">塔罗占卜</h1>
-                    <p className="text-foreground/60 mt-2">聆听内心的声音，探索命运的指引</p>
+                    <p className="text-foreground-secondary mt-2">聆听内心的声音，探索命运的指引</p>
                 </div>
 
                 <div className="max-w-4xl mx-auto px-4 mt-4">
@@ -100,7 +100,7 @@ export default function TarotPage() {
                                             : dailyCard.card.uprightMeaning}
                                     </p>
 
-                                    <div className="text-[10px] md:text-xs text-foreground/40">
+                                    <div className="text-[10px] md:text-xs text-foreground-secondary">
                                         * 每日自动抽取，为您提供当天的运势指引
                                     </div>
                                 </div>
@@ -110,7 +110,7 @@ export default function TarotPage() {
 
                     {/* 问题输入 */}
                     <div className="mb-6 md:mb-10 text-center max-w-2xl mx-auto">
-                        <label className="block text-sm font-medium text-foreground/60 mb-3 uppercase tracking-wider">
+                        <label className="block text-sm font-medium text-foreground-secondary mb-3 uppercase tracking-wider">
                             心中默念您的问题（选填）
                         </label>
                         <div className="relative group">
@@ -119,15 +119,15 @@ export default function TarotPage() {
                                 value={question}
                                 onChange={(e) => setQuestion(e.target.value)}
                                 placeholder="例如：我的事业发展会如何？"
-                                className="relative w-full px-4 md:px-6 py-3 md:py-4 bg-background rounded-lg border border-border shadow-sm 
-                                    focus:border-[#2383e2] focus:ring-2 focus:ring-[#2383e2]/10 focus:outline-none 
-                                    text-center text-base md:text-lg text-foreground placeholder:text-foreground/30
+                                className="relative w-full px-4 md:px-6 py-3 md:py-4 bg-background rounded-lg border border-border shadow-sm
+                                    focus:border-accent focus:ring-2 focus:ring-accent/10 focus:outline-none
+                                    text-center text-base md:text-lg text-foreground placeholder:text-foreground-secondary
                                     transition-all duration-150"
                             />
                         </div>
 
                         <div className="mt-4">
-                            <label className="block text-sm font-medium text-foreground/60 mb-3 uppercase tracking-wider">
+                            <label className="block text-sm font-medium text-foreground-secondary mb-3 uppercase tracking-wider">
                                 出生日期（选填，用于塔罗数秘术）
                             </label>
                             <div className="relative group">
@@ -135,7 +135,7 @@ export default function TarotPage() {
                                     type="date"
                                     value={birthDate}
                                     onChange={(e) => setBirthDate(e.target.value)}
-                                    className="relative w-full px-4 md:px-6 py-3 md:py-4 bg-background rounded-lg border border-border shadow-sm focus:border-[#2383e2] focus:ring-2 focus:ring-[#2383e2]/10 focus:outline-none text-center text-base md:text-lg text-foreground transition-all duration-150"
+                                    className="relative w-full px-4 md:px-6 py-3 md:py-4 bg-background rounded-lg border border-border shadow-sm focus:border-accent focus:ring-2 focus:ring-accent/10 focus:outline-none text-center text-base md:text-lg text-foreground transition-all duration-150"
                                 />
                             </div>
                         </div>
@@ -145,7 +145,7 @@ export default function TarotPage() {
                     <div>
                         <div className="flex items-center justify-between mb-4 md:mb-6">
                             <h2 className="text-lg md:text-xl font-bold flex items-center gap-2">
-                                <Layers className="w-5 h-5 text-[#2383e2]" />
+                                <Layers className="w-5 h-5 text-accent" />
                                 选择牌阵开始占卜
                             </h2>
                         </div>
@@ -159,23 +159,23 @@ export default function TarotPage() {
                                 >
                                     <div className="relative z-10 w-full">
                                         <div className="flex items-center justify-between mb-2 md:mb-3">
-                                            <span className="inline-flex items-center justify-center w-8 h-8 md:w-10 md:h-10 rounded-md bg-background text-foreground/70 group-hover:bg-[#2383e2] group-hover:text-white transition-colors duration-150">
+                                            <span className="inline-flex items-center justify-center w-8 h-8 md:w-10 md:h-10 rounded-md bg-background text-foreground/70 group-hover:bg-accent group-hover:text-on-accent transition-colors duration-150">
                                                 <Layers className="w-4 h-4 md:w-5 md:h-5" />
                                             </span>
-                                            <span className="text-[10px] md:text-xs font-bold text-foreground/50 bg-background px-2 md:px-2.5 py-0.5 md:py-1 rounded-md uppercase tracking-wider group-hover:bg-background group-hover:text-[#2383e2] transition-colors">
+                                            <span className="text-[10px] md:text-xs font-bold text-foreground-secondary bg-background px-2 md:px-2.5 py-0.5 md:py-1 rounded-md uppercase tracking-wider group-hover:bg-background group-hover:text-accent transition-colors">
                                                 {spread.cardCount} 张牌
                                             </span>
                                         </div>
 
-                                        <h3 className="text-base md:text-lg font-bold mb-1 md:mb-2 group-hover:text-[#2383e2] transition-colors line-clamp-1">
+                                        <h3 className="text-base md:text-lg font-bold mb-1 md:mb-2 group-hover:text-accent transition-colors line-clamp-1">
                                             {spread.name}
                                         </h3>
 
-                                        <p className="text-xs md:text-sm text-foreground/60 leading-relaxed line-clamp-2 mb-2 md:mb-4 h-8 md:h-10">
+                                        <p className="text-xs md:text-sm text-foreground-secondary leading-relaxed line-clamp-2 mb-2 md:mb-4 h-8 md:h-10">
                                             {spread.description}
                                         </p>
 
-                                        <div className="flex items-center text-[10px] md:text-xs font-bold text-[#2383e2] mt-auto">
+                                        <div className="flex items-center text-[10px] md:text-xs font-bold text-accent mt-auto">
                                             开始占卜 <ChevronRight className="w-3 h-3 ml-1" />
                                         </div>
                                     </div>

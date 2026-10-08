@@ -67,13 +67,13 @@ export function QuestionCard({
             {/* 进度条（可选） */}
             {showProgress && (
                 <div className="mb-6">
-                    <div className="flex justify-between text-[11px] font-bold uppercase tracking-wider text-foreground/40 mb-2">
+                    <div className="flex justify-between text-[11px] font-bold uppercase tracking-wider text-foreground-secondary mb-2">
                         <span>问题 {questionNumber}/{totalQuestions}</span>
                         <span>{Math.round((questionNumber / totalQuestions) * 100)}%</span>
                     </div>
                     <div className="h-1 bg-background-secondary rounded-full overflow-hidden">
                         <div
-                            className="h-full bg-[#2383e2] transition-all duration-300"
+                            className="h-full bg-accent transition-all duration-300"
                             style={{ width: `${(questionNumber / totalQuestions) * 100}%` }}
                         />
                     </div>
@@ -81,7 +81,7 @@ export function QuestionCard({
             )}
 
             {/* 题号 */}
-            <div className="text-[11px] font-bold uppercase tracking-widest text-[#2383e2] mb-3">QUESTION {questionNumber}</div>
+            <div className="text-[11px] font-bold uppercase tracking-widest text-accent mb-3">QUESTION {questionNumber}</div>
 
             {/* 问题 */}
             <div className="bg-background rounded-md p-5 mb-8 border border-border/60">
@@ -102,7 +102,7 @@ export function QuestionCard({
                             <button
                                 key={value}
                                 onClick={() => onAnswer(value)}
-                                className={`transition-all duration-150 rounded-full border-2 ${isSelected ? '' : 'hover:border-[#37352f]/30'}`}
+                                className={`transition-all duration-150 rounded-full border-2 ${isSelected ? '' : 'hover:border-foreground/30'}`}
                                 style={{
                                     width: size,
                                     height: size,
@@ -118,7 +118,7 @@ export function QuestionCard({
                 {/* 选项文字说明 - 使用实际选项文字 */}
                 <div className="flex justify-between gap-4">
                     <div className="flex-1 text-left">
-                        <p className="text-xs font-bold text-[#0f7b6c] px-1 line-clamp-2 uppercase tracking-tight">
+                        <p className="text-xs font-bold text-success px-1 line-clamp-2 uppercase tracking-tight">
                             {question.choice_a.text}
                         </p>
                     </div>

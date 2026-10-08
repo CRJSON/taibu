@@ -26,12 +26,12 @@ export function LiuRiTable({
                             className={`
                                 flex-shrink-0 w-12 text-center p-2 rounded-md border transition-colors
                                 ${isSelected
-                                    ? 'border-[#2eaadc] bg-blue-50/30'
+                                    ? 'border-accent bg-blue-50/30'
                                     : 'border-border bg-background hover:bg-background-secondary'
                                 }
                             `}
                         >
-                            <div className="text-[10px] font-mono text-foreground/40 mb-1.5 leading-none">
+                            <div className="text-[10px] font-mono text-foreground-secondary mb-1.5 leading-none">
                                 {ri.date.split('-')[1]}/{ri.date.split('-')[2]}
                             </div>
                             <div className="flex flex-col items-center gap-0.5">

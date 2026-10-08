@@ -208,7 +208,7 @@ function DailyPageContent() {
                                 <button
                                     type="button"
                                     onClick={() => setShowChartSelector(true)}
-                                    className="rounded-md bg-[#2383e2] px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-[#1d70c7]"
+                                    className="rounded-md bg-accent px-3 py-2 text-sm font-medium text-on-accent transition-colors hover:bg-[#1d70c7]"
                                 >
                                     重新选择命盘
                                 </button>
@@ -234,7 +234,7 @@ function DailyPageContent() {
                         <div className="bg-background border border-border rounded-lg p-6 max-w-md w-full shadow-md">
                             <div className="flex items-center justify-between mb-6">
                                 <h2 className="text-sm font-semibold flex items-center gap-2">
-                                    <Share2 className="w-4 h-4 text-[#2eaadc]" />
+                                    <Share2 className="w-4 h-4 text-accent" />
                                     分享运势
                                 </h2>
                                 <button
@@ -287,7 +287,7 @@ function DailyPageContent() {
                                         multiDimension={false}
                                         title={
                                             <div className="flex items-center gap-2 text-sm font-semibold">
-                                                <Activity className="w-4 h-4 text-[#2eaadc]" />
+                                                <Activity className="w-4 h-4 text-accent" />
                                                 7日运势趋势
                                             </div>
                                         }
@@ -304,7 +304,7 @@ function DailyPageContent() {
                                         运势分析
                                     </h2>
                                     {fortune.dayStem && fortune.dayBranch && (
-                                        <span className="text-[11px] text-foreground/40 uppercase tracking-wider">
+                                        <span className="text-[11px] text-foreground-secondary uppercase tracking-wider">
                                             日干支：{fortune.dayStem}{fortune.dayBranch}
                                         </span>
                                     )}
@@ -334,15 +334,15 @@ function DailyPageContent() {
                                                     <Icon className={`w-3.5 h-3.5 ${item.color}`} />
                                                     <span className="text-xs font-medium text-foreground/80">{item.label}</span>
                                                 </div>
-                                                <span className={`text-xs font-semibold ${isFavorable ? 'text-[#0f7b6c]' : isNeutral ? 'text-[#dfab01]' : 'text-[#eb5757]'}`}>
+                                                <span className={`text-xs font-semibold ${isFavorable ? 'text-success' : isNeutral ? 'text-warning' : 'text-danger'}`}>
                                                     {level}
                                                 </span>
                                             </div>
                                             <div className="h-1 bg-background-secondary rounded-full overflow-hidden">
                                                 <div
-                                                    className={`h-full transition-all duration-1000 ease-out rounded-full ${isFavorable ? 'bg-[#0f7b6c]' :
-                                                        isNeutral ? 'bg-[#dfab01]' :
-                                                            'bg-[#eb5757]'
+                                                    className={`h-full transition-all duration-1000 ease-out rounded-full ${isFavorable ? 'bg-success' :
+                                                        isNeutral ? 'bg-warning' :
+                                                            'bg-danger'
                                                         }`}
                                                     style={{ width: `${chartValue}%` }}
                                                 />
@@ -357,11 +357,11 @@ function DailyPageContent() {
                                 {isPersonalized && fortune.luckyColor && (
                                     <div className="grid grid-cols-2 gap-4 pt-2 border-t border-border/60">
                                         <div className="flex flex-col gap-1">
-                                            <span className="text-[10px] uppercase tracking-wider text-foreground/40 font-semibold">幸运色</span>
+                                            <span className="text-[10px] uppercase tracking-wider text-foreground-secondary font-semibold">幸运色</span>
                                             <span className="text-sm font-medium">{fortune.luckyColor}</span>
                                         </div>
                                         <div className="flex flex-col gap-1">
-                                            <span className="text-[10px] uppercase tracking-wider text-foreground/40 font-semibold">吉方位</span>
+                                            <span className="text-[10px] uppercase tracking-wider text-foreground-secondary font-semibold">吉方位</span>
                                             <span className="text-sm font-medium">{fortune.luckyDirection}</span>
                                         </div>
                                     </div>
@@ -409,12 +409,12 @@ function DailyPageContent() {
                                 <Sparkles className="w-6 h-6 text-[#a083ff]" />
                             </div>
                             <h3 className="text-base font-semibold mb-2">AI 命理师在线解读</h3>
-                            <p className="text-sm text-foreground/60 mb-6 max-w-sm mx-auto">
+                            <p className="text-sm text-foreground-secondary mb-6 max-w-sm mx-auto">
                                 登录即可解锁 AI 智能对话，针对您的命盘进行深度的一对一分析。
                             </p>
                             <button
                                 onClick={() => setShowAuthModal(true)}
-                                className="px-6 py-2 bg-[#2383e2] text-white text-sm font-medium rounded-md hover:bg-[#2383e2]/90 active:bg-[#1a65b0] transition-colors"
+                                className="px-6 py-2 bg-accent text-on-accent text-sm font-medium rounded-md hover:bg-accent/90 active:bg-accent-hover transition-colors"
                             >
                                 立即登录
                             </button>

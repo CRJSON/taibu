@@ -57,7 +57,7 @@ export function ConfirmDialog({
         },
         default: {
             icon: 'text-accent',
-            button: 'bg-accent hover:bg-accent/90 text-white',
+            button: 'bg-accent hover:bg-accent/90 text-on-accent',
         },
     };
 

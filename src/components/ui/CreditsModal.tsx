@@ -57,7 +57,7 @@ export function CreditsModal({ isOpen, onClose, message }: CreditsModalProps) {
                 <div className="px-6 pb-6 space-y-3">
                     <button
                         onClick={handleGoToUpgrade}
-                        className="w-full py-3 bg-accent hover:bg-accent/90 text-white rounded-xl font-medium transition-colors flex items-center justify-center gap-2"
+                        className="w-full py-3 bg-accent hover:bg-accent/90 text-on-accent rounded-xl font-medium transition-colors flex items-center justify-center gap-2"
                     >
                         <Crown className="w-5 h-5" />
                         前往订阅

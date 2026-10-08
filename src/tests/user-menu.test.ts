@@ -5,7 +5,7 @@ import { resolve } from 'node:path';
 
 test('user menu uses registry icons and removes heavy account shortcuts', () => {
   const source = readFileSync(resolve(process.cwd(), 'src/components/layout/UserMenu.tsx'), 'utf8');
-  const hostSource = readFileSync(resolve(process.cwd(), 'src/components/settings/SettingsCenterHost.tsx'), 'utf8');
+  const hostSource = readFileSync(resolve(process.cwd(), 'src/components/settings/SettingsCenterPage.tsx'), 'utf8');
   const iconSource = readFileSync(resolve(process.cwd(), 'src/components/settings/settings-center-icons.tsx'), 'utf8');
 
   assert.equal(source.includes("import { SETTINGS_CENTER_TAB_ICONS } from '@/components/settings/settings-center-icons'"), true);

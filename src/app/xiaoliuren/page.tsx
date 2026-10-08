@@ -51,25 +51,25 @@ export default function XiaoliurenPage() {
         <div className="max-w-3xl mx-auto px-4 py-8 sm:py-12">
           <header className="hidden md:block border-b border-border/60 pb-7 mb-8">
             <h1 className="text-3xl font-bold tracking-tight">小六壬</h1>
-            <p className="mt-2 text-sm text-foreground/55">从农历月、日到时辰，沿三步落宫看当下趋势。</p>
+            <p className="mt-2 text-sm text-foreground-secondary">从农历月、日到时辰，沿三步落宫看当下趋势。</p>
           </header>
 
           <main className="space-y-6">
             <section className="bg-background border border-border rounded-md p-5 sm:p-6 space-y-5">
               <div>
-                <label htmlFor="xiaoliuren-question" className="block text-xs font-bold tracking-wider text-foreground/50 mb-2">占问事项</label>
-                <input id="xiaoliuren-question" value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="例如：今天适合签约吗？" className="w-full px-3 py-3 bg-transparent border border-border rounded-md text-sm focus:border-[#2383e2] focus:ring-2 focus:ring-[#2383e2]/20 focus:outline-none" />
+                <label htmlFor="xiaoliuren-question" className="block text-xs font-bold tracking-wider text-foreground-secondary mb-2">占问事项</label>
+                <input id="xiaoliuren-question" value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="例如：今天适合签约吗？" className="w-full px-3 py-3 bg-transparent border border-border rounded-md text-sm focus:border-accent focus:ring-2 focus:ring-accent/20 focus:outline-none" />
               </div>
               <div>
-                <label htmlFor="xiaoliuren-date" className="block text-xs font-bold tracking-wider text-foreground/50 mb-2">起课时间</label>
+                <label htmlFor="xiaoliuren-date" className="block text-xs font-bold tracking-wider text-foreground-secondary mb-2">起课时间</label>
                 <div className="relative">
-                  <CalendarClock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground/35 pointer-events-none" />
-                  <input id="xiaoliuren-date" type="datetime-local" value={date} onChange={(event) => setDate(event.target.value)} className="w-full pl-10 pr-3 py-3 bg-transparent border border-border rounded-md text-sm focus:border-[#2383e2] focus:ring-2 focus:ring-[#2383e2]/20 focus:outline-none" />
+                  <CalendarClock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground-secondary pointer-events-none" />
+                  <input id="xiaoliuren-date" type="datetime-local" value={date} onChange={(event) => setDate(event.target.value)} className="w-full pl-10 pr-3 py-3 bg-transparent border border-border rounded-md text-sm focus:border-accent focus:ring-2 focus:ring-accent/20 focus:outline-none" />
                 </div>
-                <p className="mt-2 text-xs text-foreground/40">按本地墙上时间换算农历；闰月会在结果中明确标注。</p>
+                <p className="mt-2 text-xs text-foreground-secondary">按本地墙上时间换算农历；闰月会在结果中明确标注。</p>
               </div>
             </section>
-            <button type="button" onClick={() => void handleCalculate()} disabled={isLoading} className="w-full inline-flex justify-center items-center gap-2 px-5 py-3.5 bg-[#2383e2] text-white rounded-md font-semibold text-sm hover:bg-[#2383e2]/90 active:bg-[#1a65b0] transition-colors disabled:opacity-50">
+            <button type="button" onClick={() => void handleCalculate()} disabled={isLoading} className="w-full inline-flex justify-center items-center gap-2 px-5 py-3.5 bg-accent text-on-accent rounded-md font-semibold text-sm hover:bg-accent/90 active:bg-accent-hover transition-colors disabled:opacity-50">
               {isLoading ? <><SoundWaveLoader variant="inline" /><span>正在起课</span></> : <><Play className="w-4 h-4" />开始起课</>}
             </button>
           </main>

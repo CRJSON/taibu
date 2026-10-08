@@ -7,7 +7,7 @@
  */
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { ZiweiCanonicalJSON } from 'taibu-core/ziwei';
 import { getBranchIndex, getTriangleSquare } from '@/lib/divination/ziwei';
 import { getBranchElement, getStemElement, getElementColor } from '@/lib/divination/display-helpers';
@@ -46,7 +46,7 @@ function getBranchElementStyle(branch: string | undefined): { color: string } | 
  * 紫微斗数命盘 12 宫位图
  */
 export function ZiweiChartGrid({
-    canonicalChart,
+    canonicalChart: inputChart,
     copied = false,
     onCopy,
     showJsonCopy = false,
@@ -55,6 +55,11 @@ export function ZiweiChartGrid({
     horoscopeHighlight = {},
     horoscopeInfo,
 }: ZiweiChartProps) {
+    // Slim persisted tool results omit the optional index. Place their returned
+    // palaces by branch; iztro's index starts at 寅. No chart is recalculated.
+    const canonicalChart = useMemo(() => ({ ...inputChart, 十二宫位: inputChart.十二宫位.map(palace => ({ ...palace,
+        宫位索引: palace.宫位索引 ?? (getBranchIndex(palace.干支.slice(-1)) + 10) % 12,
+    })) }), [inputChart]);
     const lifePalaceIndex = canonicalChart.十二宫位.find(p => p.宫位 === '命宫')?.宫位索引 ?? null;
     // 默认选中命宫，显示三方四正
     const [selectedPalace, setSelectedPalace] = useState<number | null | undefined>(undefined);
@@ -135,7 +140,7 @@ export function ZiweiChartGrid({
         <div className="w-full">
             {/* 工具栏 */}
             <div className="flex justify-end gap-2 mb-2 md:pr-0 pr-3">
-                <button
+                {onCopy && <button
                     onClick={handleCopy}
                     className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs transition-colors ${copied
                         ? 'bg-green-500/10 text-green-500'
@@ -143,7 +148,7 @@ export function ZiweiChartGrid({
                         }`}
                 >
                     {copied ? '已复制' : '复制排盘'}
-                </button>
+                </button>}
                 {showJsonCopy && onCopyJson && (
                     <button
                         onClick={onCopyJson}

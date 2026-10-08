@@ -238,12 +238,12 @@ export default function ResultPage() {
                 <header className="space-y-6">
                     <div className="hidden md:flex items-start justify-between">
                         <div className="space-y-2">
-                            <Link href="/liuyao" className="inline-flex items-center gap-1.5 text-sm font-medium text-foreground/40 hover:text-foreground transition-colors">返回</Link>
+                            <Link href="/liuyao" className="inline-flex items-center gap-1.5 text-sm font-medium text-foreground-secondary hover:text-foreground transition-colors">返回</Link>
                             <h1 className="text-3xl font-semibold tracking-tight text-foreground">六爻解卦结果</h1>
                         </div>
                         <div className="flex items-center gap-2">
                             <button onClick={() => router.push('/liuyao')} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium border border-border hover:bg-background-secondary transition-colors"><RotateCw className="w-3.5 h-3.5" />重新起卦</button>
-                            <button onClick={() => setShowTraditional(!showTraditional)} className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${showTraditional ? 'text-[#2eaadc] bg-blue-50/50 border border-blue-100' : 'border border-border hover:bg-background-secondary'}`}><BookOpen className="w-3.5 h-3.5" />传统分析</button>
+                            <button onClick={() => setShowTraditional(!showTraditional)} className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${showTraditional ? 'text-accent bg-blue-50/50 border border-blue-100' : 'border border-border hover:bg-background-secondary'}`}><BookOpen className="w-3.5 h-3.5" />传统分析</button>
                             <button onClick={() => setShowTermsModal(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium border border-border hover:bg-background-secondary transition-colors"><Album className="w-3.5 h-3.5" />术语</button>
                         </div>
                     </div>
@@ -253,7 +253,7 @@ export default function ResultPage() {
                     {result.question && (
                             <div className="flex items-center gap-3 px-1">
                             <Sparkles className="w-4 h-4 text-[#a083ff]" />
-                            <span className="text-xs font-bold text-foreground/30 uppercase tracking-widest shrink-0">所问事项</span>
+                            <span className="text-xs font-bold text-foreground-secondary uppercase tracking-widest shrink-0">所问事项</span>
                             <span className="text-sm font-medium text-foreground">{result.question}</span>
                         </div>
                     )}
@@ -261,12 +261,12 @@ export default function ResultPage() {
                         {missingYongShenTargets && (
                             <div className="border border-blue-100 rounded-md p-5 space-y-4 bg-blue-50/30">
                                 <div className="space-y-1">
-                                    <h3 className="text-sm font-semibold text-[#2eaadc]">选择分析目标</h3>
-                                    <p className="text-xs text-foreground/50">先明确本次解卦重点，再进入后续分析。</p>
+                                    <h3 className="text-sm font-semibold text-accent">选择分析目标</h3>
+                                    <p className="text-xs text-foreground-secondary">先明确本次解卦重点，再进入后续分析。</p>
                                 </div>
                                 <YongShenTargetPicker value={pendingYongShenTargets} onChange={setPendingYongShenTargets} variant="block" />
                                 <div className="flex justify-end">
-                                    <button onClick={handleApplyYongShenTargets} disabled={pendingYongShenTargets.length === 0} className="px-4 py-1.5 bg-[#2eaadc] text-white text-sm font-medium rounded-md hover:bg-[#2eaadc]/90 transition-colors disabled:opacity-50">确认</button>
+                                    <button onClick={handleApplyYongShenTargets} disabled={pendingYongShenTargets.length === 0} className="px-4 py-1.5 bg-accent text-on-accent text-sm font-medium rounded-md hover:bg-accent/90 transition-colors disabled:opacity-50">确认</button>
                                 </div>
                             </div>
                         )}
@@ -276,7 +276,7 @@ export default function ResultPage() {
                 {/* 卦象主舞台 */}
                 <section className="relative px-2 py-6 md:px-4">
                     <button onClick={handleCopy} className="absolute top-4 right-4 p-2 rounded-md border border-border/60 text-foreground/20 hover:text-foreground hover:bg-background-secondary transition-all" title="复制卦象数据">
-                        {copied ? <Check className="w-3.5 h-3.5 text-[#0f7b6c]" /> : <Copy className="w-3.5 h-3.5" />}
+                        {copied ? <Check className="w-3.5 h-3.5 text-success" /> : <Copy className="w-3.5 h-3.5" />}
                     </button>
                     <div className="max-w-full overflow-x-auto">
                         <HexagramDisplay yaos={result.yaos} hexagram={result.hexagram} changedHexagram={result.changedHexagram} changedLines={result.changedLines} showDetails={true} fullYaos={traditionalCanonical?.六爻} showTraditional={showTraditional} yongShenPositions={traditionalYongShenPositions} />
@@ -293,14 +293,14 @@ export default function ResultPage() {
                 {/* AI 解读 */}
                 <AIFeatureGate><div className="bg-background border border-border rounded-md p-6 space-y-6">
                     <div className="flex items-center justify-between border-b border-border/60 pb-4">
-                        <h2 className="text-sm font-bold flex items-center gap-2 uppercase tracking-wider text-foreground/60"><Sparkles className="w-4 h-4 text-[#a083ff]" />AI 深度解读</h2>
+                        <h2 className="text-sm font-bold flex items-center gap-2 uppercase tracking-wider text-foreground-secondary"><Sparkles className="w-4 h-4 text-[#a083ff]" />AI 深度解读</h2>
                         <div className="flex items-center gap-2">
                             <ModelSelector compact selectedModel={selectedModel} onModelChange={setSelectedModel} reasoningEnabled={reasoningEnabled} onReasoningChange={setReasoningEnabled} userId={userId} membershipType={membershipType} disabled={membershipPending} />
                             {(interpretation || streaming.isStreaming) && <button onClick={handleGetInterpretation} disabled={isLoading} className="p-1.5 rounded-md hover:bg-background-secondary transition-colors"><RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} /></button>}
                         </div>
                     </div>
 
-                    {error && <div className="p-3 bg-red-50 text-[#eb5757] text-xs rounded-md border border-red-100 flex items-center gap-2"><AlertCircle className="w-3.5 h-3.5" />{error}</div>}
+                    {error && <div className="p-3 bg-red-50 text-danger text-xs rounded-md border border-red-100 flex items-center gap-2"><AlertCircle className="w-3.5 h-3.5" />{error}</div>}
 
                     {(interpretation || streaming.isStreaming) ? (
                         <div className="prose prose-sm max-w-none prose-p:leading-relaxed prose-headings:text-foreground">
@@ -311,11 +311,11 @@ export default function ResultPage() {
                         <div className="py-12 text-center space-y-6">
                             {user === null ? (
                                 <div className="max-w-sm mx-auto space-y-4">
-                                    <p className="text-sm text-foreground/40">登录后解锁 AI 深度解读卦象天机</p>
-                                    <button onClick={() => setShowAuthModal(true)} className="w-full py-2 bg-[#2383e2] text-white text-sm font-medium rounded-md hover:bg-[#2383e2]/90 transition-colors">立即登录</button>
+                                    <p className="text-sm text-foreground-secondary">登录后解锁 AI 深度解读卦象天机</p>
+                                    <button onClick={() => setShowAuthModal(true)} className="w-full py-2 bg-accent text-on-accent text-sm font-medium rounded-md hover:bg-accent/90 transition-colors">立即登录</button>
                                 </div>
                             ) : (
-                                <button onClick={handleGetInterpretation} disabled={isLoading || !canAnalyze || membershipPending} className="inline-flex items-center gap-2 px-8 py-2.5 bg-[#2383e2] text-white text-sm font-bold rounded-md hover:bg-[#2383e2]/90 transition-all active:scale-95 disabled:opacity-50"><Sparkles className="w-4 h-4" />获取 AI 解读</button>
+                                <button onClick={handleGetInterpretation} disabled={isLoading || !canAnalyze || membershipPending} className="inline-flex items-center gap-2 px-8 py-2.5 bg-accent text-on-accent text-sm font-bold rounded-md hover:bg-accent/90 transition-all active:scale-95 disabled:opacity-50"><Sparkles className="w-4 h-4" />获取 AI 解读</button>
                             )}
                         </div>
                     )}
@@ -328,16 +328,16 @@ export default function ResultPage() {
                     <div className="absolute inset-0 bg-black/20" onClick={() => setShowTermsModal(false)} />
                     <div className="relative w-full max-w-2xl bg-background border border-border rounded-md shadow-xl overflow-hidden animate-in zoom-in-95 duration-200">
                         <div className="flex items-center justify-between border-b border-border/60 px-4 py-3 bg-background-secondary/30">
-                            <div className="text-sm font-bold uppercase tracking-widest text-foreground/60">术语参考</div>
+                            <div className="text-sm font-bold uppercase tracking-widest text-foreground-secondary">术语参考</div>
                             <button onClick={() => setShowTermsModal(false)} className="p-1 rounded-md hover:bg-background-secondary transition-colors"><X className="w-4 h-4" /></button>
                         </div>
                         <div className="max-h-[60vh] overflow-y-auto p-6 space-y-8">
                             {[ { label: '六亲', data: LIU_QIN_TIPS }, { label: '神系', data: SHEN_XI_TIPS }, { label: '其他', data: TERM_TIPS } ].map(group => (
                                 <div key={group.label} className="space-y-3">
-                                    <h3 className="text-[10px] font-bold text-foreground/30 uppercase tracking-widest border-b border-gray-50 pb-1">{group.label}</h3>
+                                    <h3 className="text-[10px] font-bold text-foreground-secondary uppercase tracking-widest border-b border-gray-50 pb-1">{group.label}</h3>
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
                                         {Object.entries(group.data).map(([name, tip]) => (
-                                            <div key={name} className="text-xs leading-relaxed"><span className="font-bold text-foreground/70">{name}</span><span className="text-foreground/40 mx-1">/</span><span className="text-foreground/50">{tip}</span></div>
+                                            <div key={name} className="text-xs leading-relaxed"><span className="font-bold text-foreground/70">{name}</span><span className="text-foreground-secondary mx-1">/</span><span className="text-foreground-secondary">{tip}</span></div>
                                         ))}
                                     </div>
                                 </div>

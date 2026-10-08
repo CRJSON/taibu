@@ -31,7 +31,7 @@ function MBTIPageContent() {
                 <h1 className="text-2xl lg:text-3xl font-bold">
                     MBTI 性格测试
                 </h1>
-                <p className="text-foreground/60 mt-2 max-w-md mx-auto">
+                <p className="text-foreground-secondary mt-2 max-w-md mx-auto">
                     探索你的性格类型，发现你与生俱来的天赋与倾向
                 </p>
 
@@ -40,8 +40,8 @@ function MBTIPageContent() {
                         <button
                             onClick={() => router.push('/mbti/test')}
                             disabled={questions.length === 0}
-                            className="group relative inline-flex items-center gap-2 px-8 py-4 bg-[#2383e2] text-white rounded-md
-                                text-lg font-bold shadow-sm hover:bg-[#2383e2]/90 active:bg-[#1a65b0]
+                            className="group relative inline-flex items-center gap-2 px-8 py-4 bg-accent text-on-accent rounded-md
+                                text-lg font-bold shadow-sm hover:bg-accent/90 active:bg-accent-hover
                                 disabled:opacity-50 disabled:cursor-not-allowed
                                 transition-all duration-150 overflow-hidden"
                         >
@@ -57,7 +57,7 @@ function MBTIPageContent() {
                                 </>
                             )}
                         </button>
-                        <p className="mt-3 text-sm text-foreground/40 font-medium">
+                        <p className="mt-3 text-sm text-foreground-secondary font-medium">
                             共 {questions.length || 93} 道题目 · 约需 10-15 分钟
                         </p>
                     </div>
@@ -67,10 +67,10 @@ function MBTIPageContent() {
                 {/* 16种人格预览 */}
                 <div className="mb-8 flex items-center justify-between">
                     <h2 className="text-xl font-bold flex items-center gap-2">
-                        <span className="w-1 h-6 bg-[#37352f] rounded-full" />
+                        <span className="w-1 h-6 bg-foreground rounded-full" />
                         16型人格图鉴
                     </h2>
-                    <span className="text-sm font-medium text-foreground/50">
+                    <span className="text-sm font-medium text-foreground-secondary">
                         点击查看详细解读
                     </span>
                 </div>
@@ -85,7 +85,7 @@ function MBTIPageContent() {
                                 transition-all duration-150 cursor-pointer group relative overflow-hidden"
                         >
                             <div className="absolute top-0 right-0 p-2 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
-                                <Eye className="w-4 h-4 text-[#2383e2]" />
+                                <Eye className="w-4 h-4 text-accent" />
                             </div>
 
                             <div className="text-4xl mb-3">
@@ -94,10 +94,10 @@ function MBTIPageContent() {
                             <div className="text-lg font-bold font-mono tracking-wide mb-1">
                                 {type}
                             </div>
-                            <div className="text-sm font-bold text-[#2383e2] mb-1">
+                            <div className="text-sm font-bold text-accent mb-1">
                                 {info.title}
                             </div>
-                            <div className="text-xs text-foreground/60 line-clamp-1">
+                            <div className="text-xs text-foreground-secondary line-clamp-1">
                                 {info.description}
                             </div>
                         </button>

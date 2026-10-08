@@ -535,8 +535,8 @@ function BaziResultContent() {
     if (notFound) {
         return (
             <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4 text-center">
-                <p className="text-sm text-foreground/40 mb-6">未找到对应八字命盘</p>
-                <Link href="/bazi" className="px-4 py-2 bg-[#2383e2] text-white text-sm font-medium rounded-md hover:bg-[#2383e2]/90 transition-colors">
+                <p className="text-sm text-foreground-secondary mb-6">未找到对应八字命盘</p>
+                <Link href="/bazi" className="px-4 py-2 bg-accent text-on-accent text-sm font-medium rounded-md hover:bg-accent/90 transition-colors">
                     返回重新输入
                 </Link>
             </div>
@@ -546,8 +546,8 @@ function BaziResultContent() {
     if (loadError) {
         return (
             <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4 text-center">
-                <p className="text-sm text-foreground/40 mb-6">{loadError}</p>
-                <Link href="/bazi" className="px-4 py-2 bg-[#2383e2] text-white text-sm font-medium rounded-md hover:bg-[#2383e2]/90 transition-colors">
+                <p className="text-sm text-foreground-secondary mb-6">{loadError}</p>
+                <Link href="/bazi" className="px-4 py-2 bg-accent text-on-accent text-sm font-medium rounded-md hover:bg-accent/90 transition-colors">
                     返回重新输入
                 </Link>
             </div>
@@ -557,8 +557,8 @@ function BaziResultContent() {
     if (!baziOutput || !baziMeta || !proData || !canonicalBazi) {
         return (
             <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4 text-center">
-                <p className="text-sm text-foreground/40 mb-6">八字计算出错，请返回重新输入</p>
-                <Link href="/bazi" className="px-4 py-2 bg-[#2383e2] text-white text-sm font-medium rounded-md hover:bg-[#2383e2]/90 transition-colors">
+                <p className="text-sm text-foreground-secondary mb-6">八字计算出错，请返回重新输入</p>
+                <Link href="/bazi" className="px-4 py-2 bg-accent text-on-accent text-sm font-medium rounded-md hover:bg-accent/90 transition-colors">
                     返回重新输入
                 </Link>
             </div>

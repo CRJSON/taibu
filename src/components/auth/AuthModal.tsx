@@ -734,7 +734,7 @@ export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
                     <button
                         type="submit"
                         disabled={loading}
-                        className="w-full py-3 rounded-xl bg-accent text-white font-medium hover:bg-accent/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                        className="w-full py-3 rounded-xl bg-accent text-on-accent font-medium hover:bg-accent/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                     >
                         {loading && <SoundWaveLoader variant="inline" />}
                         {getSubmitText()}

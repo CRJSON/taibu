@@ -371,7 +371,7 @@ export default function HepanResultPage() {
                                     </p>
                                     <button
                                         onClick={() => setShowAuthModal(true)}
-                                        className="w-full py-3 rounded-xl bg-accent text-white font-medium hover:bg-accent/90 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-accent/20"
+                                        className="w-full py-3 rounded-xl bg-accent text-on-accent font-medium hover:bg-accent/90 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-accent/20"
                                     >
                                         登录 / 注册
                                     </button>
@@ -384,7 +384,7 @@ export default function HepanResultPage() {
                                 <button
                                     onClick={handleGetAIAnalysis}
                                     disabled={loadingAI || membershipPending}
-                                    className="inline-flex items-center gap-2.5 px-8 py-4 bg-accent text-white rounded-xl font-bold text-lg
+                                    className="inline-flex items-center gap-2.5 px-8 py-4 bg-accent text-on-accent rounded-xl font-bold text-lg
                                         shadow-lg shadow-accent/20 hover:shadow-accent/30 hover:scale-[1.02] active:scale-[0.98]
                                         disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:shadow-none transition-all"
                                 >

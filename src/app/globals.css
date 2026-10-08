@@ -15,40 +15,43 @@
   --sab: env(safe-area-inset-bottom, 0px);
   --mobile-header-height: calc(4rem + var(--sat));
 
-  /* 浅色主题 - 参考 Notion 设计规范 */
-  --background: #f7f6f3;
-  --background-secondary: #efedea;
-  --background-tertiary: #e3e1db;
-  --foreground: #37352f;
-  --foreground-secondary: rgba(55, 53, 47, 0.65);
-  --foreground-tertiary: rgba(55, 53, 47, 0.45);
-
-  /* 强调色 - Notion 蓝色 */
-  --accent: #2eaadc;
-  --accent-light: #eff6ff;
+  /* Warm paper surfaces with a restrained clay accent. */
+  --background: #faf8f5;
+  --background-secondary: #f0ece6;
+  --background-tertiary: #e7e0d7;
+  --surface: #fffdf9;
+  --foreground: #2c2925;
+  --foreground-secondary: #70685f;
+  --foreground-tertiary: #7b7165;
+  --accent: #b65c3e;
+  --accent-hover: #9d4c32;
+  --accent-light: #f5e8df;
+  --on-accent: #ffffff;
+  --success: #507557;
+  --warning: #946b2d;
+  --danger: #b54f48;
 
   /* 边框和分隔线 */
-  --border: #e5e5e5;
-  --border-hover: #d4d4d4;
+  --border: #e5ded4;
+  --border-hover: #cec4b7;
 
   /* 阴影 */
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
-  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.07);
-  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.1);
+  --shadow-sm: 0 1px 3px rgba(77, 57, 36, 0.04);
+  --shadow-md: 0 6px 24px rgba(77, 57, 36, 0.07);
+  --shadow-lg: 0 16px 48px rgba(77, 57, 36, 0.12);
 
   /* 侧边栏宽度 */
-  --sidebar-width: 240px;
-  /* Agent/chat and portaled surfaces use the same neutral reading palette. */
-  --chat-background: #fafbfc;
-  --chat-secondary: #f0f2f4;
-  --chat-tertiary: #e5e8ec;
-  --chat-foreground: #30343b;
-  --chat-muted: #686f79;
-  --chat-subtle: #9298a1;
-  --chat-border: #e3e6ea;
-  --chat-raised: #fff;
-  --chat-success: #3c7d63;
-  --chat-warning: #94671f;
+  --sidebar-width: 248px;
+  --chat-background: #faf8f5;
+  --chat-secondary: #f0ece6;
+  --chat-tertiary: #e7e0d7;
+  --chat-foreground: #2c2925;
+  --chat-muted: #70685f;
+  --chat-subtle: #7b7165;
+  --chat-border: #e5ded4;
+  --chat-raised: #fffdf9;
+  --chat-success: #507557;
+  --chat-warning: #946b2d;
 }
 
 /* 安全区域工具类 */
@@ -73,32 +76,36 @@
 .dark {
   color-scheme: dark;
 
-  --background: #0a0a0a;
-  --background-secondary: #1a1a1a;
-  --background-tertiary: #262626;
-  --foreground: #ffffff;
-  --foreground-secondary: #a0a0a0;
-  --foreground-tertiary: #7a7a7a;
-
-  --accent: #D4AF37;
-  --accent-light: #3d3520;
-
-  --border: #2a2a2a;
-  --border-hover: #3a3a3a;
+  --background: #262624;
+  --background-secondary: #30302c;
+  --background-tertiary: #3b3a35;
+  --surface: #2c2c29;
+  --foreground: #f0ede6;
+  --foreground-secondary: #b9b1a5;
+  --foreground-tertiary: #a2998b;
+  --accent: #d99475;
+  --accent-hover: #e5a388;
+  --accent-light: #44332b;
+  --on-accent: #262624;
+  --success: #a4bba0;
+  --warning: #d5b378;
+  --danger: #e39b91;
+  --border: #424039;
+  --border-hover: #57534a;
 
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
   --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.4);
   --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.5);
-  --chat-background: #17191d;
-  --chat-secondary: #22252b;
-  --chat-tertiary: #30343b;
-  --chat-foreground: #e9ecf0;
-  --chat-muted: #a1a8b3;
-  --chat-subtle: #737c89;
-  --chat-border: #30343b;
-  --chat-raised: #1e2126;
-  --chat-success: #94c8af;
-  --chat-warning: #e0ba76;
+  --chat-background: #262624;
+  --chat-secondary: #30302c;
+  --chat-tertiary: #3b3a35;
+  --chat-foreground: #f0ede6;
+  --chat-muted: #b9b1a5;
+  --chat-subtle: #a2998b;
+  --chat-border: #424039;
+  --chat-raised: #2c2c29;
+  --chat-success: #a4bba0;
+  --chat-warning: #d5b378;
 }
 
 /* ===== Tailwind 主题配置 ===== */
@@ -111,12 +118,23 @@
   --color-foreground-tertiary: var(--foreground-tertiary);
   --color-accent: var(--accent);
   --color-accent-light: var(--accent-light);
+  --color-on-accent: var(--on-accent);
   --color-border: var(--border);
   --color-border-hover: var(--border-hover);
+  --color-surface: var(--surface);
+  --color-accent-hover: var(--accent-hover);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
 
   /* 字体 */
   --font-sans: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
   --font-mono: "SFMono-Regular", "JetBrains Mono", "Menlo", "Monaco", "Consolas", "Liberation Mono", monospace;
+  --font-display: Georgia, "Songti SC", "STSong", "Noto Serif CJK SC", serif;
+  --radius-md: .5rem;
+  --radius-lg: .7rem;
+  --radius-xl: 1rem;
+  --radius-2xl: 1.3rem;
 }
 
 /* ===== 基础样式 ===== */
@@ -132,10 +150,28 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans);
-  font-size: 14px;
-  line-height: 1.6;
+  font-size: .9375rem;
+  line-height: 1.65;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+@layer base {
+  h1 { font-family: var(--font-display); font-weight: 500; line-height: 1.35; }
+  button, a, input, select, textarea, summary { -webkit-tap-highlight-color: transparent; }
+  button:not(:disabled), summary { cursor: pointer; }
+  button:disabled { cursor: not-allowed; }
+  :where(button, a, input, select, textarea, summary, [tabindex]):focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+  input, select, textarea { accent-color: var(--accent); }
+  ::selection { background: var(--accent-light); color: var(--foreground); }
+}
+
+.skip-link { position: fixed; top: .5rem; left: .5rem; z-index: 100; transform: translateY(-150%); padding: .7rem 1rem; background: var(--surface); color: var(--foreground); border: 1px solid var(--border); border-radius: .5rem; }
+.skip-link:focus { transform: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
 }
 
 /* ===== 自定义滚动条 ===== */

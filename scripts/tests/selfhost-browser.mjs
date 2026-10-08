@@ -17,7 +17,7 @@ async function verifyChartSynchronization(page, context, config) {
     await page.getByRole('link', { name: '命盘', exact: true }).click();
     await page.getByRole('heading', { name: '八字命盘', exact: true }).waitFor();
   };
-  const closeCharts = () => page.getByRole('button', { name: '关闭设置中心', exact: true }).click();
+  const closeCharts = () => page.getByRole('link', { name: '返回太卜', exact: true }).click();
   const chartRow = chart => page.locator(`a[href="/${chart.type}/result?chart=${chart.id}"]`).filter({ visible: true });
   const expectSameDocument = async () => {
     assert.equal(await page.evaluate(() => window.__chartSyncDocument), marker, 'synchronization must not depend on a full document reload');
@@ -71,14 +71,13 @@ async function verifyChartSynchronization(page, context, config) {
     }
     await openCharts();
     await chartRow(chart).waitFor({ timeout: 5000 });
-    assert.equal(await page.getByRole('heading', { name: '八字命盘', exact: true }).getAttribute('data-sync-marker'), marker, 'chart panel remains mounted across navigation and writes');
+    assert.ok(await page.getByRole('heading', { name: '八字命盘', exact: true }).isVisible(), 'chart settings page reflects the saved chart after returning');
     await expectSameDocument();
     await closeCharts();
     return chart;
   };
   try {
     await openCharts();
-    await page.getByRole('heading', { name: '八字命盘', exact: true }).evaluate((element, value) => { element.dataset.syncMarker = value; }, marker);
     await closeCharts();
     const first = await createChart('bazi', `${marker}-bazi`, true);
     const second = await createChart('bazi', `${marker}-alternative`);

@@ -317,7 +317,7 @@ function BaziPageContent() {
                 {/* 页面标题 - 移动端隐藏（顶栏已显示） */}
                 <div className="hidden md:block text-center mb-8">
                     <h1 className="text-2xl lg:text-3xl font-bold text-foreground">八字排盘</h1>
-                    <p className="text-foreground/60 mt-2">
+                    <p className="text-foreground-secondary mt-2">
                         请填写您的出生信息，我们将为您生成八字命盘
                     </p>
                 </div>

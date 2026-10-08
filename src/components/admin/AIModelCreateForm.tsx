@@ -371,7 +371,7 @@ export function AIModelCreateForm({ newModel, setNewModel, updateNewModel, showC
                 <button
                     onClick={createModel}
                     disabled={updating === 'creating'}
-                    className="px-4 py-2 rounded-lg bg-accent text-white hover:bg-accent/90 disabled:opacity-50 text-sm"
+                    className="px-4 py-2 rounded-lg bg-accent text-on-accent hover:bg-accent/90 disabled:opacity-50 text-sm"
                 >
                     {updating === 'creating' ? '创建中...' : '创建模型'}
                 </button>

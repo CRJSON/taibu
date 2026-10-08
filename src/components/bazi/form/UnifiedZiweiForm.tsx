@@ -54,7 +54,7 @@ export function UnifiedZiweiForm({
             <form onSubmit={onSubmit} className="bg-background rounded-lg p-6 shadow-sm border border-border space-y-3 sm:space-y-6">
                 {/* 姓名输入 */}
                 <div>
-                    <label className="block text-xs sm:text-sm font-medium text-foreground/60 mb-1.5 sm:mb-2">
+                    <label className="block text-xs sm:text-sm font-medium text-foreground-secondary mb-1.5 sm:mb-2">
                         姓名（可选）
                     </label>
                     <input
@@ -63,7 +63,7 @@ export function UnifiedZiweiForm({
                         onChange={(e) => onUpdate('name', e.target.value)}
                         placeholder="请输入姓名"
                         className="w-full px-3 sm:px-4 py-1.5 sm:py-2 border border-border rounded-md bg-transparent text-sm text-foreground
-                            focus:outline-none focus:ring-2 focus:ring-[#2383e2]/20 focus:border-[#2383e2]
+                            focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent
                             transition-all duration-150"
                     />
                 </div>
@@ -72,7 +72,7 @@ export function UnifiedZiweiForm({
                 <div className="grid grid-cols-2 gap-10 sm:gap-20">
                     {/* 性别选择 */}
                     <div>
-                        <label className="block text-xs sm:text-sm font-medium text-foreground/60 mb-1.5 sm:mb-2">
+                        <label className="block text-xs sm:text-sm font-medium text-foreground-secondary mb-1.5 sm:mb-2">
                             性别
                         </label>
                         <div className="grid grid-cols-2 gap-1.5 sm:gap-2">
@@ -81,7 +81,7 @@ export function UnifiedZiweiForm({
                                 onClick={() => onUpdate('gender', 'male')}
                                 className={`py-1.5 sm:py-2.5 px-1 sm:px-2 rounded-md border text-xs sm:text-sm font-medium transition-all duration-150
                                     ${formData.gender === 'male'
-                                        ? 'bg-[#2383e2] text-white border-[#2383e2]'
+                                        ? 'bg-accent text-on-accent border-accent'
                                         : 'bg-transparent border-border text-foreground hover:bg-background-secondary'
                                     }`}
                             >
@@ -92,7 +92,7 @@ export function UnifiedZiweiForm({
                                 onClick={() => onUpdate('gender', 'female')}
                                 className={`py-1.5 sm:py-2.5 px-1 sm:px-2 rounded-md border text-xs sm:text-sm font-medium transition-all duration-150
                                     ${formData.gender === 'female'
-                                        ? 'bg-[#2383e2] text-white border-[#2383e2]'
+                                        ? 'bg-accent text-on-accent border-accent'
                                         : 'bg-transparent border-border text-foreground hover:bg-background-secondary'
                                     }`}
                             >
@@ -103,7 +103,7 @@ export function UnifiedZiweiForm({
 
                     {/* 历法选择（仅公历/农历） */}
                     <div>
-                        <label className="block text-xs sm:text-sm font-medium text-foreground/60 mb-1.5 sm:mb-2">
+                        <label className="block text-xs sm:text-sm font-medium text-foreground-secondary mb-1.5 sm:mb-2">
                             历法
                         </label>
                         <div className="grid grid-cols-2 gap-1.5 sm:gap-2">
@@ -112,7 +112,7 @@ export function UnifiedZiweiForm({
                                 onClick={() => onUpdate('calendarType', 'solar')}
                                 className={`py-1.5 sm:py-2.5 px-1 sm:px-2 rounded-md border text-xs sm:text-sm font-medium transition-all duration-150
                                     ${formData.calendarType === 'solar'
-                                        ? 'bg-[#2383e2] text-white border-[#2383e2]'
+                                        ? 'bg-accent text-on-accent border-accent'
                                         : 'bg-transparent border-border text-foreground hover:bg-background-secondary'
                                     }`}
                             >
@@ -123,7 +123,7 @@ export function UnifiedZiweiForm({
                                 onClick={() => onUpdate('calendarType', 'lunar')}
                                 className={`py-1.5 sm:py-2.5 px-1 sm:px-2 rounded-md border text-xs sm:text-sm font-medium transition-all duration-150
                                     ${formData.calendarType === 'lunar'
-                                        ? 'bg-[#2383e2] text-white border-[#2383e2]'
+                                        ? 'bg-accent text-on-accent border-accent'
                                         : 'bg-transparent border-border text-foreground hover:bg-background-secondary'
                                     }`}
                             >
@@ -137,12 +137,12 @@ export function UnifiedZiweiForm({
                 <div className="space-y-2 sm:space-y-4">
                     <div className="grid grid-cols-3 gap-3">
                         <div>
-                            <label className="block text-xs text-foreground/60 mb-1">年</label>
+                            <label className="block text-xs text-foreground-secondary mb-1">年</label>
                             <select
                                 value={formData.birthYear}
                                 onChange={(e) => onUpdate('birthYear', Number(e.target.value))}
                                 className="w-full px-2 sm:px-3 py-1.5 sm:py-2 border border-border rounded-md bg-transparent text-sm text-foreground
-                                    focus:outline-none focus:ring-2 focus:ring-[#2383e2]/20 focus:border-[#2383e2]"
+                                    focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
                             >
                                 {YEAR_OPTIONS.map((year) => (
                                     <option key={year} value={year}>{year}</option>
@@ -150,12 +150,12 @@ export function UnifiedZiweiForm({
                             </select>
                         </div>
                         <div>
-                            <label className="block text-xs text-foreground/60 mb-1">月</label>
+                            <label className="block text-xs text-foreground-secondary mb-1">月</label>
                             <select
                                 value={formData.birthMonth}
                                 onChange={(e) => onUpdate('birthMonth', Number(e.target.value))}
                                 className="w-full px-2 sm:px-3 py-1.5 sm:py-2 border border-border rounded-md bg-transparent text-sm text-foreground
-                                    focus:outline-none focus:ring-2 focus:ring-[#2383e2]/20 focus:border-[#2383e2]"
+                                    focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
                             >
                                 {MONTH_OPTIONS.map((month) => (
                                     <option key={month} value={month}>
@@ -165,12 +165,12 @@ export function UnifiedZiweiForm({
                             </select>
                         </div>
                         <div>
-                            <label className="block text-xs text-foreground/60 mb-1">日</label>
+                            <label className="block text-xs text-foreground-secondary mb-1">日</label>
                             <select
                                 value={formData.birthDay}
                                 onChange={(e) => onUpdate('birthDay', Number(e.target.value))}
                                 className="w-full px-2 sm:px-3 py-1.5 sm:py-2 border border-border rounded-md bg-transparent text-sm text-foreground
-                                    focus:outline-none focus:ring-2 focus:ring-[#2383e2]/20 focus:border-[#2383e2]"
+                                    focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
                             >
                                 {dayOptions.map((day) => (
                                     <option key={day} value={day}>{day}</option>
@@ -186,9 +186,9 @@ export function UnifiedZiweiForm({
                                 type="checkbox"
                                 checked={formData.isLeapMonth}
                                 onChange={(e) => onUpdate('isLeapMonth', e.target.checked)}
-                                className="w-4 h-4 text-[#2383e2] border-border rounded focus:ring-[#2383e2]"
+                                className="w-4 h-4 text-accent border-border rounded focus:ring-accent"
                             />
-                            <span className="text-sm text-foreground/60">闰月</span>
+                            <span className="text-sm text-foreground-secondary">闰月</span>
                         </label>
                     )}
                 </div>
@@ -201,13 +201,13 @@ export function UnifiedZiweiForm({
                         hover:bg-background-secondary transition-all duration-150"
                 >
                     <div className="flex items-center gap-2 sm:gap-3">
-                        <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-[#2383e2]" />
+                        <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-accent" />
                         <span className="text-xs sm:text-sm font-medium text-foreground">出生时间</span>
-                        <span className="text-xs text-foreground/60">
+                        <span className="text-xs text-foreground-secondary">
                             {`${String(formData.birthHour).padStart(2, '0')}:${String(formData.birthMinute).padStart(2, '0')}`}
                         </span>
                     </div>
-                    <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5 text-foreground/30" />
+                    <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5 text-foreground-secondary" />
                 </button>
 
                 {/* 出生地点（点击打开模态框） */}
@@ -218,21 +218,21 @@ export function UnifiedZiweiForm({
                         hover:bg-background-secondary transition-all duration-150"
                 >
                     <div className="flex items-center gap-2 sm:gap-3">
-                        <MapPin className="w-4 h-4 sm:w-5 sm:h-5 text-[#2383e2]" />
+                        <MapPin className="w-4 h-4 sm:w-5 sm:h-5 text-accent" />
                         <span className="text-xs sm:text-sm font-medium text-foreground">出生地点</span>
-                        <span className="text-xs text-foreground/60 truncate">
+                        <span className="text-xs text-foreground-secondary truncate">
                             {placeSummary}
                         </span>
                     </div>
-                    <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5 text-foreground/30" />
+                    <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5 text-foreground-secondary" />
                 </button>
 
                 {/* 提交按钮 */}
                 <button
                     type="submit"
                     disabled={isSubmitting}
-                    className="w-full py-2 sm:py-3 bg-[#2383e2] text-white rounded-md text-sm sm:text-base font-semibold
-                        hover:bg-[#2383e2]/90 active:bg-[#1a65b0] transition-all duration-150
+                    className="w-full py-2 sm:py-3 bg-accent text-on-accent rounded-md text-sm sm:text-base font-semibold
+                        hover:bg-accent/90 active:bg-accent-hover transition-all duration-150
                         disabled:opacity-50 disabled:cursor-not-allowed
                         flex items-center justify-center gap-2"
                 >
@@ -247,7 +247,7 @@ export function UnifiedZiweiForm({
                 </button>
 
                 {/* 免责声明 */}
-                <p className="text-[10px] sm:text-xs text-center text-foreground/40">
+                <p className="text-[10px] sm:text-xs text-center text-foreground-secondary">
                     紫微斗数排盘仅供参考，不构成任何建议
                 </p>
             </form>

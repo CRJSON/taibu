@@ -100,14 +100,14 @@ export function InstantBaziPreview({ onUseInstant }: InstantBaziPreviewProps) {
         <div className="bg-background rounded-lg md:p-6 p-4 shadow-sm border border-border animate-fade-in">
             <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-bold flex items-center gap-2 text-foreground">
-                    <Sparkles className="w-5 h-5 text-[#2383e2]" />
+                    <Sparkles className="w-5 h-5 text-accent" />
                     即时排盘
                 </h2>
                 <button
                     type="button"
                     onClick={onUseInstant}
-                    className="px-4 py-2 bg-[#2383e2] text-white rounded-md text-sm font-semibold
-                        hover:bg-[#2383e2]/90 active:bg-[#1a65b0] transition-all duration-150"
+                    className="px-4 py-2 bg-accent text-on-accent rounded-md text-sm font-semibold
+                        hover:bg-accent/90 active:bg-accent-hover transition-all duration-150"
                 >
                     使用此时间
                 </button>
@@ -125,7 +125,7 @@ export function InstantBaziPreview({ onUseInstant }: InstantBaziPreviewProps) {
                         key={label}
                         className="bg-background rounded-md p-3 text-center border border-border/60"
                     >
-                        <div className="text-[11px] font-semibold text-foreground/50 uppercase tracking-wider mb-1">{label}</div>
+                        <div className="text-[11px] font-semibold text-foreground-secondary uppercase tracking-wider mb-1">{label}</div>
                         <div className="text-2xl font-bold text-foreground">
                             {pillar.stem}
                         </div>
@@ -137,7 +137,7 @@ export function InstantBaziPreview({ onUseInstant }: InstantBaziPreviewProps) {
             </div>
 
             {/* 时间信息 */}
-            <div className="text-sm text-foreground/60 space-y-1">
+            <div className="text-sm text-foreground-secondary space-y-1">
                 <div>
                     农历：{lunarInfo.year}年
                     {['正月', '二月', '三月', '四月', '五月', '六月', '七月', '八月', '九月', '十月', '冬月', '腊月'][lunarInfo.month - 1]}

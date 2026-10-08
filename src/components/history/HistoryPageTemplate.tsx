@@ -497,7 +497,7 @@ export function HistoryPageTemplate(config: HistoryPageConfig) {
                         <button
                             type="button"
                             onClick={() => { void loadItems(); }}
-                            className="px-5 py-2 rounded-xl bg-accent text-white hover:bg-accent/90 transition-colors text-sm font-medium"
+                            className="px-5 py-2 rounded-xl bg-accent text-on-accent hover:bg-accent/90 transition-colors text-sm font-medium"
                         >
                             重试
                         </button>
@@ -510,7 +510,7 @@ export function HistoryPageTemplate(config: HistoryPageConfig) {
                         <h3 className="text-lg font-medium mb-1">{searchQuery ? emptySearchMessage : emptyMessage}</h3>
                         {!searchQuery && (
                             <Link href={resolvedEmptyHref}
-                                className="mt-6 px-6 py-2.5 bg-accent text-white rounded-xl hover:bg-accent/90 transition-all shadow-lg shadow-accent/20 font-medium text-sm">
+                                className="mt-6 px-6 py-2.5 bg-accent text-on-accent rounded-xl hover:bg-accent/90 transition-all shadow-lg shadow-accent/20 font-medium text-sm">
                                 {emptyActionLabel}
                             </Link>
                         )}

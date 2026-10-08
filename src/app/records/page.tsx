@@ -324,7 +324,7 @@ export default function RecordsPage() {
                 <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 pb-6 border-b border-border/60">
                     <div className="space-y-1">
                         <h1 className="text-2xl font-bold">命理记录</h1>
-                        <p className="text-sm text-foreground/50">追踪运势变化，积累命理智慧</p>
+                        <p className="text-sm text-foreground-secondary">追踪运势变化，积累命理智慧</p>
                     </div>
                     <div className="flex items-center gap-2">
                         <button
@@ -336,7 +336,7 @@ export default function RecordsPage() {
                         </button>
                         <button
                             onClick={() => setShowRecordForm(true)}
-                            className="flex items-center gap-2 px-4 py-1.5 bg-[#2383e2] text-white text-sm font-medium rounded-md hover:bg-[#2383e2]/90 active:bg-[#1a65b0] transition-colors"
+                            className="flex items-center gap-2 px-4 py-1.5 bg-accent text-on-accent text-sm font-medium rounded-md hover:bg-accent/90 active:bg-accent-hover transition-colors"
                         >
                             <Plus className="w-4 h-4" />
                             <span>新建记录</span>
@@ -347,7 +347,7 @@ export default function RecordsPage() {
                 <div className="space-y-10">
                     {/* 小记区域 */}
                     <section className="space-y-4">
-                        <h2 className="text-[11px] font-semibold text-foreground/40 uppercase tracking-widest px-1">今日小记</h2>
+                        <h2 className="text-[11px] font-semibold text-foreground-secondary uppercase tracking-widest px-1">今日小记</h2>
                         <div className="bg-background border border-border rounded-md overflow-hidden">
                             {notesError ? (
                                 <SectionError message={notesError} onRetry={loadNotes} />
@@ -363,7 +363,7 @@ export default function RecordsPage() {
 
                     {/* 筛选与列表 */}
                     <section className="space-y-4">
-                        <h2 className="text-[11px] font-semibold text-foreground/40 uppercase tracking-widest px-1">所有记录</h2>
+                        <h2 className="text-[11px] font-semibold text-foreground-secondary uppercase tracking-widest px-1">所有记录</h2>
                         <div className="space-y-4">
                             <RecordFilters
                                 search={search}

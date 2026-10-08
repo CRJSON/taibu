@@ -18,7 +18,7 @@ export function TextDetailLevelPicker({
   return (
     <div className={`flex flex-wrap items-center gap-2 ${className}`}>
       {label ? (
-        <span className="text-[11px] font-bold uppercase tracking-widest text-foreground/40">
+        <span className="text-[11px] font-bold uppercase tracking-widest text-foreground-secondary">
           {label}
         </span>
       ) : null}

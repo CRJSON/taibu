@@ -139,7 +139,7 @@ function MBTIResultContent() {
             <div className="max-w-4xl mx-auto px-4 py-8 animate-fade-in space-y-8">
                 {/* 头部导航 */}
                 <div className="hidden md:flex items-center justify-between border-b border-border/60 pb-6">
-                    <Link href="/mbti" className="text-sm font-medium text-foreground/40 hover:text-foreground hover:bg-background-secondary px-2 py-1 rounded-md transition-colors flex items-center gap-1"><ChevronLeft className="w-4 h-4" />返回 MBTI 首页</Link>
+                    <Link href="/mbti" className="text-sm font-medium text-foreground-secondary hover:text-foreground hover:bg-background-secondary px-2 py-1 rounded-md transition-colors flex items-center gap-1"><ChevronLeft className="w-4 h-4" />返回 MBTI 首页</Link>
                     <div className="flex items-center gap-2">
                         {isTestMode && <button onClick={() => router.push('/mbti')} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium border border-border hover:bg-background-secondary transition-colors"><RotateCw className="w-3.5 h-3.5" />重新测试</button>}
                     </div>
@@ -152,7 +152,7 @@ function MBTIResultContent() {
                 {isTestMode && (<AIFeatureGate>
                     <div className="bg-background border border-border rounded-md p-6 space-y-6">
                         <div className="flex items-center justify-between border-b border-border/60 pb-4">
-                            <h3 className="text-sm font-bold flex items-center gap-2 uppercase tracking-wider text-foreground/60"><Sparkles className="w-4 h-4 text-[#2eaadc]" />AI 深度分析</h3>
+                            <h3 className="text-sm font-bold flex items-center gap-2 uppercase tracking-wider text-foreground-secondary"><Sparkles className="w-4 h-4 text-accent" />AI 深度分析</h3>
                             <div className="flex items-center gap-3">
                                 <ModelSelector compact selectedModel={selectedModel} onModelChange={setSelectedModel} reasoningEnabled={reasoningEnabled} onReasoningChange={setReasoningEnabled} userId={userId} membershipType={membershipType} disabled={membershipPending} />
                                 {aiAnalysis && <button onClick={handleGetAIAnalysis} disabled={loadingAI} className="p-1.5 rounded-md hover:bg-background-secondary transition-colors"><RefreshCw className={`w-3.5 h-3.5 ${loadingAI ? 'animate-spin' : ''}`} /></button>}
@@ -170,11 +170,11 @@ function MBTIResultContent() {
                             <div className="py-12 text-center space-y-6">
                                 {checkingAuth ? <SoundWaveLoader variant="inline" /> : !user ? (
                                     <div className="max-w-sm mx-auto space-y-4">
-                                        <p className="text-sm text-foreground/40">登录后即可获取基于您性格维度的专属 AI 深度分析</p>
-                                        <button onClick={() => setShowAuthModal(true)} className="w-full py-2 bg-[#2383e2] text-white text-sm font-medium rounded-md hover:bg-[#2383e2]/90 transition-colors">立即登录</button>
+                                        <p className="text-sm text-foreground-secondary">登录后即可获取基于您性格维度的专属 AI 深度分析</p>
+                                        <button onClick={() => setShowAuthModal(true)} className="w-full py-2 bg-accent text-on-accent text-sm font-medium rounded-md hover:bg-accent/90 transition-colors">立即登录</button>
                                     </div>
                                 ) : (
-                                    <button onClick={handleGetAIAnalysis} disabled={loadingAI} className="inline-flex items-center gap-2 px-8 py-2.5 bg-[#2383e2] text-white text-sm font-bold rounded-md hover:bg-[#2383e2]/90 transition-all active:scale-95"><Sparkles className="w-4 h-4" />获取 AI 深度分析</button>
+                                    <button onClick={handleGetAIAnalysis} disabled={loadingAI} className="inline-flex items-center gap-2 px-8 py-2.5 bg-accent text-on-accent text-sm font-bold rounded-md hover:bg-accent/90 transition-all active:scale-95"><Sparkles className="w-4 h-4" />获取 AI 深度分析</button>
                                 )}
                             </div>
                         )}
@@ -184,14 +184,14 @@ function MBTIResultContent() {
                 {/* 底部收藏操作 */}
                 {knowledgeBaseEnabled && !!readingId && (
                     <div className="flex justify-center pt-4">
-                        <button onClick={() => setKbModalOpen(true)} className="flex items-center gap-2 px-6 py-2 rounded-md border border-border text-sm font-medium hover:bg-background-secondary transition-colors text-foreground/60"><BookOpenText className="w-4 h-4" />收藏至知识库</button>
+                        <button onClick={() => setKbModalOpen(true)} className="flex items-center gap-2 px-6 py-2 rounded-md border border-border text-sm font-medium hover:bg-background-secondary transition-colors text-foreground-secondary"><BookOpenText className="w-4 h-4" />收藏至知识库</button>
                     </div>
                 )}
 
                 {/* 查看模式：开始测试按钮 */}
                 {!isTestMode && (
                     <div className="text-center pt-8">
-                        <Link href="/mbti" className="inline-flex items-center gap-2 px-8 py-2.5 bg-[#2383e2] text-white text-sm font-bold rounded-md hover:bg-[#2383e2]/90 transition-all shadow-sm"><Sparkles className="w-4 h-4" />开始 MBTI 测试</Link>
+                        <Link href="/mbti" className="inline-flex items-center gap-2 px-8 py-2.5 bg-accent text-on-accent text-sm font-bold rounded-md hover:bg-accent/90 transition-all shadow-sm"><Sparkles className="w-4 h-4" />开始 MBTI 测试</Link>
                     </div>
                 )}
             </div>

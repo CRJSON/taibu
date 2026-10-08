@@ -191,7 +191,7 @@ export function KeyActivationModal({
                             <p className="text-red-500 mb-6">{error}</p>
                             <button
                                 onClick={handleRetry}
-                                className="px-6 py-2.5 rounded-xl bg-accent text-white font-medium hover:bg-accent/90 transition-colors"
+                                className="px-6 py-2.5 rounded-xl bg-accent text-on-accent font-medium hover:bg-accent/90 transition-colors"
                             >
                                 重新输入
                             </button>
@@ -227,7 +227,7 @@ export function KeyActivationModal({
                             <button
                                 onClick={handleActivate}
                                 disabled={!keyCode.trim()}
-                                className="w-full py-3.5 rounded-xl bg-accent text-white text-base font-medium hover:bg-accent/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                className="w-full py-3.5 rounded-xl bg-accent text-on-accent text-base font-medium hover:bg-accent/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 激活
                             </button>

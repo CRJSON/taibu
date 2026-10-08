@@ -194,7 +194,7 @@ export function HistoryDrawer({ type, className = '' }: HistoryDrawerProps) {
                         `}
                         title={isOpen ? "收起" : "历史记录"}
                     >
-                        <div className="transition-all duration-150 text-[#2383e2]">
+                        <div className="transition-all duration-150 text-accent">
                             {isOpen ? (
                                 <X className="w-5 h-5" />
                             ) : (
@@ -226,14 +226,14 @@ export function HistoryDrawer({ type, className = '' }: HistoryDrawerProps) {
                     {/* 头部 */}
                     <div className="flex items-center justify-between px-5 py-4 border-b border-border bg-background/80 backdrop-blur-sm">
                         <div className="flex items-center gap-2">
-                            <span className="font-bold text-sm uppercase tracking-wider text-foreground/60">{config.label}</span>
+                            <span className="font-bold text-sm uppercase tracking-wider text-foreground-secondary">{config.label}</span>
                             <span className="px-2 py-0.5 rounded-md bg-background-secondary text-foreground text-[10px] font-bold">
                                 {items.length}
                             </span>
                         </div>
                         <Link
                             href={config.historyPath}
-                            className="text-[11px] font-bold text-[#2383e2] hover:underline transition-colors flex items-center gap-1"
+                            className="text-[11px] font-bold text-accent hover:underline transition-colors flex items-center gap-1"
                         >
                             全部
                             <ChevronLeft className="w-3 h-3 rotate-180" />
@@ -258,13 +258,13 @@ export function HistoryDrawer({ type, className = '' }: HistoryDrawerProps) {
                                 <button
                                     type="button"
                                     onClick={() => { void loadHistory(); }}
-                                    className="rounded-md bg-[#2383e2] px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-[#2383e2]/90"
+                                    className="rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-on-accent transition-colors hover:bg-accent/90"
                                 >
                                     重试
                                 </button>
                             </div>
                         ) : items.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center h-64 text-foreground/40 gap-3">
+                            <div className="flex flex-col items-center justify-center h-64 text-foreground-secondary gap-3">
                                 <History className="w-8 h-8 opacity-20" />
                                 <span className="text-xs font-medium">暂无历史记录</span>
                             </div>
@@ -293,7 +293,7 @@ export function HistoryDrawer({ type, className = '' }: HistoryDrawerProps) {
                                                     <span className="truncate">{item.title}</span>
                                                     {item.changedTitle && (
                                                         <>
-                                                            <span className="text-[10px] text-foreground/40 font-normal">变</span>
+                                                            <span className="text-[10px] text-foreground-secondary font-normal">变</span>
                                                             <span className="truncate font-medium">{item.changedTitle}</span>
                                                         </>
                                                     )}
@@ -303,7 +303,7 @@ export function HistoryDrawer({ type, className = '' }: HistoryDrawerProps) {
                                                             ${item.subType === '情侣' ? 'bg-rose-50 text-rose-600' :
                                                                 item.subType === '商业' ? 'bg-blue-50 text-blue-600' :
                                                                     item.subType === '亲子' ? 'bg-amber-50 text-amber-600' :
-                                                                        'bg-background-secondary text-foreground/60'}
+                                                                        'bg-background-secondary text-foreground-secondary'}
                                                         `}>
                                                             {item.subType}
                                                         </span>
@@ -311,17 +311,17 @@ export function HistoryDrawer({ type, className = '' }: HistoryDrawerProps) {
                                                 </h4>
                                                 {/* 问题显示在标题下方 */}
                                                 {item.question && (
-                                                    <p className="text-[11px] text-foreground/50 truncate mt-0.5 font-medium">
+                                                    <p className="text-[11px] text-foreground-secondary truncate mt-0.5 font-medium">
                                                         {item.question}
                                                     </p>
                                                 )}
                                                 <div className="flex items-center gap-2 mt-2">
-                                                    <span className="text-[10px] text-foreground/40 font-bold flex items-center gap-1">
+                                                    <span className="text-[10px] text-foreground-secondary font-bold flex items-center gap-1">
                                                         <Calendar className="w-3 h-3" />
                                                         {formatDate(item.createdAt)}
                                                     </span>
                                                     {item.modelName && (
-                                                        <span className="text-[10px] text-foreground/40 font-bold border-l border-border pl-2">
+                                                        <span className="text-[10px] text-foreground-secondary font-bold border-l border-border pl-2">
                                                             {item.modelName}
                                                         </span>
                                                     )}
@@ -333,7 +333,7 @@ export function HistoryDrawer({ type, className = '' }: HistoryDrawerProps) {
                                 {hasMore && (
                                     <div ref={loadMoreSentinelRef} className="py-3 flex justify-center">
                                         {loadingMore ? (
-                                            <div className="flex items-center gap-2 text-xs text-foreground/50">
+                                            <div className="flex items-center gap-2 text-xs text-foreground-secondary">
                                                 <SoundWaveLoader variant="inline" />
                                             </div>
                                         ) : appendError ? (
@@ -345,7 +345,7 @@ export function HistoryDrawer({ type, className = '' }: HistoryDrawerProps) {
                                                 重试加载更多
                                             </button>
                                         ) : (
-                                            <div className="text-xs text-foreground/50">
+                                            <div className="text-xs text-foreground-secondary">
                                                 继续下滑加载更多
                                             </div>
                                         )}
@@ -356,7 +356,7 @@ export function HistoryDrawer({ type, className = '' }: HistoryDrawerProps) {
                     </div>
 
                     {/* 底部渐变遮罩 (提示可滚动) */}
-                    <div className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-[#f7f6f3] to-transparent pointer-events-none" />
+                    <div className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-background to-transparent pointer-events-none" />
                 </div>
             </div>
         </>

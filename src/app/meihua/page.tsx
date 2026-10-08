@@ -117,38 +117,38 @@ export default function MeihuaPage() {
         <div className="max-w-3xl mx-auto px-4 py-8 sm:py-12">
           <header className="hidden md:block border-b border-border/60 pb-7 mb-8">
             <h1 className="text-3xl font-bold tracking-tight">梅花易数</h1>
-            <p className="mt-2 text-sm text-foreground/55">以时间、文字或报数，观察卦象的体用流转。</p>
+            <p className="mt-2 text-sm text-foreground-secondary">以时间、文字或报数，观察卦象的体用流转。</p>
           </header>
 
           <main className="space-y-6">
             <section className="bg-background border border-border rounded-md p-5 sm:p-6 space-y-5">
               <div>
-                <label htmlFor="meihua-question" className="block text-xs font-bold tracking-wider text-foreground/50 mb-2">占问事项</label>
+                <label htmlFor="meihua-question" className="block text-xs font-bold tracking-wider text-foreground-secondary mb-2">占问事项</label>
                 <input
                   id="meihua-question"
                   value={question}
                   onChange={(event) => setQuestion(event.target.value)}
                   placeholder="例如：这次合作能否顺利推进？"
-                  className="w-full px-3 py-3 bg-transparent border border-border rounded-md text-sm focus:border-[#2383e2] focus:ring-2 focus:ring-[#2383e2]/20 focus:outline-none"
+                  className="w-full px-3 py-3 bg-transparent border border-border rounded-md text-sm focus:border-accent focus:ring-2 focus:ring-accent/20 focus:outline-none"
                 />
               </div>
 
               <div>
-                <label htmlFor="meihua-date" className="block text-xs font-bold tracking-wider text-foreground/50 mb-2">起卦时间</label>
+                <label htmlFor="meihua-date" className="block text-xs font-bold tracking-wider text-foreground-secondary mb-2">起卦时间</label>
                 <div className="relative">
-                  <CalendarClock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground/35 pointer-events-none" />
+                  <CalendarClock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground-secondary pointer-events-none" />
                   <input
                     id="meihua-date"
                     type="datetime-local"
                     value={date}
                     onChange={(event) => setDate(event.target.value)}
-                    className="w-full pl-10 pr-3 py-3 bg-transparent border border-border rounded-md text-sm focus:border-[#2383e2] focus:ring-2 focus:ring-[#2383e2]/20 focus:outline-none"
+                    className="w-full pl-10 pr-3 py-3 bg-transparent border border-border rounded-md text-sm focus:border-accent focus:ring-2 focus:ring-accent/20 focus:outline-none"
                   />
                 </div>
               </div>
 
               <div>
-                <div className="text-xs font-bold tracking-wider text-foreground/50 mb-2">起卦方式</div>
+                <div className="text-xs font-bold tracking-wider text-foreground-secondary mb-2">起卦方式</div>
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-2" role="group" aria-label="梅花起卦方式">
                   {METHOD_OPTIONS.map((option) => (
                     <button
@@ -156,10 +156,10 @@ export default function MeihuaPage() {
                       type="button"
                       onClick={() => setMethod(option.id)}
                       aria-pressed={method === option.id}
-                      className={`text-left px-3 py-3 rounded-md border transition-colors duration-150 ${method === option.id ? 'border-[#2383e2] bg-[#2383e2]/8' : 'border-border hover:bg-background-secondary active:bg-background-secondary/80'}`}
+                      className={`text-left px-3 py-3 rounded-md border transition-colors duration-150 ${method === option.id ? 'border-accent bg-accent/8' : 'border-border hover:bg-background-secondary active:bg-background-secondary/80'}`}
                     >
-                      <span className={`block text-sm font-semibold ${method === option.id ? 'text-[#2383e2]' : ''}`}>{option.label}</span>
-                      <span className="block mt-1 text-[11px] text-foreground/45">{option.hint}</span>
+                      <span className={`block text-sm font-semibold ${method === option.id ? 'text-accent' : ''}`}>{option.label}</span>
+                      <span className="block mt-1 text-[11px] text-foreground-secondary">{option.hint}</span>
                     </button>
                   ))}
                 </div>
@@ -168,32 +168,32 @@ export default function MeihuaPage() {
               {method === 'text_split' && (
                 <div className="space-y-4 border-t border-border/60 pt-5">
                   <div>
-                    <label htmlFor="meihua-text" className="block text-xs font-bold tracking-wider text-foreground/50 mb-2">取卦文字</label>
+                    <label htmlFor="meihua-text" className="block text-xs font-bold tracking-wider text-foreground-secondary mb-2">取卦文字</label>
                     <textarea
                       id="meihua-text"
                       value={text}
                       onChange={(event) => setText(event.target.value)}
                       rows={3}
                       placeholder="输入一个字、两句文字或一段来意"
-                      className="w-full resize-y px-3 py-3 bg-transparent border border-border rounded-md text-sm leading-relaxed focus:border-[#2383e2] focus:ring-2 focus:ring-[#2383e2]/20 focus:outline-none"
+                      className="w-full resize-y px-3 py-3 bg-transparent border border-border rounded-md text-sm leading-relaxed focus:border-accent focus:ring-2 focus:ring-accent/20 focus:outline-none"
                     />
                   </div>
                   {isSingleCharacter && (
                     <div className="grid grid-cols-2 gap-3">
                       {[['left-stroke', '左半部笔画', leftStrokeCount, setLeftStrokeCount], ['right-stroke', '右半部笔画', rightStrokeCount, setRightStrokeCount]].map(([id, label, value, setter]) => (
-                        <label key={id as string} htmlFor={id as string} className="text-xs text-foreground/55">
+                        <label key={id as string} htmlFor={id as string} className="text-xs text-foreground-secondary">
                           <span className="block mb-2 font-semibold">{label as string}</span>
-                          <input id={id as string} type="number" min={1} value={value as string} onChange={(event) => (setter as (value: string) => void)(event.target.value)} className="w-full px-3 py-2.5 border border-border rounded-md bg-transparent text-sm focus:border-[#2383e2] focus:outline-none" />
+                          <input id={id as string} type="number" min={1} value={value as string} onChange={(event) => (setter as (value: string) => void)(event.target.value)} className="w-full px-3 py-2.5 border border-border rounded-md bg-transparent text-sm focus:border-accent focus:outline-none" />
                         </label>
                       ))}
                     </div>
                   )}
                   {sentences.length > 2 && !isSingleCharacter && (
                     <div>
-                      <div className="text-xs font-semibold text-foreground/55 mb-2">多句取用</div>
+                      <div className="text-xs font-semibold text-foreground-secondary mb-2">多句取用</div>
                       <div className="inline-flex border border-border rounded-md overflow-hidden" role="group" aria-label="多句取用方式">
                         {(['first', 'last'] as const).map((value) => (
-                          <button key={value} type="button" aria-pressed={multiSentenceStrategy === value} onClick={() => setMultiSentenceStrategy(value)} className={`px-3 py-2 text-xs transition-colors ${multiSentenceStrategy === value ? 'bg-[#2383e2] text-white' : 'hover:bg-background-secondary'}`}>
+                          <button key={value} type="button" aria-pressed={multiSentenceStrategy === value} onClick={() => setMultiSentenceStrategy(value)} className={`px-3 py-2 text-xs transition-colors ${multiSentenceStrategy === value ? 'bg-accent text-on-accent' : 'hover:bg-background-secondary'}`}>
                             {value === 'first' ? '取首句' : '取末句'}
                           </button>
                         ))}
@@ -205,12 +205,12 @@ export default function MeihuaPage() {
 
               {(method === 'number_pair' || method === 'number_triplet') && (
                 <div className="border-t border-border/60 pt-5">
-                  <div className="text-xs font-bold tracking-wider text-foreground/50 mb-2">报数</div>
+                  <div className="text-xs font-bold tracking-wider text-foreground-secondary mb-2">报数</div>
                   <div className={`grid gap-3 ${method === 'number_pair' ? 'grid-cols-2' : 'grid-cols-3'}`}>
                     {numbers.slice(0, method === 'number_pair' ? 2 : 3).map((value, index) => (
-                      <label key={index} htmlFor={`meihua-number-${index}`} className="text-xs text-foreground/55">
+                      <label key={index} htmlFor={`meihua-number-${index}`} className="text-xs text-foreground-secondary">
                         <span className="block mb-2 font-semibold">{index === 0 ? '上卦' : index === 1 ? '下卦' : '动爻'}</span>
-                        <input id={`meihua-number-${index}`} type="number" min={1} value={value} onChange={(event) => updateNumber(index, event.target.value)} className="w-full px-3 py-2.5 border border-border rounded-md bg-transparent text-sm focus:border-[#2383e2] focus:outline-none" />
+                        <input id={`meihua-number-${index}`} type="number" min={1} value={value} onChange={(event) => updateNumber(index, event.target.value)} className="w-full px-3 py-2.5 border border-border rounded-md bg-transparent text-sm focus:border-accent focus:outline-none" />
                       </label>
                     ))}
                   </div>
@@ -218,7 +218,7 @@ export default function MeihuaPage() {
               )}
             </section>
 
-            <button type="button" onClick={() => void handleCalculate()} disabled={isLoading} className="w-full inline-flex justify-center items-center gap-2 px-5 py-3.5 bg-[#2383e2] text-white rounded-md font-semibold text-sm hover:bg-[#2383e2]/90 active:bg-[#1a65b0] transition-colors disabled:opacity-50">
+            <button type="button" onClick={() => void handleCalculate()} disabled={isLoading} className="w-full inline-flex justify-center items-center gap-2 px-5 py-3.5 bg-accent text-on-accent rounded-md font-semibold text-sm hover:bg-accent/90 active:bg-accent-hover transition-colors disabled:opacity-50">
               {isLoading ? <><SoundWaveLoader variant="inline" /><span>正在起卦</span></> : <><Play className="w-4 h-4" />开始起卦</>}
             </button>
           </main>

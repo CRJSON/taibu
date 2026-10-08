@@ -15,8 +15,8 @@ const WANGSUAI_COLORS: Record<string, string> = {
 const TIANJIANG_COLORS: Record<string, string> = {
     贵人: 'text-yellow-500', 腾蛇: 'text-red-400', 朱雀: 'text-red-500',
     六合: 'text-green-500', 勾陈: 'text-amber-500', 青龙: 'text-blue-500',
-    天空: 'text-gray-400', 白虎: 'text-white', 太常: 'text-yellow-400',
-    玄武: 'text-black dark:text-foreground/20', 太阴: 'text-purple-400', 天后: 'text-pink-400',
+    天空: 'text-gray-400', 白虎: 'text-slate-600 dark:text-slate-200', 太常: 'text-yellow-400',
+    玄武: 'text-foreground', 太阴: 'text-purple-400', 天后: 'text-pink-400',
 };
 
 // 天地盘 12 宫的布局位置（4x4，中心2x2为课名区域）

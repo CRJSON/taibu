@@ -49,7 +49,7 @@ export function PlaceInputModal({
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in">
             {/* 遮罩层 */}
             <div
-                className="absolute inset-0 bg-[#37352f]/20 backdrop-blur-[2px]"
+                className="absolute inset-0 bg-foreground/20 backdrop-blur-[2px]"
                 onClick={onClose}
             />
 
@@ -58,13 +58,13 @@ export function PlaceInputModal({
                 {/* 头部 */}
                 <div className="sticky top-0 bg-background border-b border-border/60 px-6 py-4 flex items-center justify-between z-10">
                     <h2 className="text-lg font-bold flex items-center gap-2">
-                        <MapPin className="w-5 h-5 text-[#2383e2]" />
+                        <MapPin className="w-5 h-5 text-accent" />
                         出生地点
                     </h2>
                     <button
                         type="button"
                         onClick={onClose}
-                        className="text-foreground/40 hover:text-foreground hover:bg-background-secondary p-1 rounded-md transition-all duration-150"
+                        className="text-foreground-secondary hover:text-foreground hover:bg-background-secondary p-1 rounded-md transition-all duration-150"
                     >
                         <X className="w-5 h-5" />
                     </button>
@@ -79,7 +79,7 @@ export function PlaceInputModal({
                     />
 
                     {/* 说明 */}
-                    <div className="bg-blue-50 text-[#2eaadc] p-4 rounded-md text-xs flex items-start gap-3 border border-blue-100">
+                    <div className="bg-blue-50 text-accent p-4 rounded-md text-xs flex items-start gap-3 border border-blue-100">
                         <MapPin className="w-4 h-4 mt-0.5 flex-shrink-0" />
                         <p className="leading-relaxed font-medium">
                             出生地点会在提交时通过高德 Web 服务解析经度，用于真太阳时修正。如果无法精确解析到城市或区县，系统会自动回退为北京时间（东八区）排盘。
@@ -100,8 +100,8 @@ export function PlaceInputModal({
                     <button
                         type="button"
                         onClick={handleConfirm}
-                        className="flex-1 px-4 py-2 bg-[#2383e2] text-white rounded-md text-sm font-semibold
-                            hover:bg-[#2383e2]/90 active:bg-[#1a65b0] transition-all duration-150"
+                        className="flex-1 px-4 py-2 bg-accent text-on-accent rounded-md text-sm font-semibold
+                            hover:bg-accent/90 active:bg-accent-hover transition-all duration-150"
                     >
                         确定
                     </button>

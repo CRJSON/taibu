@@ -9,7 +9,7 @@
  *   const { run } = await import('file:///absolute/repo/scripts/tests/p5-browser-fixture.mjs');
  *   return run(page, '/tmp/taibu-p5-browser/fixture.js');
  *
- * Actual components: SettingsCenterHost/GeneralSettingsPanel/ChartsPanel, AIModelPanel,
+ * Actual components: SettingsCenterPage/SettingsCenterHost/GeneralSettingsPanel/ChartsPanel, AIModelPanel,
  * AnnouncementManagementPanel, ConversationListProvider, ChartPickerModal,
  * useSelectedBaziChart, useComposerState, HistoryDrawer/HistoryPageTemplate and RecordsPage.
  * Actual root ClientProviders owns the shared Query client and handles synthetic auth I/O.
@@ -35,6 +35,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import { ClientProviders, useSessionSafe } from '@/components/providers/ClientProviders';
 import { ThemeProvider } from '@/components/ui/ThemeProvider';
 import { SettingsCenterHost } from '@/components/settings/SettingsCenterHost';
+import { SettingsCenterPage } from '@/components/settings/SettingsCenterPage';
+import { usePathname } from 'next/navigation';
 import { openSettingsCenter } from '@/lib/settings-center';
 import { AIModelPanel } from '@/components/admin/AIModelPanel';
 import { AnnouncementManagementPanel } from '@/components/admin/AnnouncementManagementPanel';
@@ -51,6 +53,22 @@ import * as chartClient from '@/lib/user/charts-client';
 import { useSelectedBaziChart } from '@/lib/hooks/useUserCharts';
 import { TimeInputModal } from '@/components/bazi/form/TimeInputModal';
 import { AgentQuestionDialog } from '@/components/chat/agent/AgentQuestionDialog';
+import { AgentMessage } from '@/components/chat/AgentMessage';
+import { AgentWorkspacePanel } from '@/components/chat/agent/AgentWorkspacePanel';
+import { AgentResultContext } from '@/components/chat/agent/AgentResultContext';
+const initialToolParts = AGENT_TOOL_FIXTURE_PARTS;
+function AgentResultsProbe() {
+  const [open, setOpen] = useState(false);
+  const [request, setRequest] = useState(undefined);
+  const { user } = useSessionSafe();
+  const data = { version: 1, runId: 'ui-results', status: 'completed', parts: initialToolParts };
+  return <section data-testid="agent-results"><AgentResultContext.Provider value={{ openResource(id) { setRequest(previous => ({ id, version: (previous?.version ?? 0) + 1 })); setOpen(true); } }}>
+    <AgentMessage data={data} />
+    <button onClick={() => { setRequest(previous => ({ id: 'chart:bazi', version: (previous?.version ?? 0) + 1 })); setOpen(true); }}>恢复已有成果标签</button>
+    {open && <AgentWorkspacePanel workspaceKey={(user?.id ?? 'visitor') + ':ui-fixture'} artifacts={[{ type: 'artifact', id: 'bazi', title: '已保存八字', chartType: 'bazi', chartId: 'saved-bazi' }]} sources={[]} historyTools={initialToolParts} attachmentIds={[]} data={data} requestedResource={request} onClose={() => setOpen(false)} />}
+  </AgentResultContext.Provider></section>;
+}
+
 import { calculateZiweiChartBundle, getHoroscope } from '@/lib/divination/ziwei';
 function BirthRulesProbe() {
   const [open, setOpen] = useState(false);
@@ -136,7 +154,7 @@ function Shell() {
   const setUser = id => window.fixtureAuth.change(id);
   window.fixture.user = user?.id ?? null;
   const list = useConversationList();
-  const [route, setRoute] = useState('/chat');
+  const route = usePathname();
   const [stream, setStream] = useState(null);
   const [operation, setOperation] = useState('');
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -147,10 +165,11 @@ function Shell() {
   const [selectedMounted, setSelectedMounted] = useState(false);
   const [agentMounted, setAgentMounted] = useState(false);
   const [questionMounted, setQuestionMounted] = useState(false);
+  const [resultsMounted, setResultsMounted] = useState(false);
   const [modelMountKey, setModelMountKey] = useState(0);
   window.fixture.remountModels = () => setModelMountKey(current => current + 1);
   window.fixture.mount = { composer: setComposerMounted, history: setHistoryMounted, drawer: setDrawerMounted,
-    records: setRecordsMounted, picker: setPickerOpen, selected: setSelectedMounted, agent: setAgentMounted, question: setQuestionMounted };
+    records: setRecordsMounted, picker: setPickerOpen, selected: setSelectedMounted, agent: setAgentMounted, question: setQuestionMounted, results: setResultsMounted };
   window.fixture.chartKey = queryKeys.userCharts;
   window.fixture.chartClient = chartClient;
   window.fixture.deleteHistory = deleteHistorySummary;
@@ -164,7 +183,7 @@ function Shell() {
         ? { ...row, title: 'Stream: ' + event.task.content } : row));
     }
   }), [list.setConversations]);
-  const navigate = path => { history.pushState(null, '', path); setRoute(path); };
+  const navigate = path => { history.pushState(null, '', path); window.dispatchEvent(new Event('fixture:navigate')); };
   const start = () => manager.startTask({
     conversationId: 'alice-1', requestHeaders: {}, requestBody: {},
     baseMessages: [{ id: 'user-message', role: 'user', content: 'fixture question', createdAt: '2026-01-01' }],
@@ -210,6 +229,7 @@ function Shell() {
     {selectedMounted && <SelectedChartProbe />}
     {agentMounted && <AgentChatProbe />}
     {questionMounted && <StructuredQuestionProbe />}
+    {resultsMounted && <AgentResultsProbe />}
     {historyMounted && <section data-testid="history-page"><HistoryPageTemplate {...historyConfig} /></section>}
     {drawerMounted && <section data-testid="history-drawer"><HistoryDrawer type="tarot" /></section>}
     {recordsMounted && <section data-testid="records"><RecordsPage /></section>}
@@ -217,6 +237,7 @@ function Shell() {
       onClose={() => setPickerOpen(false)} onSelect={chart => { window.fixture.pickedChart = chart; }} /></section>
     <BirthRulesProbe />
     <SettingsCenterHost />
+    {route.startsWith('/settings/') && <SettingsCenterPage>{null}</SettingsCenterPage>}
   </>;
 }
 function App() {
@@ -229,8 +250,21 @@ export async function build(outputDirectory) {
   const { build: bundle } = await import('esbuild');
   await mkdir(outputDirectory, { recursive: true });
   const outfile = resolve(outputDirectory, 'fixture.js');
+  const { executeTool, buildToolSuccessPayload, listToolDefinitions } = await import('taibu-core/mcp');
+  const toolParts = [];
+  for (const name of ['bazi', 'ziwei', 'qimen', 'liuyao', 'meihua', 'daliuren', 'xiaoliuren', 'tarot']) {
+    const definition = listToolDefinitions().find(tool => tool.name === name);
+    const input = { ...definition.inputSchema.examples[0] };
+    if (definition.inputSchema.properties?.seed) input.seed = 'browser-ui-contract';
+    if (name === 'tarot') input.referenceYear = 2026;
+    const rendered = buildToolSuccessPayload(name, await executeTool(name, input));
+    toolParts.push({ type: 'tool', id: name, name, title: definition.title, status: 'completed', input,
+      output: { artifactId: name, result: rendered.structuredContent }, canonicalText: rendered.content.map(item => item.text).join('\n') });
+  }
+  toolParts.push({ type: 'tool', id: 'incomplete', name: 'bazi', title: '字段不足的命盘', status: 'completed', output: {}, canonicalText: '规范文本仍可访问' });
+
   await bundle({
-    stdin: { contents: entry, loader: 'jsx', resolveDir: root, sourcefile: 'p5-browser-entry.jsx' },
+    stdin: { contents: entry.replace('AGENT_TOOL_FIXTURE_PARTS', JSON.stringify(toolParts)), loader: 'jsx', resolveDir: root, sourcefile: 'p5-browser-entry.jsx' },
     outfile, bundle: true, format: 'iife', platform: 'browser', jsx: 'automatic',
     tsconfig: resolve(root, 'tsconfig.json'),
     define: { 'process.env.NODE_ENV': '"development"', 'process.env': '{}' },
@@ -248,16 +282,22 @@ export async function build(outputDirectory) {
         // Fail closed if acceptance accidentally exercises them; do not fake calculations.
         if (/^(?:node:)?crypto$/.test(args.path)) contents = `export default { createHash() { throw new Error('Node crypto is outside browser fixture scope'); } };`;
         if (args.path === 'next/navigation') contents = `
-          const navigate = url => { history.pushState(null, '', url); window.dispatchEvent(new PopStateEvent('popstate')); };
-          const router = { push: navigate, replace: url => history.replaceState(null, '', url), back: () => history.back(), prefetch() {} };
+          import { useSyncExternalStore } from 'react';
+          const signal = () => window.dispatchEvent(new Event('fixture:navigate'));
+          const navigate = url => { history.pushState(null, '', url); signal(); };
+          const router = { push: navigate, replace: url => { history.replaceState(null, '', url); signal(); }, back: () => history.back(), prefetch() {} };
+          const subscribe = callback => { window.addEventListener('fixture:navigate', callback); window.addEventListener('popstate', callback); return () => { window.removeEventListener('fixture:navigate', callback); window.removeEventListener('popstate', callback); }; };
           export const useRouter = () => router;
-          export const usePathname = () => location.pathname;
+          export const usePathname = () => useSyncExternalStore(subscribe, () => location.pathname, () => '/chat');
           export const useSearchParams = () => new URLSearchParams(location.search);
         `;
         if (args.path === 'next/link') contents = `
           import React from 'react';
-          export default function Link({ href, children, prefetch, replace, scroll, ...props }) {
-            return <a {...props} href={typeof href === 'string' ? href : href.pathname}>{children}</a>;
+          import { useRouter } from 'next/navigation';
+          export default function Link({ href, children, prefetch, replace, scroll, onClick, ...props }) {
+            const router = useRouter();
+            const url = typeof href === 'string' ? href : href.pathname;
+            return <a {...props} href={url} onClick={event => { onClick?.(event); if (event.defaultPrevented || props.target === '_blank' || event.metaKey || event.ctrlKey) return; event.preventDefault(); if (replace) router.replace(url); else router.push(url); }}>{children}</a>;
           }
         `;
         if (args.path === '@/lib/auth') contents = `
@@ -305,6 +345,7 @@ export async function run(existingPage, bundlePath) {
   assert.ok(browser, 'An existing Playwright browser is required');
   const context = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 1200, height: 1000 } });
   const page = await context.newPage();
+  page.on('dialog', dialog => dialog.accept());
   // Route fulfillment remains available offline; any missed route cannot reach a socket.
   await context.setOffline(true);
   await context.addInitScript(() => {
@@ -465,8 +506,9 @@ export async function run(existingPage, bundlePath) {
     const method = request.method();
     if (url.origin !== origin) { blocked.push(request.url()); return route.abort('blockedbyclient'); }
     if (url.pathname === '/fixture.js') return route.fulfill({ status: 200, contentType: 'text/javascript', body: bundle });
-    if (url.pathname === '/chat' && method === 'GET') return route.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><meta charset="utf-8"><style>[hidden],.hidden{display:none!important}button,input,select,textarea{margin:4px;padding:4px}svg{width:16px;height:16px}body{font-family:sans-serif}</style><div id="root"></div><script src="/fixture.js"></script>' });
+    if (url.pathname === '/chat' && method === 'GET') return route.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><meta charset="utf-8"><style>[hidden],.hidden{display:none!important}button,input,select,textarea{margin:4px;padding:4px}svg{width:16px;height:16px}.relative{position:relative}body{font-family:sans-serif}</style><div id="root"></div><script src="/fixture.js"></script>' });
     if (url.pathname === '/favicon.ico') return route.fulfill({ status: 204, body: '' });
+    if (url.pathname.startsWith('/_next/image') || url.pathname.startsWith('/tarot_cards/')) return route.fulfill({ status: 200, contentType: 'image/png', body: new Uint8Array([137,80,78,71,13,10,26,10,0,0,0,13,73,72,68,82,0,0,0,1,0,0,0,1,8,4,0,0,0,181,28,12,2,0,0,0,11,73,68,65,84,120,218,99,252,255,31,0,3,3,2,0,239,154,6,167,0,0,0,0,73,69,78,68,174,66,96,130]) });
     if (url.pathname === '/api/notifications' && method === 'GET') return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { notifications: [] }, error: null }) });
     if (url.pathname === '/api/notifications/popup' && method === 'POST') return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { claimed: false }, error: null }) });
     const body = request.postDataJSON();
@@ -659,21 +701,21 @@ export async function run(existingPage, bundlePath) {
 
     await page.getByRole('button', { name: 'Open actual settings', exact: true }).click();
     await page.getByText('推送通知', { exact: true }).waitFor();
-    check('Actual settings hash preserves /chat pathname', new URL(page.url()).pathname === '/chat' && new URL(page.url()).hash === '#settings/general');
+    check('Actual settings navigation enters an independent page address', new URL(page.url()).pathname === '/settings/general' && new URL(page.url()).hash === '');
     await page.evaluate(() => { document.querySelector('[role="switch"]').dataset.fixtureIdentity = 'original-node'; window.fixture.invalidations.length = 0; });
     await page.getByRole('switch').first().click();
     await until(() => window.fixture.invalidations.length === 1);
     check('GeneralSettings mutation invalidates its scoped query exactly once', JSON.stringify(await page.evaluate(() => window.fixture.invalidations)) === JSON.stringify([{ queryKey: ['chat', 'bootstrap', 'alice'] }]));
     let readsBeforeClose = settingsReads;
-    await page.getByRole('button', { name: '关闭设置中心', exact: true }).click();
-    await until(() => location.hash === '');
+    await page.getByRole('link', { name: '账户', exact: true }).click();
+    await until(() => location.pathname === '/settings/profile');
     await page.getByRole('button', { name: 'Open actual settings', exact: true }).click();
     await page.getByText('推送通知', { exact: true }).waitFor();
-    check('Closing/reopening actual settings preserves mounted DOM and avoids GET refetch', settingsReads === readsBeforeClose && await page.getByRole('switch').first().getAttribute('data-fixture-identity') === 'original-node');
+    check('Category switching preserves mounted settings DOM and avoids GET refetch', settingsReads === readsBeforeClose && await page.getByRole('switch').first().getAttribute('data-fixture-identity') === 'original-node');
     check('Optimistic saved switch state survives reopen', await page.getByRole('switch').first().getAttribute('aria-checked') === 'false');
     await page.goBack();
-    await until(() => location.hash === '');
-    checks.push('Browser back closes actual hash-addressed settings');
+    await until(() => location.pathname === '/settings/profile');
+    checks.push('Browser back returns to the prior settings category');
 
     await page.evaluate(() => { history.replaceState(null, '', '#settings/personalization'); window.dispatchEvent(new HashChangeEvent('hashchange')); });
     const instructions = page.locator('textarea').filter({ visible: true });
@@ -684,7 +726,21 @@ export async function run(existingPage, bundlePath) {
     await until(before => window.fixtureAuth.revalidations > before, focusBefore);
     await page.waitForTimeout(50);
     check('Real ClientProviders focus refresh preserves AI dirty draft and does not reload settings', await instructions.inputValue() === 'Dirty same-account draft' && settingsReads === readsBeforeFocus);
-    await page.getByRole('button', { name: '关闭设置中心', exact: true }).click();
+    await page.getByRole('button', { name: 'Open actual settings', exact: true }).click();
+    await page.getByLabel('早报投递时间').fill('10:15');
+    page.removeAllListeners('dialog');
+    let leavePrompts = 0;
+    page.on('dialog', dialog => { leavePrompts += 1; return dialog.dismiss(); });
+    await page.getByRole('link', { name: '返回太卜', exact: true }).click();
+    check('Cancelling leave keeps drafts from several settings categories', new URL(page.url()).pathname === '/settings/general' && await page.getByLabel('早报投递时间').inputValue() === '10:15' && leavePrompts === 1);
+    await page.evaluate(() => { history.replaceState(null, '', '#settings/personalization'); window.dispatchEvent(new HashChangeEvent('hashchange')); });
+    check('AI draft survives switching categories and cancelling leave', await instructions.inputValue() === 'Dirty same-account draft');
+    page.removeAllListeners('dialog');
+    leavePrompts = 0;
+    page.on('dialog', dialog => { leavePrompts += 1; return dialog.accept(); });
+    await page.getByRole('link', { name: '返回太卜', exact: true }).click();
+    await until(() => location.pathname === '/bazi');
+    check('Several dirty forms produce one confirmation on accepted leave', leavePrompts === 1);
     readsBeforeClose = settingsReads;
 
     failRename = true;
@@ -696,6 +752,7 @@ export async function run(existingPage, bundlePath) {
     await until(() => window.fixture.list().length === 9);
     check('Failed delete restores original ordering', await page.locator('[data-testid="conversation-list"] li').first().getAttribute('data-id') === 'alice-1');
 
+    await page.getByRole('button', { name: 'Fixture Chat route', exact: true }).click();
     await page.getByRole('button', { name: 'Start actual stream manager', exact: true }).click();
     await until(() => document.querySelector('[data-testid="stream"]').textContent === 'running:partial');
     await page.getByRole('button', { name: 'Fixture Other route', exact: true }).click();
@@ -711,6 +768,9 @@ export async function run(existingPage, bundlePath) {
     check('Stopped partial and regenerated completion each persist exactly once', saves.length === 2 && saves[0].body.messages.at(-1).content === 'partial' && saves[1].body.messages.at(-1).content === 'partial completed');
     check('Parent list and stream rerenders do not reload mounted settings for the same user', settingsReads === readsBeforeClose);
 
+    await page.getByRole('button', { name: 'Open actual settings', exact: true }).click();
+    await page.getByText('推送通知', { exact: true }).waitFor();
+    readsBeforeClose = settingsReads;
     holdList = true;
     await page.getByRole('button', { name: 'Refresh actual list', exact: true }).click();
     for (let attempt = 0; !releaseList && attempt < 100; attempt++) await page.waitForTimeout(10);
@@ -885,8 +945,8 @@ export async function run(existingPage, bundlePath) {
     await page.waitForTimeout(40);
     check('Logout/login same-ID stale PATCH cannot reset draft or local preferences', await aiDraft.inputValue() === 'New login same Alice' && await page.evaluate(() => localStorage.getItem('chartStyle')) === 'modern');
     check('Aborted settings completion does not emit old mutation effects', (await page.evaluate(() => window.fixture.invalidations)).length === 0);
-    await page.getByRole('button', { name: '关闭设置中心', exact: true }).click();
-    await page.locator('dialog.settings-center-dialog[open]').waitFor({ state: 'hidden' });
+    await page.getByRole('link', { name: '返回太卜', exact: true }).click();
+    await page.locator('.settings-page').waitFor({ state: 'hidden' });
     await page.getByRole('button', { name: 'Open actual settings', exact: true }).click();
     await page.getByText('推送通知', { exact: true }).waitFor();
     const notificationSwitch = page.getByRole('switch').first();
@@ -908,7 +968,7 @@ export async function run(existingPage, bundlePath) {
     reminderFail.release();
     await until(() => !document.querySelectorAll('[role="switch"]')[1].disabled);
     check('Failed reminder rolls back only its item', await reminderSwitch.getAttribute('aria-checked') === 'true' && await page.getByRole('switch').nth(2).getAttribute('aria-checked') === 'true');
-    await page.getByRole('button', { name: '关闭设置中心', exact: true }).click();
+    await page.getByRole('link', { name: '返回太卜', exact: true }).click();
 
     // Controlled interleavings invoke real ConversationListProvider actions.
     rows.alice = Array.from({ length: 12 }, (_, index) => ({ id: 'race-' + (index + 1), user_id: 'alice', title: 'Race ' + (index + 1), personality: 'general', created_at: '2026-01-01', updated_at: '2026-01-01', source_type: 'chat' }));
@@ -1032,7 +1092,7 @@ export async function run(existingPage, bundlePath) {
     await openCharts();
     await chartRow('chart-alice').waitFor();
     await chartRow('chart-alice').evaluate(node => { node.dataset.fixtureIdentity = 'preserved-chart-node'; });
-    await page.getByRole('button', { name: '关闭设置中心', exact: true }).click();
+    await page.getByRole('link', { name: '常规', exact: true }).click();
     await createChart('chart-created', 'Created without reload');
     await openCharts();
     await chartRow('chart-created').waitFor();
@@ -1140,7 +1200,7 @@ export async function run(existingPage, bundlePath) {
     check('Chart reads and writes carry expected-user fences through real facades',
       requests.filter(item => item.pathname === '/api/user/charts' || /^\/api\/bazi\/charts/.test(item.pathname))
         .every(item => item.expectedUserId === 'alice' || item.expectedUserId === 'bob'));
-    await page.getByRole('button', { name: '关闭设置中心', exact: true }).click();
+    await page.getByRole('link', { name: '返回太卜', exact: true }).click();
     await page.evaluate(() => { window.fixture.mount.picker(false); window.fixture.mount.selected(false); });
     await page.getByRole('button', { name: 'Fixture Alice', exact: true }).evaluate(button => button.click());
     await until(() => window.fixture.user === 'alice');
@@ -1374,6 +1434,49 @@ export async function run(existingPage, bundlePath) {
     await page.evaluate(() => window.fixture.mount.agent(false));
     await renderBarrier();
     check('Unmount cancels all nonterminal Agent event readers', await page.evaluate(() => window.fixtureAgentIO.streams.every(stream => stream.closed)));
+
+
+    const callsBeforeResults = requests.length;
+    await page.getByRole('button', { name: 'Fixture Alice', exact: true }).focus();
+    await page.evaluate(() => window.fixture.mount.results(true));
+    const results = page.locator('[data-testid="agent-results"]');
+    await results.locator('[data-chart-kind="tarot"]').waitFor();
+    check('Eight real persisted tool results automatically render with the process folded', await results.locator('[data-chart-kind]').count() === 8 && await results.getByRole('button', { name: /任务过程/ }).getAttribute('aria-expanded') === 'false');
+    check('Automatic chart previews do not steal focus', await page.getByRole('button', { name: 'Fixture Alice', exact: true }).evaluate(button => button === document.activeElement));
+    check('Slim Ziwei results render all twelve returned palaces', await results.locator('[data-chart-kind="ziwei"] [role="button"]').count() === 12);
+    const baziResult = results.locator('[data-tool-result="bazi"]');
+    await baziResult.getByRole('button', { name: '展开命盘', exact: true }).click();
+    const chartDialog = page.getByRole('dialog', { name: '八字命盘', exact: true });
+    await chartDialog.waitFor();
+    check('Expanded chart shows the same persisted four pillars', await chartDialog.innerText().then(text => text.includes('庚辰') && text.includes('己巳')));
+    await page.keyboard.press('Escape');
+    await chartDialog.waitFor({ state: 'hidden' });
+    check('Closing a chart returns focus to its expand button', await baziResult.getByRole('button', { name: '展开命盘', exact: true }).evaluate(button => button === document.activeElement));
+    await baziResult.getByRole('button', { name: '固定到工作区', exact: true }).click();
+    await page.getByRole('dialog', { name: '任务工作区', exact: true }).waitFor();
+    check('Pinning opens the corresponding real tool result in the workspace', await page.locator('#agent-workspace-panel [data-chart-kind="bazi"]').count() === 1);
+    check('Workspace counts final saved links and their original readings only once', await page.locator('#agent-workspace-panel .agent-panel-tabs button').first().innerText() === '成果9');
+    await page.getByRole('button', { name: '关闭任务工作区', exact: true }).click();
+    await results.getByRole('button', { name: '恢复已有成果标签', exact: true }).click();
+    await page.locator('#agent-workspace-panel [data-chart-kind="bazi"]').waitFor();
+    check('A restored saved-artifact tab uses the same persisted reading without chart loading or recalculation', requests.length === callsBeforeResults && await page.getByRole('tab', { name: '已保存八字', exact: true }).count() === 1);
+    await page.getByRole('button', { name: '关闭任务工作区', exact: true }).click();
+    await results.locator('[data-tool-result="tarot"]').getByRole('button', { name: '固定到工作区', exact: true }).click();
+    check('Workspace supports multiple pinned readings without replacing their data', await page.getByRole('tab', { name: '八字命盘', exact: true }).count() === 1 && await page.locator('#agent-workspace-panel [data-chart-kind="tarot"]').count() === 1);
+    await page.getByRole('button', { name: '关闭任务工作区', exact: true }).click();
+    await page.setViewportSize({ width: 320, height: 740 });
+    await results.locator('[data-tool-result="meihua"]').getByRole('button', { name: '展开命盘', exact: true }).click();
+    await page.getByRole('dialog', { name: '梅花卦盘', exact: true }).waitFor();
+    check('Mobile expansion keeps the returned hexagrams and moving line', await page.getByRole('dialog', { name: '梅花卦盘', exact: true }).innerText().then(text => text.includes('泽地萃') && text.includes('泽水困') && text.includes('动')));
+    await page.keyboard.press('Escape');
+    await page.setViewportSize({ width: 1200, height: 1000 });
+    check('Incomplete chart retains canonical text instead of generating another reading', await results.locator('[data-tool-result="incomplete"]').innerText().then(text => text.includes('命盘数据不完整') && text.includes('规范文本仍可访问')));
+    await page.evaluate(() => window.fixture.mount.results(false));
+    await renderBarrier();
+    await page.evaluate(() => window.fixture.mount.results(true));
+    await results.locator('[data-chart-kind="tarot"]').waitFor();
+    check('History remount restores all eight UI readings without new API operations', requests.length === callsBeforeResults && await results.locator('[data-chart-kind]').count() === 8);
+    await page.evaluate(() => window.fixture.mount.results(false));
 
     check('No unhandled network requests escaped fixtures', blocked.length === 0);
     check('No browser runtime exceptions', browserErrors.length === 0);

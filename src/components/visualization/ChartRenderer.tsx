@@ -52,7 +52,7 @@ export function shouldResetChartError(prevResetKey: unknown, nextResetKey: unkno
   return prevResetKey !== nextResetKey;
 }
 
-class ChartErrorBoundary extends Component<{ children: ReactNode; resetKey: unknown }, ErrorBoundaryState> {
+export class ChartErrorBoundary extends Component<{ children: ReactNode; resetKey: unknown; fallback?: ReactNode }, ErrorBoundaryState> {
   state: ErrorBoundaryState = { error: null };
 
   static getDerivedStateFromError(error: Error) {
@@ -67,6 +67,7 @@ class ChartErrorBoundary extends Component<{ children: ReactNode; resetKey: unkn
 
   render() {
     if (this.state.error) {
+      if (this.props.fallback !== undefined) return this.props.fallback;
       return (
         <div className="rounded-xl border border-[var(--color-border)] p-4 text-center text-sm text-[var(--color-foreground-secondary)]">
           <p>图表渲染出错</p>

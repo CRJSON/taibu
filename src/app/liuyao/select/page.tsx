@@ -218,7 +218,7 @@ export default function SelectHexagramPage() {
                             onClick={() => handleModeChange('list')}
                             className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-md text-sm font-medium transition-all
                                 ${selectMode === 'list'
-                                    ? 'bg-accent text-white'
+                                    ? 'bg-accent text-on-accent'
                                     : 'text-foreground-secondary hover:text-foreground'
                                 }`}
                         >
@@ -229,7 +229,7 @@ export default function SelectHexagramPage() {
                             onClick={() => handleModeChange('trigram')}
                             className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-md text-sm font-medium transition-all
                                 ${selectMode === 'trigram'
-                                    ? 'bg-accent text-white'
+                                    ? 'bg-accent text-on-accent'
                                     : 'text-foreground-secondary hover:text-foreground'
                                 }`}
                         >
@@ -302,7 +302,7 @@ export default function SelectHexagramPage() {
                     <button
                         onClick={handleGenerate}
                         disabled={!effectiveCode || isLoading}
-                        className="w-full flex items-center justify-center gap-2 py-3 bg-accent text-white rounded-xl font-medium
+                        className="w-full flex items-center justify-center gap-2 py-3 bg-accent text-on-accent rounded-xl font-medium
                             hover:bg-accent/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                     >
                         {isLoading ? (
