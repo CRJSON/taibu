@@ -129,6 +129,7 @@ docs/manual/*
 !docs/agent-experience-implementation.md
 !docs/agent-domain-competence-implementation.md
 !docs/agent-chart-interaction-review.md
+!docs/agent-pi-durable-1-1-upgrade.md
 !docs/ui-settings-agent.md
 
 # AI
