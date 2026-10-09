@@ -13,13 +13,14 @@ import { readFileSync, writeFileSync, mkdirSync, statSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { SKILL_DIR, requireGuide, shortDescription } from './skill-guides.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(import.meta.url);
 const coreVersion = require(path.join(repoRoot, 'packages/core/package.json')).version;
 
 const entry = path.join(repoRoot, 'packages/core/dist/mcp/index.js');
-const skillDir = path.join(repoRoot, 'skills/taibu-divination');
+const skillDir = SKILL_DIR;
 const bundlePath = path.join(skillDir, 'scripts/vendor/taibu-core.bundle.mjs');
 const referencesDir = path.join(skillDir, 'references');
 const skillMdPath = path.join(skillDir, 'SKILL.md');
@@ -150,37 +151,8 @@ function renderReference(tool) {
   return lines.join('\n');
 }
 
-function shortDescription(description) {
-  const [, afterDash] = description.split(/\s+-\s+/, 2);
-  const text = (afterDash ?? description).replace(/\n+/g, ' ');
-  const [firstSentence] = text.split(/[。；]/, 1);
-  return firstSentence || text;
-}
-
-// 工具 -> interpretation/ 解读指引的映射（同域工具共用一份）。新增工具时必须补充，否则构建报错。
-const TOOL_GUIDES = {
-  astrology: 'astrology',
-  bazi: 'bazi',
-  bazi_pillars_resolve: 'bazi',
-  bazi_dayun: 'bazi',
-  ziwei: 'ziwei',
-  ziwei_horoscope: 'ziwei',
-  ziwei_flying_star: 'ziwei',
-  liuyao: 'liuyao',
-  meihua: 'meihua',
-  tarot: 'tarot',
-  taiyi: 'taiyi',
-  almanac: 'almanac',
-  qimen: 'qimen',
-  daliuren: 'daliuren',
-  xiaoliuren: 'xiaoliuren',
-};
-
 function guideLink(toolName) {
-  const guide = TOOL_GUIDES[toolName];
-  if (!guide) throw new Error(`工具 ${toolName} 缺少解读指引映射，请更新 build-skill-bundle.mjs 的 TOOL_GUIDES 并补写 interpretation/ 文档`);
-  const guidePath = path.join(skillDir, 'interpretation', `${guide}.md`);
-  statSync(guidePath);
+  const guide = requireGuide(toolName);
   return `[interpretation/${guide}.md](interpretation/${guide}.md)`;
 }
 

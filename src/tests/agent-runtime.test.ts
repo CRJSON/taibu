@@ -4,8 +4,6 @@ import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   createAssistantMessageEventStream,
-  getCurrentTools,
-  type AssistantMessage,
 } from "@earendil-works/pi-ai";
 import type { PiStreamFn as StreamFn } from "../lib/agent/types";
 import type { StorageWrite } from "@earendil-works/pi-durable";
@@ -25,151 +23,10 @@ import {
   createAgentTools,
   searchAgentWeb,
 } from "../lib/agent/tools.server";
-import type { AIModelConfig } from "../types";
 import { MockLanguageModelV3 } from "ai/test";
-import { countTokens } from "../lib/token-utils";
+import { estimateContextTokens } from '@earendil-works/pi-ai/utils/estimate';
 
-const config: AIModelConfig = {
-  id: "fixture",
-  name: "fixture",
-  vendor: "other",
-  modelId: "fixture",
-  apiUrl: "https://model.example/v1",
-  apiKeyEnvVar: "FIXTURE_KEY",
-  supportsReasoning: false,
-  requiredTier: "free",
-};
-const row = (): AgentRunRow => {
-  const id = randomUUID();
-  return {
-    id,
-    user_id: randomUUID(),
-    conversation_id: randomUUID(),
-    request_id: randomUUID(),
-    request_hash: "hash",
-    status: "running",
-    checkpoint: {
-      version: 1,
-      messages: [
-        { role: "user", content: "请用工具分析", timestamp: Date.now() },
-      ],
-      parts: [],
-      finalArtifacts: [],
-    },
-    public_message: {
-      id: `agent:${id}`,
-      role: "assistant",
-      content: "",
-      createdAt: new Date().toISOString(),
-      agent: { version: 1, runId: id, status: "running", parts: [] },
-    },
-    input: {
-      model: "fixture",
-      reasoning: false,
-      webEnabled: false,
-      systemPrompt: "fixture",
-      title: "fixture",
-      userMessage: {
-        id: "user",
-        role: "user",
-        content: "请用工具分析",
-        createdAt: new Date().toISOString(),
-      },
-    },
-    billing: "charged",
-    worker_id: "test-worker",
-    fence: 1,
-    cancel_requested: false,
-    record_id: null,
-    created_at: new Date().toISOString(),
-    event_cursor: 1,
-  };
-};
-class MemoryStore extends AgentStore {
-  readonly drafts = new Map<string, AgentArtifactRow>();
-  readonly writes: Array<{ name: string; args: Record<string, unknown> }> = [];
-  pending: AgentCommandRow[] = [];
-  log: Array<{ sequence: number; writes: StorageWrite[] }> = [];
-  draft(callId: string) {
-    return [...this.drafts.values()].find(d => d.call_id === callId || d.call_id.endsWith(`:${callId}`));
-  }
-  nativeEntries() {
-    return this.log.flatMap(c => c.writes).filter(w => w.type === "entry").map(w => w.value);
-  }
-  constructor() {
-    super({} as SupabaseClient);
-  }
-  override async artifact(_run: AgentRunRow, callId: string) {
-    return this.drafts.get(callId) ?? null;
-  }
-  override async artifacts() {
-    return [...this.drafts.values()].filter((a) => a.kind === "calculation");
-  }
-  override async commands() {
-    return this.pending;
-  }
-  override async rpc<T>(
-    name: string,
-    args: Record<string, unknown>,
-  ): Promise<T> {
-    this.writes.push({ name, args: structuredClone(args) });
-    if (name === "agent_durable_read") return this.log.filter(c => c.sequence > Number(args.p_after)).slice(0, 200) as T;
-    if (name === "agent_durable_commit") {
-      const sequence = Number(args.p_sequence);
-      const writes = structuredClone(args.p_writes) as StorageWrite[];
-      const existing = this.log.find(c => c.sequence === sequence);
-      if (existing) assert.deepEqual(existing.writes, writes);
-      else {
-        assert.equal(sequence, this.log.length + 1);
-        this.log.push({ sequence, writes });
-      }
-      for (const write of writes) {
-        if (write.type === "submission" && ["placed", "done"].includes(write.value.status)) {
-          const match = /^command:(\d+)$/.exec(write.value.requestId ?? "");
-          if (match) this.pending = this.pending.filter(c => c.sequence !== Number(match[1]));
-        }
-      }
-      return sequence as T;
-    }
-    if (name === "agent_cache_tool") {
-      const data = {
-        id: randomUUID(),
-        call_id: args.p_call_id,
-        tool_name: args.p_tool_name,
-        kind: args.p_kind,
-        args: args.p_args,
-        result: args.p_result,
-      } as AgentArtifactRow;
-      this.drafts.set(data.call_id, data);
-      return data as T;
-    }
-    if (name === "agent_checkpoint" && args.p_command)
-      this.pending = this.pending.filter((c) => c.sequence !== args.p_command);
-    return false as T;
-  }
-}
-function scripted(
-  build: (index: number) => AssistantMessage["content"],
-  onContext?: (messages: Parameters<StreamFn>[1]["messages"]) => void,
-): StreamFn {
-  let round = 0;
-  return (model, context) => {
-    assert.ok(getCurrentTools(context.messages).some((t) => t.name === "bazi"));
-    onContext?.(context.messages);
-    const output = createAssistantMessageEventStream(),
-      message = emptyPiAssistant(model);
-    message.content = build(round++);
-    message.usage.input = countTokens(JSON.stringify(context.messages));
-    message.usage.totalTokens = message.usage.input;
-    message.stopReason = message.content.some((p) => p.type === "toolCall")
-      ? "toolUse"
-      : "stop";
-    output.push({ type: "start", partial: message });
-    output.push({ type: "done", reason: message.stopReason, message });
-    output.end(message);
-    return output;
-  };
-}
+import { config, row, MemoryStore, scripted } from "./helpers/agent-runtime-fixture";
 beforeEach((t) => {
   assert.ok("mock" in t);
   const credits =
@@ -1056,6 +913,7 @@ test("unknown Pi models carry an unknown capacity and expose native context usag
   const store = new MemoryStore();
   let capacity: number | undefined;
   const streamFn: StreamFn = (model, context, options) => {
+    assert.match(JSON.stringify(context.messages), /<taibu_methods>/);
     capacity = model.contextWindow;
     return scripted(() => [{ type: "text", text: "chat-only result" }])(model, context, options);
   };
@@ -1069,6 +927,39 @@ test("unknown Pi models carry an unknown capacity and expose native context usag
   assert.ok(data.runtime!.context!.measuredTokens > 0);
   assert.ok(store.writes.some(w => w.name === "agent_checkpoint" && (w.args.p_message as AgentRunRow["public_message"]).agent?.runtime?.context));
   assert.equal(finish.args.p_record, null);
+});
+
+test('known contexts start background compaction below the blocking threshold while generation continues', async t => {
+  const store = new MemoryStore(), run = row();
+  const windows = require('../lib/ai/model-context') as typeof import('../lib/ai/model-context');
+  t.mock.method(windows, 'resolveKnownModelContextConfig', () => ({ maxContext: 64000, reserveOutput: 4096 }));
+  run.checkpoint.messages = Array.from({ length: 6 }, (_, index) => ({ role: 'user' as const, content: `old ${index}: ${'history '.repeat(2000)}`, timestamp: index + 1 }));
+  let summaryStarted = false, summaryFinished = false, generatedWhileCompacting = false;
+  let release!: () => void;
+  const barrier = new Promise<void>(resolve => { release = resolve; });
+  const safeguard = setTimeout(() => release(), 1000);
+  t.after(() => clearTimeout(safeguard));
+  const sdk = require('../lib/ai/providers/ai-sdk-provider') as typeof import('../lib/ai/providers/ai-sdk-provider');
+  t.mock.method(sdk, 'callWithAISDK', async () => { summaryStarted = true; await barrier; summaryFinished = true; return { text: '保留原目标与历史事实' }; });
+  const streamFn: StreamFn = (model, context) => {
+    const tokens = estimateContextTokens(context.messages).tokens;
+    assert.ok(tokens < model.contextWindow - 8096, `tokens ${tokens} must stay below the blocking line`);
+    const output = createAssistantMessageEventStream(), message = emptyPiAssistant(model);
+    setTimeout(() => {
+      generatedWhileCompacting = summaryStarted && !summaryFinished;
+      release();
+      setTimeout(() => {
+        message.content = [{ type: 'text', text: '继续生成而不等待后台摘要' }];
+        message.stopReason = 'stop';
+        output.push({ type: 'done', reason: 'stop', message });
+        output.end(message);
+      }, 20);
+    }, 30);
+    return output;
+  };
+  await executeAgentRun(store, run, undefined, { config, streamFn });
+  assert.equal(generatedWhileCompacting, true);
+  assert.ok(store.nativeEntries().some(entry => entry.kind === 'pi.compaction'));
 });
 
 test("unknown capacity still uses Pi's bounded compaction recovery on a reported overflow", async () => {

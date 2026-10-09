@@ -29,7 +29,9 @@
     "test": "node scripts/test-runner.mjs",
     "test:browser": "pnpm build:core && node scripts/tests/p5-browser-fixture.mjs",
     "verify": "node scripts/test-runner.mjs --verify",
-    "build:core": "pnpm -C packages/core build"
+    "build:core": "pnpm -C packages/core build",
+    "build:methods": "pnpm build:core && node scripts/build-analysis-methods.mjs",
+    "check:methods": "pnpm build:core && node scripts/build-analysis-methods.mjs --check"
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.48",

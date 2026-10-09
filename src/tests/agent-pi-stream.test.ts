@@ -63,6 +63,32 @@ function mockModel(parts: Part[]) {
   });
 }
 
+test('SDK requests include native prompt sections and replay their latest updates before instructions', async t => {
+  const sdk = require('../lib/ai/providers/ai-sdk-provider') as typeof import('../lib/ai/providers/ai-sdk-provider');
+  t.mock.method(sdk, 'isModelAvailable', () => true);
+  const model = mockModel([
+    { type: 'stream-start', warnings: [] },
+    { type: 'text-start', id: 'text' },
+    { type: 'text-delta', id: 'text', delta: 'answer with guide' },
+    { type: 'text-end', id: 'text' },
+    { type: 'finish', finishReason: { unified: 'stop', raw: 'stop' }, usage },
+  ]);
+  t.mock.method(sdk, 'createModelFromConfig', () => model);
+  const input = normalizeContext({ messages: [
+    { role: 'system', content: '系统约定', timestamp: 1, sections: { taibu_methods: '<taibu_methods>旧目录</taibu_methods>', instructions: '<instructions>先计算后解读</instructions>', obsolete: '已移除权限' } },
+    { role: 'user', content: 'query', timestamp: 2 },
+    { role: 'system', content: '', timestamp: 3, sections: { taibu_methods: '<taibu_methods>解读前读取八字指引</taibu_methods>', obsolete: null } },
+  ] });
+  const output = createPiSDKStream(config, { reasoning: false })(piModel, input);
+  assert.equal((await output.result()).stopReason, 'stop');
+  const prompt = model.doStreamCalls[0].prompt;
+  assert.equal(prompt.filter(message => message.role === 'system').length, 1);
+  assert.equal(prompt[0].role, 'system');
+  assert.match(String(prompt[0].content), /<taibu_methods>解读前读取八字指引<\/taibu_methods>/);
+  assert.doesNotMatch(String(prompt[0].content), /旧目录|已移除权限/);
+  assert.ok(String(prompt[0].content).indexOf('<taibu_methods>') < String(prompt[0].content).indexOf('<instructions>'));
+});
+
 test('source fallback and transient errors share three external attempts; empty responses recover once', async t => {
   const sdk = require('../lib/ai/providers/ai-sdk-provider') as typeof import('../lib/ai/providers/ai-sdk-provider');
   t.mock.method(sdk, 'isModelAvailable', () => true);

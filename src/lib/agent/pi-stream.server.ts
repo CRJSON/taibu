@@ -3,6 +3,9 @@ import { jsonSchema, streamText, tool, type ModelMessage } from "ai";
 import {
   createAssistantMessageEventStream,
   getCurrentTools,
+  collapseSystemMessages,
+  getSystemMessageText,
+  normalizeContext,
   isContextOverflow,
   type Api,
   type AssistantMessage,
@@ -67,14 +70,11 @@ export function emptyPiAssistant(model: Model<Api>): AssistantMessage {
   };
 }
 export function toAgentModelMessages(messages: Message[]): ModelMessage[] {
-  return messages.map((message) => {
+  return collapseSystemMessages(normalizeContext({ messages })).messages.map((message) => {
     if (message.role === "system")
       return {
         role: "system",
-        content:
-          typeof message.content === "string"
-            ? message.content
-            : message.content.map((p) => p.text).join("\n"),
+        content: getSystemMessageText(message),
       };
     if (message.role === "user")
       return {
