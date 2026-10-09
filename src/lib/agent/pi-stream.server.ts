@@ -14,6 +14,7 @@ import {
   type Message,
 } from "@earendil-works/pi-ai";
 import type { PiStreamFn as StreamFn } from "./types";
+import { toPiUsage } from './usage';
 
 export const AGENT_UNSUPPORTED_TOOLS_MESSAGE = "当前模型不支持工具调用，请切换普通对话";
 import type { AIModelConfig } from "@/types";
@@ -166,6 +167,7 @@ export function createPiSDKStream(
           try {
             const requestSignal = agentModelRequestSignal(options?.signal);
             let finished = false;
+            const outputLimits = [source.defaultMaxTokens, piModel.maxTokens, options?.maxTokens].filter((limit): limit is number => limit !== undefined);
             const result = streamText({
               // The SDK's default handler logs upstream exception bodies.
               // Emit our public error event instead of logging provider secrets.
@@ -180,7 +182,7 @@ export function createPiSDKStream(
               maxRetries: 0,
               abortSignal: requestSignal,
               temperature: source.defaultTemperature ?? 0.7,
-              maxOutputTokens: source.defaultMaxTokens ?? undefined,
+              maxOutputTokens: outputLimits.length ? Math.min(...outputLimits) : undefined,
               topP: source.defaultTopP ?? undefined,
               presencePenalty: source.defaultPresencePenalty ?? undefined,
               frequencyPenalty: source.defaultFrequencyPenalty ?? undefined,
@@ -327,21 +329,7 @@ export function createPiSDKStream(
                     : message.content.some((p) => p.type === "toolCall")
                       ? "toolUse"
                       : "stop";
-                const usage = event.totalUsage;
-                const count = (value: number | undefined) => typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : 0;
-                const cacheRead = count(usage.inputTokenDetails?.cacheReadTokens);
-                const cacheWrite = count(usage.inputTokenDetails?.cacheWriteTokens);
-                // SDK inputTokens includes the caches; Pi counts them separately.
-                const input = usage.inputTokenDetails?.noCacheTokens === undefined
-                  ? Math.max(0, count(usage.inputTokens) - cacheRead - cacheWrite)
-                  : count(usage.inputTokenDetails.noCacheTokens);
-                const outputTokens = count(usage.outputTokens);
-                message.usage = {
-                  ...structuredClone(EMPTY_USAGE),
-                  input, output: outputTokens, cacheRead, cacheWrite,
-                  ...(usage.outputTokenDetails?.reasoningTokens === undefined ? {} : { reasoning: count(usage.outputTokenDetails.reasoningTokens) }),
-                  totalTokens: count(usage.totalTokens) || input + outputTokens + cacheRead + cacheWrite,
-                };
+                message.usage = toPiUsage(event.totalUsage);
               }
             }
             // EOF and an SDK abort are not successful Pi terminal messages.

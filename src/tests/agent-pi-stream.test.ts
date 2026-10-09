@@ -89,6 +89,24 @@ test('SDK requests include native prompt sections and replay their latest update
   assert.ok(String(prompt[0].content).indexOf('<taibu_methods>') < String(prompt[0].content).indexOf('<instructions>'));
 });
 
+test('SDK output tokens respect the smallest source, native model and per-request budget', async t => {
+  const sdk = require('../lib/ai/providers/ai-sdk-provider') as typeof import('../lib/ai/providers/ai-sdk-provider');
+  t.mock.method(sdk, 'isModelAvailable', () => true);
+  const model = mockModel([
+    { type: 'stream-start', warnings: [] },
+    { type: 'text-start', id: 'text' },
+    { type: 'text-delta', id: 'text', delta: 'budgeted answer' },
+    { type: 'text-end', id: 'text' },
+    { type: 'finish', finishReason: { unified: 'stop', raw: 'stop' }, usage },
+  ]);
+  t.mock.method(sdk, 'createModelFromConfig', () => model);
+  for (const [sourceLimit, requestLimit, expected] of [[12288, undefined, 2400], [12288, 1200, 1200], [800, 1200, 800]] as const) {
+    const output = createPiSDKStream({ ...config, defaultMaxTokens: sourceLimit }, { reasoning: false })({ ...piModel, maxTokens: 2400 }, context(), { maxTokens: requestLimit });
+    assert.equal((await output.result()).stopReason, 'stop');
+    assert.equal(model.doStreamCalls.at(-1)!.maxOutputTokens, expected);
+  }
+});
+
 test('source fallback and transient errors share three external attempts; empty responses recover once', async t => {
   const sdk = require('../lib/ai/providers/ai-sdk-provider') as typeof import('../lib/ai/providers/ai-sdk-provider');
   t.mock.method(sdk, 'isModelAvailable', () => true);

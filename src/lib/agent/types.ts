@@ -1,4 +1,4 @@
-import type { Message, Tool, TSchema, Static, AssistantMessageEventStream, Model, Api, TranscriptContext, SimpleStreamOptions } from "@earendil-works/pi-ai";
+import type { Message, Tool, TSchema, Static, AssistantMessageEventStream, Model, Api, TranscriptContext, SimpleStreamOptions, Usage } from "@earendil-works/pi-ai";
 import type { ChatMessage } from "@/types";
 import type { AgentQuestion } from './questions';
 import type { AgentTodo } from './todos';
@@ -62,6 +62,7 @@ export interface AgentRuntimeInfo {
     compactions: number;
   };
   activity?: { phase: "preparing" | "generating" | "thinking" | "responding" | "tools" | "compacting" | "retrying" | "awaiting_input" | "settling"; toolTitle?: string; attempt?: number };
+  usage?: { models: Record<string, Partial<Pick<Usage, 'input' | 'output' | 'cacheRead' | 'cacheWrite' | 'totalTokens' | 'reasoning'>>>; tools: Record<string, Partial<Pick<Usage, 'input' | 'output' | 'cacheRead' | 'cacheWrite' | 'totalTokens' | 'reasoning'>>>; totalTokens: number };
 }
 
 export interface AgentCheckpoint {
@@ -96,6 +97,7 @@ export interface DomainToolResult<T = unknown> {
   content: Array<{ type: "text"; text: string }>;
   details: T;
   canonicalText?: string;
+  usage?: Usage;
 }
 /** Business tools have no dependency on an agent loop implementation. */
 export interface DomainTool<T extends TSchema = TSchema, R = unknown> extends Tool<T> {

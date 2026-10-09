@@ -108,6 +108,15 @@ async function featureEnabled(feature: FeatureModuleId) {
   if (state.status === "unavailable") throw new Error("功能状态暂不可用，请稍后再试");
   return state.status === "enabled";
 }
+export async function assertAgentToolAccess(store: AgentStore, run: AgentRunRow, name: string, args: Record<string, unknown>) {
+  const account = await getUserCreditInfo(run.user_id, { client: store.db });
+  const feature = name.startsWith('bazi_') ? 'bazi' : name.startsWith('ziwei_') ? 'ziwei' : name;
+  if (FEATURE_MODULE_IDS.includes(feature as FeatureModuleId) && !(await featureEnabled(feature as FeatureModuleId))) throw new Error('该功能已关闭');
+  if (name === 'search_knowledge' && (!(await featureEnabled('knowledge-base')) || account.membership === 'free')) throw new Error('当前会员无法使用知识库检索');
+  if (name === 'web_search' && (!run.input.webEnabled || account.membership === 'free')) throw new Error('当前任务不能使用联网工具');
+  if (name === 'read_user_data' && !(await featureEnabled(getDataSourceFeatureId(args.type as typeof DATA_SOURCE_TYPES[number])))) throw new Error('该资料功能已关闭');
+  if (name === 'read_user_profile' && !(await featureEnabled('ai-personalization'))) throw new Error('个性化功能已关闭');
+}
 const auxiliaryToolTitles: Record<string, string> = {
   list_user_data: "个人资料列表",
   read_user_data: "读取命盘与历史",
@@ -269,42 +278,7 @@ export async function createAgentTools(
     replay: "safe",
     execute: async (callId, args, signal) => {
       signal?.throwIfAborted();
-      await checkMember();
-      const feature = name.startsWith("bazi_")
-        ? "bazi"
-        : name.startsWith("ziwei_")
-          ? "ziwei"
-          : name;
-      if (
-        FEATURE_MODULE_IDS.includes(feature as FeatureModuleId) &&
-        !(await featureEnabled(feature as FeatureModuleId))
-      )
-        throw new Error("该功能已关闭");
-      if (
-        name === "search_knowledge" &&
-        (!(await featureEnabled("knowledge-base")) ||
-          (await checkMember()).membership === "free")
-      )
-        throw new Error("当前会员无法使用知识库检索");
-      if (
-        name === "web_search" &&
-        (!run.input.webEnabled || (await checkMember()).membership === "free")
-      )
-        throw new Error("当前任务不能使用联网检索");
-      if (
-        name === "read_user_data" &&
-        !(await featureEnabled(
-          getDataSourceFeatureId(
-            (args as { type: (typeof DATA_SOURCE_TYPES)[number] }).type,
-          ),
-        ))
-      )
-        throw new Error("该资料功能已关闭");
-      if (
-        name === "read_user_profile" &&
-        !(await featureEnabled("ai-personalization"))
-      )
-        throw new Error("个性化功能已关闭");
+      await assertAgentToolAccess(store, run, name, args);
       const cached = await store.artifact(run, callId);
       if (cached) {
         if (cached.tool_name !== name || !isDeepStrictEqual(cached.args, args))
@@ -350,10 +324,7 @@ export async function createAgentTools(
         return kind === "calculation"
           ? {
               ...cached.result,
-              content: [
-                ...cached.result.content,
-                { type: "text", text: `成果 ID: ${cached.id}` },
-              ],
+              content: cached.result.content,
               details: { artifactId: cached.id, result: cached.result.details },
             }
           : cached.result;
@@ -380,13 +351,7 @@ export async function createAgentTools(
       return kind === "calculation"
         ? {
             ...result,
-            content: [
-              ...result.content,
-              {
-                type: "text",
-                text: `成果 ID: ${a.id}。完成任务时通过 select_final_artifacts 选择最终成果。`,
-              },
-            ],
+            content: result.content,
             details: { artifactId: a.id, result: result.details },
           }
         : result;
@@ -400,7 +365,7 @@ export async function createAgentTools(
       async (args, callId) => {
         const stableArgs = { ...args };
         if (def.inputSchema.properties?.seed && stableArgs.seed == null)
-          stableArgs.seed = stableAgentSeed(run.id, callId);
+          stableArgs.seed = String(stableAgentSeed(run.id, callId));
         const result = await executeTool(def.name, stableArgs);
         const rendered = buildToolSuccessPayload(def.name, result);
         const resultWithText = {

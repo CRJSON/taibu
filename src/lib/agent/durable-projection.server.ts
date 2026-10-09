@@ -6,6 +6,7 @@ import { CompactionEntry } from "@earendil-works/pi-durable";
 import type { AgentDurableStorage } from "./durable-storage.server";
 import type { AgentCheckpoint, AgentPart, DomainTool } from "./types";
 import { projectAgentContextUsage } from "./context-usage";
+import { projectAgentUsage } from './usage';
 
 /** Public messages are a projection; Durable entries remain the execution truth. */
 export async function projectDurableConversation(
@@ -15,6 +16,7 @@ export async function projectDurableConversation(
   const state = await root.viewState(context);
   const oldStreamingId = checkpoint.streamingAssistantId;
   const live = state.value.docs["pi.live"] as LiveState | undefined;
+  const usage = projectAgentUsage(state.value.docs['pi.usage']);
   state.dispose();
   // A compaction changes active context, not the visible execution history.
   let cursor: Cursor | undefined;
@@ -27,6 +29,7 @@ export async function projectDurableConversation(
   history.reverse();
   const title = (name: string) => tools.find(t => t.name === name)?.label ?? name;
   if (checkpoint.runtime) {
+    checkpoint.runtime.usage = usage;
     const transcript = await root.context(context);
     checkpoint.runtime.context = projectAgentContextUsage(transcript.messages, history.filter(entry => entry.kind === CompactionEntry.kind).length);
     const runningTool = live?.tools?.find(slot => slot.status === "running");

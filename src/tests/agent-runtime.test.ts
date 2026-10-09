@@ -925,6 +925,7 @@ test("unknown Pi models carry an unknown capacity and expose native context usag
   assert.equal(data.runtime?.model.limitSource, "unknown");
   assert.equal(data.runtime?.context?.source, "usage");
   assert.ok(data.runtime!.context!.measuredTokens > 0);
+  assert.ok(data.runtime!.usage!.models['taibu/fixture'].totalTokens! > 0);
   assert.ok(store.writes.some(w => w.name === "agent_checkpoint" && (w.args.p_message as AgentRunRow["public_message"]).agent?.runtime?.context));
   assert.equal(finish.args.p_record, null);
 });
@@ -960,6 +961,20 @@ test('known contexts start background compaction below the blocking threshold wh
   await executeAgentRun(store, run, undefined, { config, streamFn });
   assert.equal(generatedWhileCompacting, true);
   assert.ok(store.nativeEntries().some(entry => entry.kind === 'pi.compaction'));
+});
+
+test('Tarot implicit seeds satisfy Core schema and durable hooks block overrides before calculation', async () => {
+  const store = new MemoryStore(), run = row();
+  await executeAgentRun(store, run, undefined, { config, streamFn: scripted(index => index === 0
+    ? [{ type: 'toolCall', id: 'blocked', name: 'tarot', arguments: { seed: 'model-seed' } }]
+    : index === 1 ? [{ type: 'toolCall', id: 'draw', name: 'tarot', arguments: { spreadType: 'single', referenceYear: '2026' } }]
+    : index === 2 ? [{ type: 'toolCall', id: 'select', name: 'select_final_artifacts', arguments: { artifactIds: [store.draft('draw')!.id] } }]
+    : [{ type: 'text', text: '按实际牌面解读' }]) });
+  assert.equal(store.draft('blocked'), undefined);
+  assert.ok(store.draft('draw'));
+  const results = store.nativeEntries().flatMap(entry => entry.model ?? []).filter(message => message.role === 'toolResult');
+  assert.ok(results.some(message => message.role === 'toolResult' && message.toolCallId === 'blocked' && message.isError));
+  assert.ok(results.some(message => message.role === 'toolResult' && message.toolCallId === 'draw' && !message.isError && message.content.some(part => part.type === 'text' && part.text.includes('成果 ID:'))));
 });
 
 test("unknown capacity still uses Pi's bounded compaction recovery on a reported overflow", async () => {

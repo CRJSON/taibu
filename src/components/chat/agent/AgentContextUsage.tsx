@@ -37,6 +37,14 @@ export function AgentContextUsage({ runtime }: { runtime?: AgentRuntimeInfo }) {
                 {context.reasoning !== undefined && <div><dt>推理（包含在输出中）</dt><dd>{number(context.reasoning)}</dd></div>}
                 <div><dt>上下文压缩</dt><dd>{context.compactions} 次</dd></div>
             </dl>}
+            {runtime?.usage && <details>
+                <summary className="agent-context-note">任务累计用量 · {number(runtime.usage.totalTokens)} tokens</summary>
+                <dl className="agent-context-stats">
+                    {Object.entries(runtime.usage.models).map(([model, usage]) => <div key={model}><dt>{model}</dt><dd>{number(usage.totalTokens ?? 0)}</dd></div>)}
+                    {Object.entries(runtime.usage.tools).map(([tool, usage]) => <div key={tool}><dt>{tool}</dt><dd>{number(usage.totalTokens ?? 0)}</dd></div>)}
+                </dl>
+                <p className="agent-context-note">按服务商回传统计。未回传 token 的本地计算不计入；金额未配置。</p>
+            </details>}
             <p className="agent-context-note">{capacity ? '窗口上限来自应用的模型配置。' : '此模型未配置窗口上限，因此不显示占比。'}</p>
         </FloatingPanel>
     </div>;

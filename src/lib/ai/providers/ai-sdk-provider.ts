@@ -170,7 +170,7 @@ export async function callWithAISDK(
     systemPrompt: string,
     config: AIModelConfig,
     options?: AIProviderOptions,
-): Promise<{ text: string; reasoning?: string }> {
+): Promise<{ text: string; reasoning?: string; usage?: import('ai').LanguageModelUsage }> {
     const result = await generateText({
         model,
         abortSignal: options?.abortSignal,
@@ -188,6 +188,7 @@ export async function callWithAISDK(
     return {
         text: result.text,
         reasoning: result.reasoningText ?? undefined,
+        usage: result.usage,
     };
 }
 
