@@ -198,6 +198,7 @@
 .agent-tool-card--completed .agent-tool-indicator { color: var(--chat-success); }
 .agent-tool-card--failed .agent-tool-indicator, .agent-tool-card--failed .agent-tool-state { color: var(--chat-warning); }
 .agent-tool-state { font-size: calc(10 / 16 * 1rem); white-space: nowrap; }
+.agent-tool-time { color: var(--foreground-tertiary); font-size: calc(10 / 16 * 1rem); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .agent-tool-chevron { color: var(--foreground-tertiary); transition: transform .15s; }
 .agent-tool-card[open] .agent-tool-chevron { transform: rotate(90deg); }
 .agent-tool-details { border-top: 1px solid var(--border); background: var(--chat-raised); }

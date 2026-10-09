@@ -336,6 +336,8 @@ test('native Pi tools project chart actions and rebuild the exact focus after an
   const focus = getLatestChartFocus(tools);
   assert.equal(focus?.caption, '模型正在查看日支');
   assert.equal(getChartResources(tools).length, 1);
+  const bazi = tools.find(part => part.name === 'bazi')!;
+  assert.ok(typeof bazi.durationMs === 'number' && bazi.durationMs >= 0, 'durable 1.1.0 records tool execution time on the native result');
   const snapshot = structuredClone(first.args.p_checkpoint) as AgentRunRow['checkpoint'];
   snapshot.parts = [];
   run.checkpoint = snapshot;

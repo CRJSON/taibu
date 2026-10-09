@@ -23,6 +23,8 @@ export type AgentPart =
       input?: unknown;
       output?: unknown;
       canonicalText?: string;
+      /** Tool execution time (durable 1.1.0), shown on completed cards. */
+      durationMs?: number;
     }
   | { type: "source"; id: string; title: string; url: string; content?: string }
   | { type: "question"; id: string; question: string; questions?: AgentQuestion[] }

@@ -3,7 +3,7 @@ import { BACKGROUND_CONTEXT, awaitWithContext, withCancel } from "@earendil-work
 import type { Context, JsonValue } from "@earendil-works/chord";
 import {
   CompactionTask, GenerationTask, ToolTask, Harness, createRegistry, defineTool, hook,
-  type Conversation, type ConversationWatch, type StorageWrite, type SubmissionRecord,
+  type Conversation, type ConversationWatch, type StorageWrite,
   type ToolExecutionApi, type UserInput,
 } from "@earendil-works/pi-durable";
 import {
@@ -55,13 +55,15 @@ function waitForCancellation(context: Context): Promise<never> {
 }
 
 async function latestSubmission(storage: AgentDurableStorage, root: Conversation, context: Context) {
-  let cursor, last: SubmissionRecord | undefined;
+  let cursor;
   do {
-    const page = await storage.scanSubmissions({ conversationId: root.id }, 200, cursor, context);
-    for (const item of page.items) if (item.type === "input") last = item;
+    // Durable 1.1.0 scans submissions in either order: newest-first finds the
+    // latest admitted input without paging the whole history.
+    const page = await storage.scanSubmissions({ conversationId: root.id, order: "descending" }, 200, cursor, context);
+    for (const item of page.items) if (item.type === "input") return item;
     cursor = page.next;
   } while (cursor);
-  return last;
+  return undefined;
 }
 
 async function latestAssistant(root: Conversation, context: Context, includeHistory: boolean) {

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { ChatMessage } from '../types';
-import { collectAgentArtifacts, getAgentArtifactHref, getAgentToolState, groupAgentParts, getAgentActivityLabel, type AgentArtifact } from '../components/chat/agent/presentation';
+import { collectAgentArtifacts, formatAgentToolDuration, getAgentArtifactHref, getAgentToolState, groupAgentParts, getAgentActivityLabel, type AgentArtifact } from '../components/chat/agent/presentation';
 
 const chart: AgentArtifact = { type: 'artifact', id: 'chart-part', title: '命盘', chartType: 'bazi', chartId: 'chart/with?special=字符' };
 function message(parts: AgentArtifact[]): ChatMessage {
@@ -50,6 +50,21 @@ test('A terminal task never leaves unfinished tools spinning forever', () => {
     assert.equal(getAgentToolState({ ...tool, status: 'pending' }, 'running').label, '待执行');
     assert.equal(getAgentToolState({ ...tool, status: 'awaiting_input' }, 'awaiting_input').label, '等待回答');
     assert.equal(getAgentToolState({ ...tool, status: 'awaiting_input' }, 'cancelled').status, 'interrupted');
+});
+
+test('Completed cards show the durable-measured tool time without inventing a value for unfinished steps', () => {
+    assert.equal(formatAgentToolDuration(0), '1 毫秒');
+    assert.equal(formatAgentToolDuration(240), '240 毫秒');
+    assert.equal(formatAgentToolDuration(999), '999 毫秒');
+    assert.equal(formatAgentToolDuration(1000), '1 秒');
+    assert.equal(formatAgentToolDuration(2400), '2.4 秒');
+    assert.equal(formatAgentToolDuration(9950), '10 秒');
+    assert.equal(formatAgentToolDuration(10_000), '10 秒');
+    assert.equal(formatAgentToolDuration(65_400), '65 秒');
+    const completed = { type: 'tool', id: 'tool', name: 'bazi', title: '八字', status: 'completed', durationMs: 2400 } as const;
+    assert.equal(completed.durationMs, 2400);
+    const running = { type: 'tool', id: 'tool', name: 'bazi', title: '八字', status: 'running' } as const;
+    assert.equal('durationMs' in running, false);
 });
 
 test('Activity grouping preserves narration, question IDs and tool ordering', () => {

@@ -88,6 +88,13 @@ export function getAgentToolState(tool: AgentTool, runStatus: AgentRunStatus) {
     };
 }
 
+/** Tool execution time measured by the durable runtime for the completed attempt. */
+export function formatAgentToolDuration(ms: number): string {
+    if (ms < 1000) return `${Math.max(1, Math.round(ms))} 毫秒`;
+    if (ms < 10_000) return `${Math.round(ms / 100) / 10} 秒`;
+    return `${Math.round(ms / 1000)} 秒`;
+}
+
 export function formatAgentValue(value: unknown): string {
     if (value === undefined) return '暂无数据';
     if (typeof value === 'string') return value;

@@ -5,7 +5,7 @@ import { Calculator, Check, ChevronRight, CircleAlert, CircleHelp, Copy, Databas
 import type { AgentRunStatus } from '@/lib/agent/types';
 import { MarkdownContent } from '@/components/ui/MarkdownContent';
 import { useToast } from '@/components/ui/Toast';
-import { formatAgentValue, getAgentToolState, summarizeAgentTool, type AgentTool } from './presentation';
+import { formatAgentToolDuration, formatAgentValue, getAgentToolState, summarizeAgentTool, type AgentTool } from './presentation';
 import { AgentToolResult } from './AgentToolResult';
 
 function ToolValue({ value }: { value: unknown }) {
@@ -60,6 +60,7 @@ export function AgentToolCard({ tool, runStatus, showResult = true, fullResult =
                 <Icon size={14} className={state.status === 'running' ? 'animate-spin motion-reduce:animate-none' : undefined} aria-hidden="true" />
             </span>
             <span className="agent-tool-label"><span>{tool.title}</span>{summary && <small>{summary}</small>}</span>
+            {typeof tool.durationMs === 'number' && <span className="agent-tool-time">{formatAgentToolDuration(tool.durationMs)}</span>}
             <span className="agent-tool-state">{state.label}</span>
             <ChevronRight size={14} className="agent-tool-chevron" aria-hidden="true" />
         </summary>

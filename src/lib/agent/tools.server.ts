@@ -342,7 +342,7 @@ export async function createAgentTools(
           : cached.result;
       }
       const executed = await execute(args, callId, signal);
-      // Pi 1.0.4 allocates increasing numeric task IDs; tools execute sequentially.
+      // Pi Durable allocates increasing numeric task IDs; tools execute sequentially.
       // Keep the order in cache JSON rather than relying on a nonexistent timestamp column.
       const taskOrder = Number(callId.split(':', 1)[0]);
       const result = name === 'inspect_chart' && Number.isSafeInteger(taskOrder) && taskOrder > 0
