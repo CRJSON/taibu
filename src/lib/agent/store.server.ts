@@ -22,6 +22,7 @@ export interface AgentRunRow {
     userMessage: ChatMessage;
     title: string;
     knowledgeBaseIds?: string[];
+    memoryEnabled?: boolean;
   };
   billing: "charged" | "exempt" | "refunded";
   worker_id: string | null;
@@ -133,6 +134,7 @@ export class AgentStore {
       status: run.status,
       message,
       cursor: Number(run.event_cursor),
+      epoch: run.fence ?? 0,
       createdAt: run.created_at,
       clientRequestId: run.request_id,
       userMessage: run.input?.userMessage,

@@ -55,6 +55,7 @@ export interface ResolvedChatPreparation {
 }
 
 export interface ChatPromptContext {
+  agentMemoryEnabled?: boolean;
   sanitizedMessages: ChatMessage[];
   metadata: AIMessageMetadata & {
     sources?: unknown;

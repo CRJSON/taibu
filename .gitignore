@@ -106,6 +106,7 @@ supabase/migrations/*
 !supabase/migrations/20261007_180000_conversation_fork.sql
 !supabase/migrations/20261007_190000_agent_backend_access.sql
 !supabase/migrations/20261008_100000_agent_question_dedupe.sql
+!supabase/migrations/20261008_180000_agent_competence.sql
 # Additional explicit inputs for isolated Auth/PostgREST acceptance only.
 !supabase/migrations/20260110_add_user_settings_and_fix_notifications_rls.sql
 !supabase/migrations/20260113_add_app_settings.sql
@@ -125,6 +126,7 @@ docs/manual/*
 !docs/manual/Self-Hosting.md
 !docs/manual/Agent.md
 !docs/agent-experience-implementation.md
+!docs/agent-domain-competence-implementation.md
 !docs/ui-settings-agent.md
 
 # AI
@@ -141,3 +143,4 @@ skills/*-workspace/
 .codex-deploy/
 .playwright-mcp/
 .playwright-cli/
+output/playwright/

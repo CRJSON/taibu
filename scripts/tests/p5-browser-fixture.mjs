@@ -484,7 +484,7 @@ export async function run(existingPage, bundlePath) {
   page.on('console', message => {
     if (message.text().includes('No queryFn was passed')) queryWarnings.push(message.text());
   });
-  const settings = { notificationsEnabled: true, language: 'zh', expressionStyle: 'direct', customInstructions: '', chartPromptDetailLevel: 'default', userProfile: null, promptKbIds: [], notifyEmail: true, notifySite: true, defaultBaziChartId: null, defaultZiweiChartId: null };
+  const settings = { notificationsEnabled: true, language: 'zh', expressionStyle: 'direct', customInstructions: '', chartPromptDetailLevel: 'default', userProfile: null, promptKbIds: [], notifyEmail: true, notifySite: true, defaultBaziChartId: null, defaultZiweiChartId: null, chatPreferences: { width: 760, fontScale: 100, desktopNotifications: false } };
   const settingsByUser = { alice: { ...settings }, bob: { ...settings, customInstructions: 'Bob preferences', notificationsEnabled: false } };
   const chart = (id, name) => ({ id, name, gender: 'male', birth_date: '1990-01-01', birth_time: '12:00',
     birth_place: 'Beijing', longitude: 116.4, calendar_type: 'solar', is_leap_month: false, created_at: '2026-01-01T00:00:00Z' });
@@ -526,11 +526,12 @@ export async function run(existingPage, bundlePath) {
       return route.fulfill({ status: 200, contentType: 'application/json', body: payload }).catch(() => {});
     };
     const denied = () => route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ data: null, error: { message: 'Controlled fixture failure' } }) });
-    if (url.pathname === '/api/user/settings' || url.pathname === '/api/reminders') {
+    if (['/api/user/settings','/api/reminders','/api/user/agent-memory'].includes(url.pathname)) {
       const cookieUser = await page.evaluate(() => window.fixtureAuth.cookieUser);
       if (request.headers()['x-expected-user-id'] && request.headers()['x-expected-user-id'] !== cookieUser) {
         return route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ error: { message: 'Account changed' } }) });
       }
+      if (url.pathname === '/api/user/agent-memory' && method === 'GET') return ok({ memories: [] });
       if (url.pathname === '/api/user/settings') {
         const owned = settingsByUser[cookieUser] ?? settings;
         if (method === 'GET') { settingsReads++; return ok({ settings: owned }); }
@@ -718,7 +719,7 @@ export async function run(existingPage, bundlePath) {
     checks.push('Browser back returns to the prior settings category');
 
     await page.evaluate(() => { history.replaceState(null, '', '#settings/personalization'); window.dispatchEvent(new HashChangeEvent('hashchange')); });
-    const instructions = page.locator('textarea').filter({ visible: true });
+    const instructions = page.getByPlaceholder('例如：先给结论，再给依据；避免空话和术语堆叠。', { exact: true });
     await instructions.fill('Dirty same-account draft');
     const readsBeforeFocus = settingsReads;
     const focusBefore = await page.evaluate(() => window.fixtureAuth.revalidations);

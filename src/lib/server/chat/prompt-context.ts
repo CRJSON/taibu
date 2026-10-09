@@ -33,6 +33,7 @@ function injectToLastUserMessage(messages: ChatMessage[], prefix: string): ChatM
 }
 
 type UserSettingsContext = {
+  memoryEnabled?: boolean;
   expressionStyle: 'direct' | 'gentle';
   chartPromptDetailLevel: 'default' | 'more' | 'full';
   userProfile: UserIdentityProfile | null;
@@ -82,6 +83,7 @@ async function loadUserSettingsContext(
 
   return {
     expressionStyle: settings.expressionStyle,
+    memoryEnabled: settings.chatPreferences.memoryEnabled === true,
     chartPromptDetailLevel: settings.chartPromptDetailLevel,
     userProfile: settings.userProfile,
     customInstructions: settings.customInstructions,
@@ -99,6 +101,7 @@ function applyUserSettingsOverrides(
       overrides.expressionStyle === 'direct' ? 'direct' : settings.expressionStyle
     ),
     chartPromptDetailLevel: settings.chartPromptDetailLevel,
+    memoryEnabled: settings.memoryEnabled,
     customInstructions: overrides.customInstructions === null
       ? ''
       : typeof overrides.customInstructions === 'string'
@@ -252,6 +255,7 @@ export async function buildChatPromptContext(
 
   return {
     sanitizedMessages,
+    agentMemoryEnabled: effectiveUserSettings.memoryEnabled === true,
     metadata,
     fallbackPersonality,
     systemPrompt: promptBuild.systemPrompt,

@@ -193,3 +193,24 @@ test('settings expected account is only a precondition; authentication and serve
   }
   assert.ok(owners.length > 0 && owners.every(owner => owner === 'alice'));
 });
+
+test('Agent preference updates preserve display settings and reject invalid templates or memory consent before writing', async t => {
+  const api = require('../lib/api-utils') as typeof import('../lib/api-utils');
+  const template = { id: 'career', name: '事业', content: '分析：{{question}}' };
+  let settings: Record<string, unknown> = { chat_preferences: { width: 980, fontScale: 115, desktopNotifications: true, promptTemplates: [template], memoryEnabled: true } };
+  const writes: Record<string, unknown>[] = [];
+  t.mock.method(api, 'requireUserContext', async () => ({ user: { id: 'alice' }, db: { from: () => ({
+    select: () => ({ eq: (_key: string, owner: string) => { assert.equal(owner, 'alice'); return { maybeSingle: async () => ({ data: settings, error: null }) }; } }),
+    upsert: async (payload: Record<string, unknown>) => { assert.equal(payload.user_id, 'alice'); writes.push(payload); settings = payload; return { error: null }; },
+  }) } }) as unknown as Awaited<ReturnType<typeof api.requireUserContext>>);
+  const { PATCH } = await import('../app/api/user/settings/route');
+  const patch = (chatPreferences: unknown) => PATCH(new NextRequest('http://localhost/api/user/settings', { method: 'PATCH', headers: { 'X-Expected-User-Id': 'alice' }, body: JSON.stringify({ chatPreferences, user_id: 'bob' }) }));
+  for (const input of [{ memoryEnabled: 'true' }, { promptTemplates: [template, template] }, { promptTemplates: [{ ...template, content: '' }] }]) assert.equal((await patch(input)).status, 400);
+  assert.equal(writes.length, 0);
+  const response = await patch({ memoryEnabled: false });
+  assert.equal(response.status, 200);
+  assert.deepEqual((await response.json()).settings.chatPreferences, { width: 980, fontScale: 115, desktopNotifications: true, promptTemplates: [template], memoryEnabled: false });
+  assert.equal(writes.length, 1);
+  assert.equal((await patch({ promptTemplates: [] })).status, 200);
+  assert.deepEqual((settings.chat_preferences as { promptTemplates: unknown }).promptTemplates, []);
+});

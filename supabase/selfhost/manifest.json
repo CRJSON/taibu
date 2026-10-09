@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
   "baselineRevision": "5725dde",
-  "sourceFingerprint": "d3d50ddd409fab2baa9ea3a46a62db23c9db52fb9d14da09322841fa3eb149ee",
+  "sourceFingerprint": "164667195c1eeeb3cf8f54502ba12915602c15b1d823b1e750440e2ad8cad0f1",
   "target": "empty local self-hosted application schema; NOT production parity or a migration replay",
   "bootstrapOrder": [
     "platform roles/extensions",
@@ -18,7 +18,7 @@
   "sources": [
     {
       "file": "supabase/tabel_export_from_supabase.sql",
-      "sha256": "750f8a22f622dd265a2724cdb17020cfe7ddb7cc2a8644b4760d3e41f12c9dc3"
+      "sha256": "a32e24ca8331120b55a7a47ccbf551ae11c480077f9c7b9fff785b54936f3448"
     },
     {
       "file": "supabase/migrations/20260118_create_gamification_tables.sql",
@@ -185,6 +185,10 @@
       "sha256": "ed9806aa50e8c009390c39ed4d50ffa654097d40a4162009f5d3c644170d3c17"
     },
     {
+      "file": "supabase/migrations/20261008_180000_agent_competence.sql",
+      "sha256": "a9fe2732170d32b4c448d492090f81c417e7dd05a0804c979e07b528fc0a6208"
+    },
+    {
       "file": "supabase/selfhost/source-views.sql",
       "sha256": "3ec59bffedd43530835e728dd9e9fac580ed09bbacb23e64fe460cb2775c6342"
     },
@@ -206,7 +210,7 @@
     },
     {
       "file": "scripts/selfhost-schema.mjs",
-      "sha256": "5e347bf5665a527202dc59fc5de805d5cdafce74eea07d975f017adbea26b7e6"
+      "sha256": "7a7343dd50bc143bba4f83b115d1e45286a772118a41d2f79f97ad1a146009bc"
     },
     {
       "file": "src/app/api/supabase/storage/route.ts",
@@ -520,6 +524,12 @@
       "uniqueSource": null
     },
     {
+      "name": "user_agent_memory",
+      "source": "supabase/tabel_export_from_supabase.sql",
+      "security": "Feature migration: owner SELECT when granted; atomic owner or lease-fenced RPC writes",
+      "uniqueSource": null
+    },
+    {
       "name": "user_oauth_providers",
       "source": "supabase/tabel_export_from_supabase.sql",
       "security": "owner SELECT + administrator JWT writes",
@@ -723,6 +733,15 @@
         "src/lib/agent/worker-entry.ts"
       ],
       "source": "supabase/migrations/20261006_100000_agent_pi_durable.sql",
+      "status": "defined",
+      "reason": null
+    },
+    {
+      "name": "agent_write_memory",
+      "callers": [
+        "src/lib/agent/tools.server.ts"
+      ],
+      "source": "supabase/migrations/20261008_180000_agent_competence.sql",
       "status": "defined",
       "reason": null
     },
@@ -1442,15 +1461,15 @@
           "kind": "chart-return-catalog"
         },
         {
+          "file": "src/lib/agent/briefing.server.ts",
+          "kind": "literal-from"
+        },
+        {
           "file": "src/lib/api/chart-crud.ts",
           "kind": "tableName-catalog"
         },
         {
           "file": "src/lib/chat/chat-context.ts",
-          "kind": "literal-from"
-        },
-        {
-          "file": "src/lib/daily-briefing.server.ts",
           "kind": "literal-from"
         },
         {
@@ -2182,6 +2201,29 @@
       ]
     },
     {
+      "name": "user_agent_memory",
+      "kind": "table",
+      "status": "defined",
+      "callers": [
+        {
+          "file": "src/app/api/user/agent-memory/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/user/agent-memory/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/app/api/user/agent-memory/route.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/agent/tools.server.ts",
+          "kind": "literal-from"
+        }
+      ]
+    },
+    {
       "name": "user_oauth_providers",
       "kind": "table",
       "status": "defined",
@@ -2226,6 +2268,14 @@
           "kind": "literal-from"
         },
         {
+          "file": "src/lib/agent/briefing.server.ts",
+          "kind": "literal-from"
+        },
+        {
+          "file": "src/lib/agent/tools.server.ts",
+          "kind": "literal-from"
+        },
+        {
           "file": "src/lib/agent/tools.server.ts",
           "kind": "literal-from"
         },
@@ -2236,10 +2286,6 @@
         {
           "file": "src/lib/chat/chat-context.ts",
           "kind": "typed-adapter-catalog"
-        },
-        {
-          "file": "src/lib/daily-briefing.server.ts",
-          "kind": "literal-from"
         },
         {
           "file": "src/lib/data-sources/fortune.ts",
@@ -2499,7 +2545,7 @@
   "artifacts": [
     {
       "file": "supabase/selfhost/001-application.sql",
-      "sha256": "ebb3781e38106ce654d59163182ca5c8791a714b343b50da1ca201f0cf25f4f5"
+      "sha256": "3a5de5f502f516e754c80920a514e349b8eada737ab038568ec88cad8c735460"
     },
     {
       "file": "supabase/selfhost/002-storage.sql",

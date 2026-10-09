@@ -45,6 +45,7 @@ export const SQL_SOURCE_MANIFEST = {
   conversationFork: 'supabase/migrations/20261007_180000_conversation_fork.sql',
   agentBackendAccess: 'supabase/migrations/20261007_190000_agent_backend_access.sql',
   agentQuestionDedupe: 'supabase/migrations/20261008_100000_agent_question_dedupe.sql',
+  agentCompetence: 'supabase/migrations/20261008_180000_agent_competence.sql',
   userSettings: 'supabase/migrations/20260110_add_user_settings_and_fix_notifications_rls.sql',
   chartTimeResolution: 'supabase/migrations/20261005_110000_chart_time_resolution.sql',
   agentChartIdentity: 'supabase/migrations/20261005_120000_agent_chart_identity.sql',
@@ -296,6 +297,7 @@ RESET ROLE;`,
     sources.conversationFork,
     sources.agentBackendAccess,
     sources.agentQuestionDedupe,
+    sources.agentCompetence,
     'RESET ROLE;',
   ].join('\n\n');
 }

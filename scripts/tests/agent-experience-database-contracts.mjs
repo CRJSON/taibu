@@ -25,6 +25,43 @@ export async function agentExperienceDatabaseContracts(t, { sql, asActor, asOwne
   const finish = (r,status='cancelled', checkpoint=cp, output=assistant(r.id)) => admin(`SELECT public.agent_finish_run(${lease(r)},${quote(status)},${json(checkpoint)},${json(output)},NULL);`);
   const submit = async(r, request=randomUUID(), content='待发送',mode='follow_up',attachments,metadata) => JSON.parse(await asActor(owner,`SELECT to_jsonb(public.agent_submit_command(${quote(r.id)},${quote(request)},${quote(mode)},${json({...message(randomUUID(),content),attachments,metadata})}));`));
 
+  await t.test('long-term memory is opt-in, owner-isolated, evidence-bound and lease-fenced', async () => {
+    const r = await run(), evidence = '我希望每次分析都使用简洁直接的表达方式';
+    await asOwner(`UPDATE public.agent_runs SET input=jsonb_set(input,'{userMessage}',${json(message('memory-source', evidence))}) WHERE id=${quote(r.id)};`);
+    const write = (content=evidence, proof=evidence, fence=r.fence) => admin(`SELECT to_jsonb(public.agent_write_memory(${quote(r.id)},${quote(r.worker_id)},${fence},'表达方式',${quote(content)},'preference',${quote(proof)}));`);
+    await assert.rejects(write(), /AGENT_MEMORY_DISABLED/);
+    await asOwner(`INSERT INTO public.user_settings(user_id,chat_preferences) VALUES(${quote(owner)},'{"memoryEnabled":true}') ON CONFLICT(user_id) DO UPDATE SET chat_preferences=excluded.chat_preferences;`);
+    await assert.rejects(write(evidence, '不在用户消息中的原话'), /AGENT_MEMORY_EVIDENCE_REQUIRED/);
+    await assert.rejects(write('模型擅自推断的事实'), /AGENT_MEMORY_EVIDENCE_REQUIRED/);
+    await assert.rejects(write(evidence,evidence,r.fence+1), /AGENT_LEASE_LOST/);
+    const first = JSON.parse(await write()), duplicate = JSON.parse(await write());
+    assert.equal(first.id, duplicate.id);
+    assert.equal(await admin(`SELECT count(*) FROM public.user_agent_memory WHERE user_id=${quote(owner)};`),'1');
+    assert.equal(await asActor(other,`SELECT count(*) FROM public.user_agent_memory WHERE id=${quote(first.id)};`),'0');
+    assert.equal(await asActor(other,`WITH deleted AS (DELETE FROM public.user_agent_memory WHERE id=${quote(first.id)} RETURNING id) SELECT count(*) FROM deleted;`),'0');
+    await assert.rejects(asActor(other,`INSERT INTO public.user_agent_memory(user_id,title,content) VALUES(${quote(owner)},'伪造','另一个人的内容');`), /AGENT_ADMIN_REQUIRED|row-level security/);
+    await asOwner(`UPDATE public.agent_runs SET input=jsonb_set(input,'{userMessage,role}','"assistant"') WHERE id=${quote(r.id)};`);
+    await assert.rejects(write(), /AGENT_MEMORY_EVIDENCE_REQUIRED/);
+    const command = await submit(r,randomUUID(),evidence,'steer');
+    await assert.rejects(write(), /AGENT_MEMORY_EVIDENCE_REQUIRED/);
+    await asOwner(`UPDATE public.agent_run_commands SET delivery_state='admitted' WHERE sequence=${command.sequence};`);
+    assert.equal(JSON.parse(await write()).id,first.id);
+    await asOwner(`UPDATE public.agent_run_commands SET message=jsonb_set(message,'{role}','"assistant"') WHERE sequence=${command.sequence};`);
+    await assert.rejects(write(), /AGENT_MEMORY_EVIDENCE_REQUIRED/);
+    await asOwner(`UPDATE public.agent_runs SET input=jsonb_set(input,'{userMessage,role}','"user"'),lease_until=now()-interval '1 second' WHERE id=${quote(r.id)};`);
+    await assert.rejects(write(), /AGENT_LEASE_LOST/);
+    await asOwner(`UPDATE public.agent_runs SET lease_until=now()+interval '60 seconds',cancel_requested=true WHERE id=${quote(r.id)};`);
+    await assert.rejects(write(), /AGENT_CANCELLED/);
+    await asOwner(`UPDATE public.agent_runs SET cancel_requested=false WHERE id=${quote(r.id)};`);
+    await asOwner(`UPDATE public.user_settings SET chat_preferences='{"memoryEnabled":false}' WHERE user_id=${quote(owner)};`);
+    await assert.rejects(write(), /AGENT_MEMORY_DISABLED/);
+    await asActor(owner,`INSERT INTO public.user_agent_memory(user_id,title,content) SELECT ${quote(owner)},'手动记忆', '容量记录 '||n FROM generate_series(1,127) n;`);
+    await assert.rejects(asActor(owner,`INSERT INTO public.user_agent_memory(user_id,title,content) VALUES(${quote(owner)},'溢出','第129条记忆');`), /AGENT_MEMORY_LIMIT/);
+    assert.equal(await asActor(owner,`SELECT count(*) FROM public.user_agent_memory;`),'128');
+    await asActor(owner,`DELETE FROM public.user_agent_memory WHERE user_id=${quote(owner)};`);
+    await finish(r);
+  });
+
   await t.test('literal branch search stays owner-isolated and does not search inactive version trees',async()=>{
     const cid=await conversation(); const marker=`literal_%_${randomUUID()}`;
     await asActor(owner,`SELECT public.replace_conversation_messages(${quote(cid)},${json([{...message('visible',marker),versions:[{userContent:'inactive-secret',aiContent:'inactive-only'}]}])});`);

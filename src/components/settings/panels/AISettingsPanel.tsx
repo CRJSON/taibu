@@ -25,6 +25,7 @@ import { getCurrentUserSettings, type UserIdentityProfile, updateCurrentUserSett
 import { syncVisualizationPreferencesAfterSave } from '@/lib/user/ai-settings-local-sync';
 import { CHART_TEXT_DETAIL_OPTIONS, type ChartTextDetailLevel } from '@/lib/divination/detail-level';
 import { useUnsavedSettingsGuard } from '@/lib/hooks/useUnsavedSettingsGuard';
+import { AgentPreferencesPanel } from './AgentPreferencesPanel';
 
 type ExpressionStyle = 'direct' | 'gentle';
 type UserProfileDraft = UserIdentityProfile | null;
@@ -98,7 +99,7 @@ function FieldLabel({ children }: { children: ReactNode }) {
 
 export default function AISettingsPanel() {
   const { user } = useSessionSafe();
-  return <AccountAISettingsPanel key={user?.id ?? 'visitor'} />;
+  return <><AccountAISettingsPanel key={user?.id ?? 'visitor'} />{user && <AgentPreferencesPanel key={`agent:${user.id}`} userId={user.id} />}</>;
 }
 
 function AccountAISettingsPanel() {

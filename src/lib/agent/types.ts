@@ -112,6 +112,7 @@ export interface AgentRunView {
   status: AgentRunStatus;
   message: ChatMessage;
   cursor: number;
+  epoch?: number;
   createdAt: string;
   clientRequestId?: string;
   userMessage?: ChatMessage;

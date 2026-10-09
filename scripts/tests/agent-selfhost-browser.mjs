@@ -6,6 +6,7 @@ import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { chromium } from "playwright";
 import { verifyAgentExperience } from './agent-experience-browser.mjs';
+import { verifyAgentDomain } from './agent-domain-browser.mjs';
 import {
   ROOT,
   validateConfig,
@@ -24,6 +25,16 @@ assert.ok(stat.isFile() && !stat.isSymbolicLink() && !(stat.mode & 0o077));
 const config = validateConfig(JSON.parse(await readFile(file, "utf8")));
 assert.equal(config.LOCAL_PROJECT, project);
 assert.equal(config.DEMO_ENABLED, "true");
+let account = { email: config.USER_EMAIL, password: config.USER_PASSWORD };
+const accountIndex = process.argv.indexOf('--account');
+if (accountIndex >= 0) {
+  const accountFile = process.argv[accountIndex + 1];
+  const accountStat = await lstat(accountFile);
+  assert.ok(accountStat.isFile() && !accountStat.isSymbolicLink() && !(accountStat.mode & 0o077), 'account credentials must be a private regular file');
+  const supplied = JSON.parse(await readFile(accountFile, 'utf8'));
+  assert.ok(typeof supplied.email === 'string' && supplied.email.length <= 200 && typeof supplied.password === 'string' && supplied.password.length >= 8 && supplied.password.length <= 256, 'invalid account credentials');
+  account = { email: supplied.email, password: supplied.password };
+}
 const browser = await chromium.launch({
   headless: true,
   ...(process.argv.includes("--chrome") ? { channel: "chrome" } : {}),
@@ -55,6 +66,7 @@ try {
     for (const [key, value] of Object.entries(config))
       if (value && /PASSWORD|KEY|SECRET|INSTANCE/u.test(key))
         message = message.replaceAll(value, "[redacted]");
+    message = message.replaceAll(account.password, '[redacted]');
     const detail = `${new URL(page.url()).pathname}: ${error.name}: ${message.slice(0, 8000)}`;
     errors.push(detail);
     console.error('浏览器异常：', detail);
@@ -118,8 +130,8 @@ try {
   };
   await page.goto(`${config.APP_ORIGIN}/chat`);
   await page.getByRole("button", { name: "登录", exact: true }).click();
-  await page.getByPlaceholder("邮箱前缀").fill(config.USER_EMAIL);
-  await page.getByPlaceholder("输入密码").fill(config.USER_PASSWORD);
+  await page.getByPlaceholder("邮箱前缀").fill(account.email);
+  await page.getByPlaceholder("输入密码").fill(account.password);
   await page
     .locator("form")
     .getByRole("button", { name: "登录", exact: true })
@@ -246,6 +258,7 @@ try {
   await page.screenshot({ path: path.join(directory, 'agent-empty-acceptance.png'), fullPage: true });
 
   const initial = await credits();
+  assert.ok(initial >= 6, 'browser acceptance requires six chat uses; supply an isolated account with --account');
   const first = await send("Agent验收：跨命盘对比，请排盘并在聊天中分析。");
   await page.goto(`${config.APP_ORIGIN}/chat?id=${first.run.conversationId}`);
   const finished = await waitForRun(first.run.id, "completed");
@@ -652,12 +665,14 @@ try {
   );
 
   await newChat();
+  await uiReady();
   await page.getByRole("button", { name: "普通对话", exact: true }).click();
   const plainResponse = page.waitForResponse(
     (response) =>
       new URL(response.url()).pathname === "/api/chat" &&
       response.request().method() === "POST",
   );
+  void plainResponse.catch(() => {});
   await composer().fill(`普通对话本地验收 ${randomUUID()}`);
   await composer().press("Enter");
   assert.ok((await plainResponse).ok());
@@ -740,6 +755,7 @@ try {
     });
   }
   console.log('聊天阅读：普通与虚拟列表的阅读位置恢复、回到最新通过。');
+  await verifyAgentDomain({ page, context, origin: config.APP_ORIGIN, output: path.join(ROOT,'output','playwright') });
   assert.deepEqual(outside, []);
   assert.deepEqual(errors, []);
   assert.deepEqual(failures, []);

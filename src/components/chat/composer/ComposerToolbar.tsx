@@ -6,7 +6,7 @@
  */
 'use client';
 
-import { useRef, useState } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import {
     ArrowUp,
     Atom,
@@ -35,6 +35,7 @@ import { FloatingPanel } from '@/components/ui/FloatingPanel';
 import { Modal } from '@/components/ui/Modal';
 
 interface ComposerToolbarProps {
+    domainControls?: ReactNode;
     agentMode?: boolean;
     agentRuntime?: AgentRuntimeInfo;
     // Menu
@@ -126,6 +127,7 @@ export function ComposerToolbar(props: ComposerToolbarProps) {
         <div className="chat-composer-toolbar flex items-center justify-between gap-3 border-border/50">
             {/* 左侧按钮组 */}
             <div className="chat-composer-tools flex min-w-0 items-center gap-1.5 flex-shrink">
+                {props.domainControls}
                 <div className="relative">
                     <button
                         ref={toolsRef}

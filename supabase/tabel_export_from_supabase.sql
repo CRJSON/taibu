@@ -695,3 +695,18 @@ CREATE TABLE public.daily_briefing_jobs (
   notification_pending boolean NOT NULL DEFAULT false, created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(),
   UNIQUE(user_id,local_date)
 );
+
+-- Agent long-term memory; maintained by 20261008_180000_agent_competence.sql
+CREATE TABLE public.user_agent_memory (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  title text NOT NULL CHECK (length(btrim(title)) BETWEEN 1 AND 80),
+  content text NOT NULL CHECK (length(btrim(content)) BETWEEN 1 AND 2000),
+  kind text NOT NULL DEFAULT 'preference' CHECK (kind IN ('preference','context')),
+  fingerprint text GENERATED ALWAYS AS (md5(content)) STORED,
+  source_run_id uuid REFERENCES public.agent_runs(id) ON DELETE SET NULL,
+  source_text text NOT NULL DEFAULT '',
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (user_id,fingerprint)
+);

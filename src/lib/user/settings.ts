@@ -96,7 +96,7 @@ export type DefaultChartIds = {
 
 export type UserSettingsUpdateInput = Partial<{
   briefingPreferences: BriefingPreferences;
-  chatPreferences: ChatPreferences;
+  chatPreferences: Partial<ChatPreferences>;
   expressionStyle: ExpressionStyle;
   customInstructions: string | null;
   chartPromptDetailLevel: ChartPromptDetailLevel;

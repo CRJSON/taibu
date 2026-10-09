@@ -24,9 +24,9 @@ test('generated artifacts and caller inventory are deterministic and source-pinn
   assert.match(sql, new RegExp(`COMMENT ON SCHEMA public IS 'taibu-selfhost-v1:${manifest.sourceFingerprint}'`));
 });
 
-test('all 53 application tables retain the reviewed snapshot column inventory', () => {
+test('all 54 application tables retain the reviewed snapshot column inventory', () => {
   const snapshot = read('supabase/tabel_export_from_supabase.sql');
-  assert.equal(names(sql).length, 53);
+  assert.equal(names(sql).length, 54);
   assert.deepEqual(names(sql), names(snapshot));
   for (const match of snapshot.matchAll(/^CREATE TABLE public\.(\w+) \(([\s\S]*?)^\);/gm)) {
     const actual = new RegExp(`CREATE TABLE public\\.${match[1]} \\(([\\s\\S]*?)\\n\\);`).exec(sql)?.[1];
@@ -96,7 +96,7 @@ test('restored transactional uniqueness and message cascade are present', () => 
 });
 
 test('all current literal application RPC references have definitions or explicit blockers', () => {
-  assert.equal(manifest.rpcReferences.length, 57);
+  assert.equal(manifest.rpcReferences.length, 58);
   assert.deepEqual(manifest.rpcReferences.filter(r => r.status === 'missing-source'), []);
   for (const rpc of manifest.rpcReferences) assert.ok(definition(rpc.name) || ['check_login_attempts', 'record_login_attempt'].includes(rpc.name), rpc.name);
   assert.deepEqual(manifest.requiredPostBaselineMigrations, ['supabase/migrations/20261003_100000_fix_rate_limit_admission.sql']);
@@ -124,7 +124,7 @@ test('Agent lifecycle repair is included after Durable without adding tables or 
   // The Durable migration amends the catalog body with pg_get_functiondef;
   // the generated source's last literal definition precedes that amendment.
   assert.match(sql, /new_guard text := .*durable_admitted/);
-  assert.equal(names(sql).length, 53);
+  assert.equal(names(sql).length, 54);
 });
 
 test('storage uses actual flat UID naming, bounded MIME/size and owner-only writes', () => {

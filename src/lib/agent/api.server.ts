@@ -1,4 +1,5 @@
 import "server-only";
+import { AGENT_STREAM_QUEUE_BYTES, enqueueAgentFrame, type AgentResync } from './sse';
 import { createHash, randomUUID } from "node:crypto";
 import type { NextRequest } from "next/server";
 import {
@@ -412,6 +413,7 @@ export async function createAgentTask(request: NextRequest) {
     reasoning,
     webEnabled: body.webEnabled !== false,
     systemPrompt: prepared.systemPrompt,
+    memoryEnabled: prepared.agentMemoryEnabled === true,
     knowledgeBaseIds: prepared.promptKnowledgeBases.map((kb) => kb.id),
     userMessage,
     title: body.message.content.slice(0, 60),
@@ -531,48 +533,55 @@ export async function streamAgentTask(request: NextRequest, id: string) {
   let closed = false;
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
+      const send = (frame: string) => {
+        if (closed) return false;
+        if (!enqueueAgentFrame(controller, encoder.encode(frame))) { closed = true; return false; }
+        return true;
+      };
       let cursor = Number(
         request.nextUrl.searchParams.get("after") ??
           request.headers.get("Last-Event-ID") ??
           0,
       );
       if (!Number.isSafeInteger(cursor) || cursor < 0) cursor = 0;
+      const suppliedEpoch = request.nextUrl.searchParams.get('epoch');
+      let epoch = suppliedEpoch === null ? undefined : Number(suppliedEpoch);
       try {
         while (!closed && !request.signal.aborted) {
           const run = await store.getRun(id, auth.user.id);
           if (!run) break;
-          const view = await store.view(run);
-          if (view.cursor > cursor || isAgentRunTerminal(view.status)) {
+          const view = { ...await store.view(run), epoch: run.fence ?? 0 };
+          let resetReason: AgentResync['reason'] | undefined;
+          const resync = (reason: AgentResync['reason']) => {
+            resetReason = reason;
+            cursor = view.cursor;
+            epoch = view.epoch;
+          };
+          let reset = false;
+          if (epoch !== undefined && epoch !== view.epoch) { resync('epoch'); reset = true; }
+          else if (cursor > view.cursor) { resync('cursor'); reset = true; }
+          if (reset || view.cursor > cursor || isAgentRunTerminal(view.status)) {
             while (cursor < view.cursor && !closed && !request.signal.aborted) {
               const events = await store.events(id, cursor, view.cursor);
-              if (!events.length) break;
+              if (!events.length) { resync('gap'); break; }
               for (const event of events) {
+                if (Number(event.sequence) <= cursor || Number(event.sequence) > view.cursor) { resync('gap'); break; }
                 cursor = Number(event.sequence);
-                controller.enqueue(
-                  encoder.encode(
-                    `event: history\nid: ${cursor}\ndata: ${JSON.stringify({ version: 1, runId: id, ...event })}\n\n`,
-                  ),
-                );
+                if (!send(`event: history\nid: ${cursor}\ndata: ${JSON.stringify({ version: 1, runId: id, ...event })}\n\n`)) break;
               }
             }
             cursor = view.cursor;
-            controller.enqueue(
-              encoder.encode(
-                `event: snapshot\nid: ${cursor}\ndata: ${JSON.stringify(view)}\n\n`,
-              ),
-            );
-          } else controller.enqueue(encoder.encode(": heartbeat\n\n"));
+            const resetFrame = resetReason ? `event: resync\ndata: ${JSON.stringify({ version: 1, runId: id, cursor: view.cursor, epoch: view.epoch, reason: resetReason } satisfies AgentResync)}\n\n` : '';
+            if (!send(`${resetFrame}event: snapshot\nid: ${cursor}\ndata: ${JSON.stringify(view)}\n\n`)) break;
+            epoch = view.epoch;
+          } else if (!send(': heartbeat\n\n')) break;
           if (isAgentRunTerminal(view.status))
             break;
           await new Promise((resolve) => setTimeout(resolve, 1000));
         }
       } catch {
         if (!closed && !request.signal.aborted)
-          controller.enqueue(
-            encoder.encode(
-              'event: error\ndata: {"code":"AGENT_STREAM_INTERRUPTED"}\n\n',
-            ),
-          );
+          send('event: error\ndata: {"code":"AGENT_STREAM_INTERRUPTED"}\n\n');
       } finally {
         if (!closed) {
           closed = true;
@@ -583,7 +592,7 @@ export async function streamAgentTask(request: NextRequest, id: string) {
     cancel() {
       closed = true;
     },
-  });
+  }, { highWaterMark: AGENT_STREAM_QUEUE_BYTES, size: chunk => chunk.byteLength });
   return new Response(stream, {
     headers: {
       "Content-Type": "text/event-stream",

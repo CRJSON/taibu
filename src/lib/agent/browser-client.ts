@@ -1,5 +1,6 @@
 import type { ChatMessage } from "@/types";
 import { isAgentRunTerminal, type AgentRunView } from "./types";
+import { AGENT_STREAM_IDLE_MS, AGENT_STREAM_QUEUE_BYTES, type AgentResync } from './sse';
 
 export function canAdoptAgentRun(
   current: AgentRunView | undefined,
@@ -7,7 +8,7 @@ export function canAdoptAgentRun(
 ) {
   if (!current || current.conversationId !== incoming.conversationId)
     return true;
-  if (current.id === incoming.id) return incoming.cursor >= current.cursor;
+  if (current.id === incoming.id) return (incoming.epoch ?? 0) >= (current.epoch ?? 0) && (incoming.epoch !== current.epoch || incoming.cursor >= current.cursor);
   return Date.parse(incoming.createdAt) >= Date.parse(current.createdAt);
 }
 
@@ -47,6 +48,8 @@ export async function readAgentStream(
   response: Response,
   signal: AbortSignal,
   onRun: (run: AgentRunView) => void,
+  onResync?: (resync: AgentResync) => void,
+  idleTimeoutMs = AGENT_STREAM_IDLE_MS,
 ) {
   if (!response.ok || !response.body) throw new Error("任务连接中断");
   const reader = response.body.getReader(),
@@ -58,10 +61,15 @@ export async function readAgentStream(
   signal.addEventListener("abort", onAbort, { once: true });
   try {
     while (!signal.aborted) {
-      const { value, done } = await reader.read();
+      let timer!: ReturnType<typeof setTimeout>;
+      const { value, done } = await Promise.race([
+        reader.read(),
+        new Promise<never>((_resolve, reject) => { timer = setTimeout(() => reject(new Error('AGENT_STREAM_IDLE')), idleTimeoutMs); }),
+      ]).finally(() => clearTimeout(timer));
       if (done) break;
       buffer += decoder.decode(value, { stream: true });
       buffer = buffer.replaceAll("\r\n", "\n");
+      if (buffer.length > AGENT_STREAM_QUEUE_BYTES) throw new Error('AGENT_STREAM_FRAME_TOO_LARGE');
       let end: number;
       while ((end = buffer.indexOf("\n\n")) >= 0) {
         const frame = buffer.slice(0, end);
@@ -72,6 +80,13 @@ export async function readAgentStream(
           .map((line) => line.slice(5).trimStart())
           .join("\n");
         if (!data) continue;
+        const event = frame.split(/\r?\n/u).find(line => line.startsWith('event:'))?.slice(6).trim();
+        if (event === 'error') throw new Error('AGENT_STREAM_INTERRUPTED');
+        if (event === 'resync') {
+          const resync = JSON.parse(data) as AgentResync;
+          if (resync.version === 1 && typeof resync.runId === 'string' && Number.isSafeInteger(resync.cursor) && resync.cursor >= 0 && Number.isSafeInteger(resync.epoch) && resync.epoch >= 0) onResync?.(resync);
+          continue;
+        }
         const run = JSON.parse(data) as AgentRunView;
         if (
           typeof run.id === "string" &&

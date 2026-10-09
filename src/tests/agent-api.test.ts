@@ -384,6 +384,17 @@ test("Agent request hashes are independent of object property order but distingu
   );
 });
 
+test('SSE accepts gaps from the global event sequence and resynchronizes a changed worker epoch', async t => {
+  const f=setup(t), id=randomUUID();
+  const run={id,user_id:f.owner,conversation_id:f.conversation,status:'completed',fence:2,event_cursor:100,created_at:'now',public_message:{id:'assistant',role:'assistant',content:'完成',createdAt:'now',agent:{version:1,runId:id,status:'completed',parts:[]}}} as unknown as AgentRunRow;
+  t.mock.method(AgentStore.prototype,'getRun',async()=>run);
+  t.mock.method(AgentStore.prototype,'events',async()=>[{sequence:30,type:'tool',payload:{}},{sequence:100,type:'completed',payload:{}}]);
+  const current=await (await streamAgentTask(new NextRequest(`http://localhost/api/agent/runs/${id}/events?after=10&epoch=2`),id)).text();
+  assert.match(current,/id: 30/);assert.doesNotMatch(current,/event: resync/);
+  const stale=await (await streamAgentTask(new NextRequest(`http://localhost/api/agent/runs/${id}/events?after=10&epoch=1`),id)).text();
+  assert.match(stale,/event: resync/);assert.match(stale,/"reason":"epoch"/);assert.match(stale,/event: snapshot\nid: 100/);
+});
+
 test("Agent SSE stays open while awaiting input and observes another tab's resume and completion", async (t) => {
   const fixture = setup(t), id = randomUUID();
   let status = "awaiting_input", cursor = 1;

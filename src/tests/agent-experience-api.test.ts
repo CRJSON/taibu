@@ -10,6 +10,7 @@ import { POST as upload } from '../app/api/agent/attachments/route';
 import { GET as attachment } from '../app/api/agent/attachments/[id]/route';
 import { POST as fork } from '../app/api/conversations/[id]/fork/route';
 import { PATCH as configuration } from '../app/api/conversations/[id]/configuration/route';
+import { GET as memories, POST as saveMemory, DELETE as deleteMemory } from '../app/api/user/agent-memory/route';
 
 function fixture(t: TestContext) {
     const owner = randomUUID(), id = randomUUID();
@@ -26,6 +27,8 @@ function fixture(t: TestContext) {
                 eq: (field: string,value: unknown) => { calls.push({table,field,value}); return query; },
                 insert: (value: unknown) => { inserts[table] = value; return query; },
                 update: (value: unknown) => { inserts[table] = value; return query; },
+                upsert: (value: unknown) => { inserts[table] = value; return query; }, delete: () => query,
+                order: () => query, limit: () => query,
                 maybeSingle: async () => result(), single: async () => result(),
                 then: (resolve: (value: unknown) => void) => resolve(result()),
             }; return query;
@@ -44,6 +47,22 @@ function fixture(t: TestContext) {
 }
 const request = (url: string, body?: unknown) => new NextRequest(`http://localhost${url}`, body === undefined ? {} : { method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body) });
 const params = (id:string) => ({params:Promise.resolve({id})});
+
+test('memory API scopes every read/delete to the current account and ignores forged ownership on save', async t => {
+    const f=fixture(t);
+    f.rows.user_agent_memory=[{id:f.id,title:'偏好',content:'简洁表达',kind:'preference'}];
+    assert.equal((await memories(request('/api/user/agent-memory'))).status,200);
+    f.rows.user_agent_memory={id:f.id};
+    assert.equal((await saveMemory(request('/api/user/agent-memory',{user_id:randomUUID(),title:'偏好',content:'简洁表达',kind:'preference'}))).status,200);
+    assert.equal((f.inserts.user_agent_memory as {user_id:string}).user_id,f.owner);
+    assert.equal((await saveMemory(request('/api/user/agent-memory',{title:'',content:'',kind:'preference'}))).status,400);
+    f.rows.user_agent_memory=[];
+    assert.equal((await deleteMemory(new NextRequest('http://localhost/api/user/agent-memory',{method:'DELETE',body:JSON.stringify({id:f.id})}))).status,404);
+    assert.ok(f.calls.filter(call=>call.table==='user_agent_memory').some(call=>call.field==='user_id'&&call.value===f.owner));
+    assert.equal((await memories(new NextRequest('http://localhost/api/user/agent-memory',{headers:{'X-Expected-User-Id':randomUUID()}}))).status,409);
+    t.mock.method(f.api,'requireUserContext',async()=>({error:{message:'请登录',status:401}}));
+    assert.equal((await memories(request('/api/user/agent-memory'))).status,401);
+});
 
 test('search validates literals, forwards request cancellation and reports bounded database timeouts',async t => {
     const f=fixture(t); f.rpc([{conversationId:f.id,messageId:'visible',preview:'literal_%'}]);

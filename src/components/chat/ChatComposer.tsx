@@ -21,6 +21,7 @@ import { useComposerState, type KnowledgeBaseSummary } from '@/components/chat/c
 import { MentionManager } from '@/components/chat/composer/MentionManager';
 import { AttachmentBar } from '@/components/chat/composer/AttachmentBar';
 import { ComposerToolbar } from '@/components/chat/composer/ComposerToolbar';
+import { ComposerDomainControls } from '@/components/chat/composer/ComposerDomainControls';
 import type { ChatMode } from '@/lib/chat/use-chat-state';
 import type { AgentRuntimeInfo } from '@/lib/agent/types';
 import { useComposerCommands } from './composer/ComposerCommands';
@@ -516,6 +517,7 @@ export function ChatComposer({
 
                     {/* 底部按钮栏 */}
                     <ComposerToolbar
+                        domainControls={<ComposerDomainControls key={`${userId}:${draftKey ?? 'draft'}`} userId={userId} value={inputValue} onChange={handleInputChange} disabled={!!disabled} />}
                         agentMode={agentMode}
                         agentRuntime={agentRuntime}
                         menuOpen={menuOpen}

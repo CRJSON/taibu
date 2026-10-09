@@ -170,20 +170,22 @@ export function useAgentChat(
     const controller = new AbortController();
     const isCurrent = captureConversation();
     let cursor = run.cursor;
+    let epoch = run.epoch;
     const listen = async () => {
       while (!controller.signal.aborted) {
         try {
           const response = await fetch(
-            `/api/agent/runs/${runId}/events?after=${cursor}`,
+            `/api/agent/runs/${runId}/events?after=${cursor}${epoch === undefined ? '' : `&epoch=${epoch}`}`,
             { signal: controller.signal },
           );
           if (isCurrent()) setReconnecting(false);
           let settled = false;
           await readAgentStream(response, controller.signal, (view) => {
             cursor = Math.max(cursor, view.cursor);
+            epoch = view.epoch;
             if (isCurrent()) adopt(view);
             settled = isAgentRunTerminal(view.status);
-          });
+          }, resync => { if (resync.runId === runId) { cursor = resync.cursor; epoch = resync.epoch; } });
           if (settled) return;
         } catch {
           if (controller.signal.aborted) return;
