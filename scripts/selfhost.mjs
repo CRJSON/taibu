@@ -38,7 +38,7 @@ export function createConfig(project, port, demo = false) {
 }
 export function validateConfig(config) {
   const expected = Object.keys(createConfig('taibu-validation', '3080')).sort();
-  const optionalAgentFields = new Set(['AGENT_CREDENTIAL_ENCRYPTION_KEY','TAVILY_API_KEY']);
+  const optionalAgentFields = new Set(['AGENT_CREDENTIAL_ENCRYPTION_KEY','TAVILY_API_KEY','AGENT_MCP_SERVERS']);
   if (!config || JSON.stringify(Object.keys(config).filter(key=>!optionalAgentFields.has(key)).sort()) !== JSON.stringify(expected.filter(key=>!optionalAgentFields.has(key)))) throw new Error('本地配置字段无效');
   if (config.AGENT_CREDENTIAL_ENCRYPTION_KEY !== undefined && (Buffer.from(config.AGENT_CREDENTIAL_ENCRYPTION_KEY,'base64').length!==32 || Buffer.from(config.AGENT_CREDENTIAL_ENCRYPTION_KEY,'base64').toString('base64')!==config.AGENT_CREDENTIAL_ENCRYPTION_KEY)) throw new Error('Agent 加密密钥格式无效');
   validateProject(config.LOCAL_PROJECT); validatePort(config.APP_PORT);

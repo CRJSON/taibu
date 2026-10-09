@@ -10,6 +10,7 @@ import {
 import { AgentStore, type AgentRunRow } from "../lib/agent/store.server";
 import {
   agentEndpoint,
+  agentCapabilities,
   createAgentTask,
   getAgentTask,
   controlAgentTask,
@@ -150,6 +151,42 @@ test("Agent feature admission fails closed when fresh configuration cannot be re
   const response = await agentEndpoint(() => createAgentTask(fixture.request()));
   assert.equal(response.status, 403);
   assert.equal(fixture.writes.length, 0);
+});
+
+test('network capability includes a configured MCP service and ignores malformed configuration', async t => {
+  setup(t);
+  const previous = { mcp: process.env.AGENT_MCP_SERVERS, tavily: process.env.TAVILY_API_KEY };
+  t.after(() => {
+    for (const [key, value] of [['AGENT_MCP_SERVERS', previous.mcp], ['TAVILY_API_KEY', previous.tavily]] as const) {
+      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
+  });
+  delete process.env.TAVILY_API_KEY;
+  const available = async () => (await (await agentCapabilities(new NextRequest('http://localhost/api/agent/capabilities'))).json()).webAvailable;
+  process.env.AGENT_MCP_SERVERS = JSON.stringify([{ name: 'reference', url: 'https://mcp.example/tools', tools: ['lookup'] }]);
+  assert.equal(await available(), true);
+  process.env.AGENT_MCP_SERVERS = 'invalid-json';
+  assert.equal(await available(), false);
+  process.env.TAVILY_API_KEY = 'fixture';
+  assert.equal(await available(), true);
+});
+
+test('image capability is enforced before charging and when adding input to an existing task', async t => {
+  const fixture=setup(t), attachmentId=randomUUID(), id=randomUUID();
+  const attachments=require('../lib/agent/attachments.server') as typeof import('../lib/agent/attachments.server');
+  const configs=require('../lib/server/ai-config') as typeof import('../lib/server/ai-config');
+  t.mock.method(attachments,'validateAttachmentIds',async()=>[{id:attachmentId,user_id:fixture.owner,name:'diagram.png',kind:'image',mime_type:'image/png',status:'ready'}] as Awaited<ReturnType<typeof attachments.validateAttachmentIds>>);
+  const body={...fixture.body,message:{...fixture.body.message,attachments:{ids:[attachmentId]}}};
+  const denied=await agentEndpoint(()=>createAgentTask(fixture.request(body)));
+  assert.equal(denied.status,400); assert.match((await denied.json()).error,/视觉模型/); assert.equal(fixture.writes.length,0);
+  t.mock.method(configs,'getModelConfigAsync',async()=>({...model,supportsVision:true}));
+  assert.equal((await agentEndpoint(()=>createAgentTask(fixture.request(body)))).status,201);
+  const run={id,user_id:fixture.owner,conversation_id:fixture.conversation,input:{model:'fixture'},checkpoint:{},status:'running',event_cursor:1,created_at:'now',public_message:{id:'assistant',role:'assistant',content:'',createdAt:'now',agent:{version:1,runId:id,status:'running',parts:[]}}} as unknown as AgentRunRow;
+  t.mock.method(AgentStore.prototype,'getRun',async()=>run);
+  t.mock.method(configs,'getModelConfigAsync',async()=>({...model,supportsVision:false}));
+  const before=fixture.writes.length;
+  const addition=await agentEndpoint(()=>controlAgentTask(fixture.request({content:'补充图片',mode:'steer',clientRequestId:randomUUID(),attachmentIds:[attachmentId]}),id,'message'));
+  assert.equal(addition.status,400);assert.match((await addition.json()).error,/不支持图片/);assert.equal(fixture.writes.length,before);
 });
 
 test("Agent create uses server history and an atomic charge RPC; supplied assistant/metadata is discarded", async (t) => {

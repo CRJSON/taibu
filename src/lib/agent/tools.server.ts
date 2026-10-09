@@ -114,7 +114,7 @@ export async function assertAgentToolAccess(store: AgentStore, run: AgentRunRow,
   const feature = name.startsWith('bazi_') ? 'bazi' : name.startsWith('ziwei_') ? 'ziwei' : name;
   if (FEATURE_MODULE_IDS.includes(feature as FeatureModuleId) && !(await featureEnabled(feature as FeatureModuleId))) throw new Error('该功能已关闭');
   if (name === 'search_knowledge' && (!(await featureEnabled('knowledge-base')) || account.membership === 'free')) throw new Error('当前会员无法使用知识库检索');
-  if (name === 'web_search' && (!run.input.webEnabled || account.membership === 'free')) throw new Error('当前任务不能使用联网工具');
+  if ((name === 'web_search' || name.startsWith('mcp__')) && (!run.input.webEnabled || account.membership === 'free')) throw new Error('当前任务不能使用联网工具');
   if (name === 'read_user_data' && !(await featureEnabled(getDataSourceFeatureId(args.type as typeof DATA_SOURCE_TYPES[number])))) throw new Error('该资料功能已关闭');
   if (name === 'read_saved_chart' && !(await featureEnabled('bazi'))) throw new Error('命盘功能已关闭');
   if (['read_user_profile', 'read_user_memory', 'remember_user_fact'].includes(name) && !(await featureEnabled('ai-personalization'))) throw new Error('个性化功能已关闭');

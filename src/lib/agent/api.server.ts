@@ -2,6 +2,7 @@ import "server-only";
 import { AGENT_STREAM_QUEUE_BYTES, enqueueAgentFrame, type AgentResync } from './sse';
 import { createHash, randomUUID } from "node:crypto";
 import type { NextRequest } from "next/server";
+import { parseAgentMcpServers } from './mcp-client.server';
 import {
   getSystemAdminClient,
   jsonError,
@@ -215,10 +216,12 @@ export async function agentCapabilities(request: NextRequest) {
   await authenticated(request);
   const state = await readFeatureModuleStateFresh("agent");
   const store = new AgentStore(getSystemAdminClient());
+  let mcpAvailable = false;
+  try { mcpAvailable = parseAgentMcpServers().length > 0; } catch { /* Invalid administrator config cannot advertise network access. */ }
   return jsonOk({
     enabled: state.status === "enabled",
     ready: state.status === "enabled" && (await store.workerReady()),
-    webAvailable: !!process.env.TAVILY_API_KEY,
+    webAvailable: !!process.env.TAVILY_API_KEY || mcpAvailable,
     customAvailable: !!process.env.AGENT_CREDENTIAL_ENCRYPTION_KEY,
   });
 }
