@@ -18,7 +18,7 @@ flowchart LR
   SSE --> UI
 ```
 
-执行内核固定为 `@earendil-works/pi-durable@1.0.4`，配套 Pi AI／Chord 同版本。使用原生 Harness、GenerationTask、ToolTask、CompactionTask、请求去重和队列；模型桥接继续经过 `pi-stream.server.ts` 的 AI SDK，复用模型配置、网关排序、来源切换、推理和采样配置。开始输出后不会重新切换来源。模型和摘要权限在服务端重新校验，SDK 错误不会打印上游凭据。Durable 目前是实验接口，版本固定，并用官方存储契约测试检查适配器。
+执行内核固定为 `@earendil-works/pi-durable@1.1.0`，配套 Pi AI／Chord／MCP 同版本；worker 心跳与原生检查点记录引擎代际 `pi-durable/1.1.0`，升级前的 `pi-durable/1.0.4` 运行继续可被认领。使用原生 Harness、GenerationTask、ToolTask、CompactionTask、请求去重和队列；模型桥接继续经过 `pi-stream.server.ts` 的 AI SDK，复用模型配置、网关排序、来源切换、推理和采样配置。开始输出后不会重新切换来源。模型和摘要权限在服务端重新校验，SDK 错误不会打印上游凭据。Durable 目前是实验接口，版本固定，并用官方存储契约测试检查适配器。
 
 没有任务步数、检索次数或总运行时长上限。结束条件是模型完成、`ask_user` 等待补充、用户停止或不可恢复错误。外部请求仍有单次超时。Durable 按已配置的模型窗口选择完整工具回合的压缩边界；未知模型使用 Pi 的 `contextWindow: 0`，跳过容量阈值判断，在可识别的供应商超限错误后尝试一次压缩恢复。摘要通过原有 AI SDK 和网关生成，保留最近消息、成果 ID 和实际来源。完整原始记录保留在 Durable 提交日志中。
 
@@ -40,7 +40,7 @@ Agent 在最终答复前通过 `select_final_artifacts` 选择成果，支持空
 
 ## 持久化与结算
 
-迁移 `20261005_100000_agent_runtime.sql` 提供六张业务运行表；`20261005_120000_agent_chart_identity.sql` 在排盘时间字段迁移后更新命盘身份与去重；`20261006_100000_agent_pi_durable.sql` 增加 `agent_durable_commits` 和 worker 引擎标识。安全对象显式设置 `search_path` 和执行权限。原生日志只由受租约保护的管理员 RPC 读取／提交，普通用户不能直接读取或写入。公开消息修改仍受活动任务保护。
+迁移 `20261005_100000_agent_runtime.sql` 提供六张业务运行表；`20261005_120000_agent_chart_identity.sql` 在排盘时间字段迁移后更新命盘身份与去重；`20261006_100000_agent_pi_durable.sql` 增加 `agent_durable_commits` 和 worker 引擎标识；`20261009_100000_agent_pi_durable_1_1.sql` 升级引擎代际：心跳白名单与认领门控同时接受 `pi-durable/1.0.4` 与 `pi-durable/1.1.0`，worker 只认领自身代际或更旧的运行，旧检查点不因升级失联。安全对象显式设置 `search_path` 和执行权限。原生日志只由受租约保护的管理员 RPC 读取／提交，普通用户不能直接读取或写入。公开消息修改仍受活动任务保护。
 
 任务状态：`queued → running → awaiting_input / completed / cancelled / failed`，停止过程使用 `cancelling`。租约每秒续期，失效窗口为 60 秒；新的 worker 接管时递增执行版本，旧版本不能写入。每个业务任务对应独立的 Durable Storage，只允许当前租约进程推进。RPC 原子保存原生写批次及业务检查点，连续序号和相同批次去重保证丢失响应可重试；指令在原生 submission 进入 placed 状态时才被确认消费。结果不明时暂停当前执行并由新持有者重读日志。
 
@@ -208,7 +208,7 @@ node scripts/tests/agent-selfhost-browser.mjs --project <独立演示项目> --c
 
 `ask_user` 等待时自动打开提问弹窗。弹窗按用户／对话／任务／问题 ID 隔离，聚焦回答框并限制键盘焦点；Escape 或「稍后回答」关闭后保留草稿和等待状态，点击「回答问题」重新打开。提交沿用 `reply` 指令、同一任务及原扣费。刷新后从服务端问题恢复弹窗。
 
-模型与上下文位于工具栏右侧、发送按钮左侧。Agent 停用旧 `/api/chat/preview` 提示层估算，使用 Pi 的活动 transcript 和 [`estimateContextTokens`](https://github.com/earendil-works/pi/blob/v1.0.4/packages/ai/src/utils/estimate.ts)：最近有效 usage 为已测基准，后续消息显式标为估算；压缩后旧基准失效。检查器区分已测／混合／估算、缓存读写、输出和压缩次数，SDK 缓存与推理子计数不重复加总。未知模型容量不套用 32k，不显示百分比；已知上限标为应用配置。普通对话继续使用原有提示预算。
+模型与上下文位于工具栏右侧、发送按钮左侧。Agent 停用旧 `/api/chat/preview` 提示层估算，使用 Pi 的活动 transcript 和 [`estimateContextTokens`](https://github.com/earendil-works/pi/blob/v1.1.0/packages/ai/src/utils/estimate.ts)：最近有效 usage 为已测基准，后续消息显式标为估算；压缩后旧基准失效。检查器区分已测／混合／估算、缓存读写、输出和压缩次数，SDK 缓存与推理子计数不重复加总。未知模型容量不套用 32k，不显示百分比；已知上限标为应用配置。普通对话继续使用原有提示预算。
 
 八字、紫微、奇门、六爻、梅花、大六壬、小六壬、塔罗、太乙、西方占星和黄历工具成功后，命盘卡片自动出现在对应任务步骤中；任务过程折叠后仍能访问。点击「展开命盘」查看工具返回盘面，「固定到工作区」在桌面宽屏打开右侧工作区，手机使用全屏查看。模型查看新的原盘时，桌面工作区会自动展开；同一任务中主动关闭后保持关闭。展示使用已持久化的实际工具结果，刷新和历史恢复不重新排盘、不保存第二份记录、不扣费；模型定位仅滚动工作区，保留用户的键盘焦点。字段不足或视图异常时保留规范文本。查询、来源和知识库使用对应结果列表，参数与原始结果仍可展开和复制。
 

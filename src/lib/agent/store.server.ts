@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ChatMessage, CustomProviderRequest } from "@/types";
 import type { EncryptedAgentCredential } from "./credentials.server";
 import type { AgentCheckpoint, AgentRunStatus, AgentRunView } from "./types";
+import { AGENT_ENGINE } from "./engine";
 
 export interface AgentRunRow {
   id: string;
@@ -149,7 +150,7 @@ export class AgentStore {
     const { data, error } = await this.db
       .from("agent_workers")
       .select("id")
-      .eq("engine", "pi-durable/1.0.4")
+      .eq("engine", AGENT_ENGINE)
       .gt("heartbeat_at", new Date(Date.now() - 30_000).toISOString())
       .limit(1);
     if (error) return false;

@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { getSystemAdminClient } from "@/lib/supabase-server";
 import { AgentStore, type AgentRunRow } from "./store.server";
 import { executeAgentRun } from "./runtime.server";
-import { AGENT_ENGINE } from "./durable-storage.server";
+import { AGENT_ENGINE } from "./engine";
 
 async function main() {
   if (process.argv.includes("--check")) {

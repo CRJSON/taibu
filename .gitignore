@@ -107,6 +107,7 @@ supabase/migrations/*
 !supabase/migrations/20261007_190000_agent_backend_access.sql
 !supabase/migrations/20261008_100000_agent_question_dedupe.sql
 !supabase/migrations/20261008_180000_agent_competence.sql
+!supabase/migrations/20261009_100000_agent_pi_durable_1_1.sql
 # Additional explicit inputs for isolated Auth/PostgREST acceptance only.
 !supabase/migrations/20260110_add_user_settings_and_fix_notifications_rls.sql
 !supabase/migrations/20260113_add_app_settings.sql

@@ -4,7 +4,6 @@ import { MemoryStorage, type Seq, type StorageWrite } from "@earendil-works/pi-d
 import type { AgentStore, AgentRunRow } from "./store.server";
 import type { AgentCheckpoint } from "./types";
 
-export const AGENT_ENGINE = "pi-durable/1.0.4";
 export interface DurableStoredCommit {
   sequence: number;
   writes: StorageWrite[];
@@ -17,7 +16,7 @@ export interface DurableCommitPersistence {
 /**
  * Postgres supplies the durable commit log and the run's lease. Pi's reference
  * backend supplies validation, document history, ancestry and query semantics.
- * prepareCommit is public in the pinned 1.0.4 backend and is also the boundary
+ * prepareCommit is public in the pinned 1.1.0 backend and is also the boundary
  * used by Pi's JSONL implementation. Never apply or publish before Postgres
  * acknowledges the entire batch. A reopen replays only acknowledged batches.
  */

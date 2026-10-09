@@ -248,6 +248,10 @@ const EXPERIENCE_MIGRATIONS = [
 ].map(([name, sha256]) => ({ file: `supabase/migrations/${name.startsWith('2026') ? name : `20261007_${name}`}.sql`, sha256 }));
 const PREVIOUS_EXPERIENCE_FINGERPRINT = '6072a25ccaae42b489af7f836ec52d80e806906fa4e722d1a343577502afe3be';
 const EXPERIENCE_FINGERPRINT = 'c49d95371d32c4da037a0ab2c5ca82bf188be438787baada29a484c1f45fa658';
+const PI_DURABLE_MIGRATIONS = [
+  ['20261009_100000_agent_pi_durable_1_1', 'bcd3996445aff8a3f610b6e38078f9df94999030b814fcb71f4e23f540e4a687'],
+].map(([name, sha256]) => ({ file: `supabase/migrations/${name}.sql`, sha256 }));
+const PI_DURABLE_FINGERPRINT = '223d3ed92db07a499114b15eb8be07f258a1e54effc47ee0a1bb812ec7403824';
 const REVIEWED_SCHEMA_UPGRADES = [{
   previous: '9a6fd07d2d17f61ee6669d20d4910f2b3b7c621d3d07d9ceeba2b0af26df90be',
   current: 'e639cd6d5a7d70ed5450bd5ee5cc7cd44f3a0924b5b91ce33d719df2c99cec9f',
@@ -273,6 +277,30 @@ const REVIEWED_SCHEMA_UPGRADES = [{
   previous: 'abacc80319e797bcbe1a0bb40434f301d48c93492f2e3cd81dcc60bfb8c19f9b',
   current: EXPERIENCE_FINGERPRINT,
   files: EXPERIENCE_MIGRATIONS.slice(-1),
+}, {
+  previous: '9a6fd07d2d17f61ee6669d20d4910f2b3b7c621d3d07d9ceeba2b0af26df90be',
+  current: PI_DURABLE_FINGERPRINT,
+  files: [{ file: 'supabase/migrations/20261007_100000_agent_chat_results.sql', sha256: '462a8badd3f41fa1f5f5b389f2e2fa4320bc7911d0e125da6d06a8dee27effe8' }, ...EXPERIENCE_MIGRATIONS, ...PI_DURABLE_MIGRATIONS],
+}, {
+  previous: 'e639cd6d5a7d70ed5450bd5ee5cc7cd44f3a0924b5b91ce33d719df2c99cec9f',
+  current: PI_DURABLE_FINGERPRINT,
+  files: [...EXPERIENCE_MIGRATIONS, ...PI_DURABLE_MIGRATIONS],
+}, {
+  previous: EXPERIENCE_FINGERPRINT,
+  current: PI_DURABLE_FINGERPRINT,
+  files: PI_DURABLE_MIGRATIONS,
+}, {
+  previous: PREVIOUS_EXPERIENCE_FINGERPRINT,
+  current: PI_DURABLE_FINGERPRINT,
+  files: [...EXPERIENCE_MIGRATIONS.slice(-2), ...PI_DURABLE_MIGRATIONS],
+}, {
+  previous: 'aa23300ca84196b4c6e3a5ab0669168420c78be450c4ea8f5cc273ccc3687fc2',
+  current: PI_DURABLE_FINGERPRINT,
+  files: [...EXPERIENCE_MIGRATIONS.slice(-3), ...PI_DURABLE_MIGRATIONS],
+}, {
+  previous: 'abacc80319e797bcbe1a0bb40434f301d48c93492f2e3cd81dcc60bfb8c19f9b',
+  current: PI_DURABLE_FINGERPRINT,
+  files: [...EXPERIENCE_MIGRATIONS.slice(-1), ...PI_DURABLE_MIGRATIONS],
 }];
 
 export function reviewedSchemaUpgrade(fingerprint, bundle) {
@@ -376,7 +404,7 @@ async function up(state, run, build = false) {
   if (build && state.config.DEMO_ENABLED === 'true') await run.compose(['up', '-d', '--no-deps', '--force-recreate', 'demo']);
   await wait(() => httpReady(state.config.APP_ORIGIN, '/api/health'), '应用');
   await wait(() => httpReady(state.config.APP_ORIGIN, '/api/announcements?latest=1'), '应用数据库');
-  await wait(async () => (await run.sql("SELECT EXISTS(SELECT 1 FROM public.agent_workers WHERE engine='pi-durable/1.0.4' AND heartbeat_at > now() - interval '30 seconds')")).trim() === 't', 'Agent worker');
+  await wait(async () => (await run.sql("SELECT EXISTS(SELECT 1 FROM public.agent_workers WHERE engine='pi-durable/1.1.0' AND heartbeat_at > now() - interval '30 seconds')")).trim() === 't', 'Agent worker');
   // The scheduler script is bind-mounted; recreating its stateless process
   // loads updated polling code even when its image/configuration did not change.
   await run.compose(['up', '-d', '--no-deps', '--force-recreate', 'scheduler']);

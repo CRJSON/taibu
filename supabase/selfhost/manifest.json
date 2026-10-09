@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
   "baselineRevision": "5725dde",
-  "sourceFingerprint": "164667195c1eeeb3cf8f54502ba12915602c15b1d823b1e750440e2ad8cad0f1",
+  "sourceFingerprint": "5d4c20a93d7f93de36cb2bb67e3ecbaf0e0a96f0b748ee42d89d80f2fccded38",
   "target": "empty local self-hosted application schema; NOT production parity or a migration replay",
   "bootstrapOrder": [
     "platform roles/extensions",
@@ -189,6 +189,10 @@
       "sha256": "a9fe2732170d32b4c448d492090f81c417e7dd05a0804c979e07b528fc0a6208"
     },
     {
+      "file": "supabase/migrations/20261009_100000_agent_pi_durable_1_1.sql",
+      "sha256": "bcd3996445aff8a3f610b6e38078f9df94999030b814fcb71f4e23f540e4a687"
+    },
+    {
       "file": "supabase/selfhost/source-views.sql",
       "sha256": "3ec59bffedd43530835e728dd9e9fac580ed09bbacb23e64fe460cb2775c6342"
     },
@@ -210,7 +214,7 @@
     },
     {
       "file": "scripts/selfhost-schema.mjs",
-      "sha256": "7a7343dd50bc143bba4f83b115d1e45286a772118a41d2f79f97ad1a146009bc"
+      "sha256": "0f3d3287e2e528c7000184355d38604644dfdf2231a44f900a5851560fd803bc"
     },
     {
       "file": "src/app/api/supabase/storage/route.ts",
@@ -657,7 +661,7 @@
       "callers": [
         "src/lib/agent/worker-entry.ts"
       ],
-      "source": "supabase/migrations/20261006_100000_agent_pi_durable.sql",
+      "source": "supabase/migrations/20261009_100000_agent_pi_durable_1_1.sql",
       "status": "defined",
       "reason": null
     },
@@ -732,7 +736,7 @@
         "src/lib/agent/worker-entry.ts",
         "src/lib/agent/worker-entry.ts"
       ],
-      "source": "supabase/migrations/20261006_100000_agent_pi_durable.sql",
+      "source": "supabase/migrations/20261009_100000_agent_pi_durable_1_1.sql",
       "status": "defined",
       "reason": null
     },
@@ -2585,7 +2589,7 @@
   "artifacts": [
     {
       "file": "supabase/selfhost/001-application.sql",
-      "sha256": "3a5de5f502f516e754c80920a514e349b8eada737ab038568ec88cad8c735460"
+      "sha256": "59c1ff20bf1b7f2a116d2808540bbec539d293e470d29b5d1c59b2218579e664"
     },
     {
       "file": "supabase/selfhost/002-storage.sql",

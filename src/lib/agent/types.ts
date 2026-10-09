@@ -83,7 +83,8 @@ export interface AgentCheckpoint {
   streamingAssistantId?: string;
   runtime?: AgentRuntimeInfo;
   durable?: {
-    engine: "pi-durable/1.0.4";
+    /** Engine generation recorded when the run started; resumed runs keep their marker. */
+    engine: "pi-durable/1.0.4" | "pi-durable/1.1.0";
     seeded?: boolean;
     started?: boolean;
     legacySettled?: boolean;

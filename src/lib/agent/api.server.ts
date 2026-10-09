@@ -34,6 +34,7 @@ import {
 import { encryptAgentCredential } from "./credentials.server";
 import { validateAgentProviderUrl } from "./safe-fetch.server";
 import { isAgentRunTerminal, type AgentCheckpoint } from "./types";
+import { AGENT_ENGINE } from "./engine";
 import { piHistory } from "./history.server";
 import { normalizeQuestions, validateAnswers, formatQuestionAnswers } from './questions';
 import { validateAttachmentIds } from './attachments.server';
@@ -394,7 +395,7 @@ export async function createAgentTask(request: NextRequest) {
       : null;
   const checkpoint: AgentCheckpoint = {
     version: 2,
-    durable: { engine: "pi-durable/1.0.4" },
+    durable: { engine: AGENT_ENGINE },
     messages: replay
       ? [...replay, ...piHistory([userMessage])]
       : piHistory(prepared.sanitizedMessages.map(message => ({ ...message, attachments: message.id === userMessage.id ? userMessage.attachments : history.find(item => item.id === message.id)?.attachments }))),

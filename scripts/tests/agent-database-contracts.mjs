@@ -180,11 +180,11 @@ export async function agentDatabaseContracts(
   });
 
   await t.test("Pi Durable commits checkpoints atomically, deduplicates receipts, and consumes only placed commands", async () => {
-    const nativeCheckpoint = { ...checkpoint, version: 2, durable: { engine: "pi-durable/1.0.4", seeded: true } };
+    const nativeCheckpoint = { ...checkpoint, version: 2, durable: { engine: "pi-durable/1.1.0", seeded: true } };
     const queued = await create(await createConversation(), { checkpoint: nativeCheckpoint });
     await admin("SELECT public.agent_worker_heartbeat('old-engine');");
     assert.equal(await claim("old-engine"), null, "Core workers cannot claim V2 checkpoints");
-    await admin("SELECT public.agent_worker_heartbeat('durable-worker','pi-durable/1.0.4');");
+    await admin("SELECT public.agent_worker_heartbeat('durable-worker','pi-durable/1.1.0');");
     const run = await claim("durable-worker");
     assert.equal(run.id, queued.id);
     const cmd = JSON.parse(await command(run, randomUUID(), "steer", "继续对比"));
@@ -207,7 +207,7 @@ export async function agentDatabaseContracts(
     await assert.rejects(asActor(other, `SELECT public.agent_durable_read(${lease(run)},0);`), /AGENT_ADMIN_REQUIRED/);
     await asOwner(`UPDATE public.agent_runs SET lease_until=now()-interval '1 second' WHERE id=${quote(run.id)};`);
     assert.equal(await claim("old-engine"), null, "mixed-version restart leaves native tasks to Durable workers");
-    await admin("SELECT public.agent_worker_heartbeat('durable-replacement','pi-durable/1.0.4');");
+    await admin("SELECT public.agent_worker_heartbeat('durable-replacement','pi-durable/1.1.0');");
     const replacement = await claim("durable-replacement");
     assert.equal(replacement.fence, run.fence + 1);
     await assert.rejects(commit(3, []), /AGENT_LEASE_LOST/);
@@ -218,7 +218,7 @@ export async function agentDatabaseContracts(
 
   await t.test("Pi Durable admitted input stays awaiting a human reply instead of spinning queued leases", async () => {
     const before = await balance();
-    const cp = { ...checkpoint, version: 2, question: "补充信息？", durable: { engine: "pi-durable/1.0.4", seeded: true } };
+    const cp = { ...checkpoint, version: 2, question: "补充信息？", durable: { engine: "pi-durable/1.1.0", seeded: true } };
     await create(await createConversation(), { checkpoint: cp });
     const run = await claim("durable-worker");
     const first = JSON.parse(await command(run, randomUUID(), "follow_up", "之后比较两份命盘"));
@@ -234,6 +234,21 @@ export async function agentDatabaseContracts(
     await admin(`SELECT public.agent_durable_commit(${lease(resumed)},2,${json([submission(first, 2, "placed"), submission(second, 3, "placed")])},${json(cp)});`);
     await finish(resumed, "failed");
     assert.equal(await balance(), before, "one original debit and refund survive every pause");
+  });
+
+  await t.test("Durable workers claim their own engine generation or older, never a newer native run", async () => {
+    const oldRun = await create(await createConversation(), { checkpoint: { ...checkpoint, version: 2, durable: { engine: "pi-durable/1.0.4", seeded: true } } });
+    const newRun = await create(await createConversation(), { checkpoint: { ...checkpoint, version: 2, durable: { engine: "pi-durable/1.1.0", seeded: true } } });
+    await assert.rejects(admin("SELECT public.agent_worker_heartbeat('bad-engine','pi-durable/9.9.9');"), /AGENT_ENGINE_UNSUPPORTED/);
+    await admin("SELECT public.agent_worker_heartbeat('v11-worker','pi-durable/1.1.0');");
+    await admin("SELECT public.agent_worker_heartbeat('v104-worker','pi-durable/1.0.4');");
+    const resumed = await claim("v11-worker");
+    assert.equal(resumed.id, oldRun.id, "the upgraded worker resumes the in-flight 1.0.4 run");
+    assert.equal(await claim("v104-worker"), null, "a stale 1.0.4 worker never adopts a 1.1.0 native run");
+    const adopted = await claim("v11-worker");
+    assert.equal(adopted.id, newRun.id);
+    await finish(resumed, "failed");
+    await finish(adopted, "failed");
   });
 
   await t.test(
