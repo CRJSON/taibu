@@ -1,6 +1,8 @@
 import { arr, num, obj, str, type OutputSchema } from '../../schema-builders.js';
 
 const factorSnapshotSchema = obj({
+  标识: str('原始星体标识'),
+  黄经度: num('原始黄经度，用于盘面定位'),
   星座: str('星座'),
   黄经: str('黄经'),
   宫位: str('宫位'),
@@ -8,12 +10,15 @@ const factorSnapshotSchema = obj({
 });
 
 const compactAspectSchema = obj({
+  对象标识: str('原始相位对象标识'),
   对象: str('相位对象'),
   相位: str('相位'),
   容许度: num('容许度'),
 });
 
 const factorWithAspectsSchema = obj({
+  标识: str('原始星体标识'),
+  黄经度: num('原始黄经度'),
   因素: str('因素'),
   星座: str('星座'),
   黄经: str('黄经'),
@@ -23,6 +28,8 @@ const factorWithAspectsSchema = obj({
 });
 
 const transitTriggerSchema = obj({
+  标识: str('原始流运星体标识'),
+  黄经度: num('原始黄经度'),
   流运星体: str('流运星体'),
   星座: str('星座'),
   黄经: str('黄经'),
@@ -38,6 +45,8 @@ const pointPairSchema = obj({
 });
 
 const aspectSchema = obj({
+  起点标识: str('原始起点标识'),
+  终点标识: str('原始终点标识'),
   相位: str('相位'),
   起点: str('起点'),
   终点: str('终点'),
@@ -46,6 +55,8 @@ const aspectSchema = obj({
 });
 
 const houseSchema = obj({
+  宫位序号: num('原始宫位序号'),
+  宫头黄经度: num('原始宫头黄经度'),
   宫位: str('宫位'),
   宫头星座: str('宫头星座'),
   宫头黄经: str('宫头黄经'),

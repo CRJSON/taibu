@@ -9,6 +9,7 @@ import { Modal } from '@/components/ui/Modal';
 import { CanonicalChartView } from './CanonicalChartView';
 import { useAgentResultWorkspace } from './AgentResultContext';
 import './agent-results.css';
+import { getChartFocus } from '@/lib/agent/chart-interaction';
 
 function TextFallback({ tool, incomplete = false }: { tool: AgentToolPart; incomplete?: boolean }) {
   const text = getAgentToolText(tool);
@@ -24,7 +25,9 @@ export function AgentToolResult({ tool, full = false }: { tool: AgentToolPart; f
   const [expanded, setExpanded] = useState(false);
   const value = useMemo(() => getAgentChart(tool), [tool]);
   if (tool.status !== 'completed') return null;
-  if (isAgentChartTool(tool.name)) {
+  const focus = getChartFocus(tool);
+  if (focus) return <p className="agent-focus-receipt"><span>盘面已定位</span>{focus.caption}</p>;
+  if (isAgentChartTool(tool.name) || tool.name === 'inspect_chart') {
     const title = value?.title ?? tool.title;
     const content = value ? <ChartErrorBoundary resetKey={tool.output} fallback={<TextFallback tool={tool} />}><CanonicalChartView value={value} text={getAgentToolText(tool) ?? undefined} /></ChartErrorBoundary> : <TextFallback tool={tool} incomplete />;
     if (full) return <section className="agent-result-full" aria-label={title}>{value && <p className="agent-result-summary">{value.summary}</p>}<div className="agent-chart-scroll" tabIndex={0} aria-label={`${title}内容`}>{content}</div></section>;

@@ -3,6 +3,7 @@
 import { useId, useState } from 'react';
 import { ChevronRight, CircleAlert, CircleHelp, ListChecks, LoaderCircle, Pause, Sparkles } from 'lucide-react';
 import type { AgentMessageData } from '@/lib/agent/types';
+import { deduplicateChartResults } from '@/lib/agent/chart-interaction';
 import { MarkdownContent } from '@/components/ui/MarkdownContent';
 import { ThinkingBlock } from '../ThinkingBlock';
 import { AgentToolCard } from './AgentToolCard';
@@ -20,6 +21,7 @@ export function AgentActivityGroup({ parts, data, active = false }: { parts: Age
     const id = useId();
     const [disclosed, setDisclosed] = useState<boolean | null>(null);
     const tools = parts.filter(part => part.type === 'tool');
+    const resultIds = new Set(deduplicateChartResults(data.parts.filter(part => part.type === 'tool')).map(tool => tool.id));
     const toolNumbers = new Map(tools.map((tool, index) => [tool.id, index + 1]));
     const completed = tools.filter(tool => tool.status === 'completed').length;
     const failed = tools.filter(tool => tool.status === 'failed').length;
@@ -43,6 +45,6 @@ export function AgentActivityGroup({ parts, data, active = false }: { parts: Age
                 </div>
             </div>)}
         </div>
-        <div className="agent-activity-results">{tools.map(tool => <AgentToolResult key={tool.id} tool={tool} />)}</div>
+        <div className="agent-activity-results">{tools.filter(tool => resultIds.has(tool.id)).map(tool => <AgentToolResult key={tool.id} tool={tool} />)}</div>
     </section>;
 }

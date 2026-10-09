@@ -91,7 +91,7 @@ export async function projectDurableConversation(
         if (card) {
           card.status = message.isError ? "failed" : "completed";
           card.output = message.details ?? message.content;
-          if (['bazi', 'ziwei', 'liuyao', 'meihua', 'tarot', 'qimen', 'daliuren', 'xiaoliuren', 'read_user_data'].includes(card.name)) card.canonicalText = message.content.filter(part => part.type === 'text').map(part => part.type === 'text' ? part.text : '').join('\n');
+          if (['bazi', 'ziwei', 'liuyao', 'meihua', 'tarot', 'qimen', 'daliuren', 'xiaoliuren', 'read_user_data', 'inspect_chart'].includes(card.name)) card.canonicalText = message.content.filter(part => part.type === 'text').map(part => part.type === 'text' ? part.text : '').join('\n');
           if (entry.byTaskId) attach(card.id, `${entry.byTaskId}:${message.toolCallId}`);
         }
       }

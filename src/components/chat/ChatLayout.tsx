@@ -32,7 +32,8 @@ import { getSettingsCenterRouteTarget, openSettingsCenter } from '@/lib/settings
 import { AgentStatus } from './agent/AgentStatus';
 import { AgentWorkspacePanel } from './agent/AgentWorkspacePanel';
 import { AgentResultContext } from './agent/AgentResultContext';
-import { getAgentUnrepresentedArtifacts, isAgentChartTool } from '@/lib/agent/tool-presentation';
+import { getAgentChart, getAgentUnrepresentedArtifacts } from '@/lib/agent/tool-presentation';
+import { getChartFocus, getChartResources } from '@/lib/agent/chart-interaction';
 import { AgentQuestionDialog } from './agent/AgentQuestionDialog';
 import { collectAgentArtifacts } from './agent/presentation';
 import type { AgentPart } from '@/lib/agent/types';
@@ -129,6 +130,7 @@ export function ChatLayout(props: ChatLayoutProps) {
     const [openWorkspaceKey, setOpenWorkspaceKey] = useState<string | null>(null);
     const workspaceKey = `${userId ?? 'anonymous'}:${activeConversationId ?? 'new'}`;
     const [resourceRequest, setResourceRequest] = useState<{ scope: string; id: string; version: number } | null>(null);
+    const autoWorkspace = useRef<{ scope: string; action: string | null }>({ scope: '', action: null });
     const openResource = useCallback((id: string) => {
         setResourceRequest(previous => ({ scope: workspaceKey, id, version: (previous?.version ?? 0) + 1 }));
         setOpenWorkspaceKey(workspaceKey);
@@ -206,22 +208,45 @@ export function ChatLayout(props: ChatLayoutProps) {
         ? [...props.agent.run.message.agent?.parts ?? []].reverse().find((part): part is Extract<AgentPart, { type: 'question' }> => part.type === 'question') : undefined;
     const hasWorkspace = isAgentMode || Boolean(latestAgentData);
     const workspaceOpen = hasWorkspace && openWorkspaceKey === workspaceKey;
-    const chartCount = historyTools.filter(tool => tool.status === 'completed' && isAgentChartTool(tool.name)).length;
+    const chartCount = getChartResources(historyTools).length;
     const resultCount = chartCount + getAgentUnrepresentedArtifacts(historyTools, artifacts).length;
     const closeWorkspace = () => {
         const previous = document.activeElement;
         setOpenWorkspaceKey(null);
         setResourceRequest(null);
-        try { sessionStorage.removeItem(`taibu.workspace-open:${workspaceKey}`); } catch { /* optional */ }
+        try { sessionStorage.removeItem(`taibu.workspace-open:${workspaceKey}`); if (currentRun) sessionStorage.setItem('taibu.workspace-dismissed:' + workspaceKey, currentRun.id); } catch { /* optional */ }
         requestAnimationFrame(() => {
             const active = document.activeElement;
             if (!active || active === document.body || active === previous) workspaceButtonRef.current?.focus();
         });
     };
+    const currentChartAction = [...currentRun?.message.agent?.parts ?? []].reverse().find(part =>
+        part.type === 'tool' && (getChartFocus(part) || getAgentChart(part)));
+    useEffect(() => {
+        const action = currentChartAction?.id ?? null;
+        if (autoWorkspace.current.scope !== workspaceKey) { autoWorkspace.current = { scope: workspaceKey, action }; return; }
+        if (!action || autoWorkspace.current.action === action || !currentRun || props.agent?.restoring) return;
+        autoWorkspace.current.action = action;
+        if (!window.matchMedia('(min-width: 1280px)').matches) return;
+        try { if (sessionStorage.getItem('taibu.workspace-dismissed:' + workspaceKey) === currentRun.id) return; } catch { /* optional */ }
+        queueMicrotask(() => {
+            if (autoWorkspace.current.scope !== workspaceKey) return;
+            setOpenWorkspaceKey(workspaceKey);
+            try { sessionStorage.setItem('taibu.workspace-open:' + workspaceKey, '1'); } catch { /* optional */ }
+        });
+    }, [currentChartAction?.id, currentRun, props.agent?.restoring, workspaceKey]);
     const title = props.conversationTitle || messages.find(message => message.role === 'user')?.content.slice(0, 60) || (isAgentMode ? '新任务' : '新对话');
     const suggest = (text: string) => {
         onInputChange(text);
         requestAnimationFrame(() => contentRef.current?.querySelector<HTMLTextAreaElement>('[data-chat-composer] textarea')?.focus());
+    };
+    const askAboutChart = (text: string) => {
+        const scope = workspaceKey;
+        onInputChange(inputValue.trim() ? inputValue + '\n\n' + text : text);
+        if (!window.matchMedia('(min-width: 1280px)').matches) closeWorkspace();
+        requestAnimationFrame(() => {
+            if (draftScope.current === scope) contentRef.current?.querySelector<HTMLTextAreaElement>('[data-chat-composer] textarea')?.focus();
+        });
     };
     const composerProps = {
         draftKey: workspaceKey,
@@ -258,7 +283,7 @@ export function ChatLayout(props: ChatLayoutProps) {
                     <label className="chat-reading-width" title="调整阅读宽度"><span>列宽</span><input type="range" aria-label="阅读列宽" min="560" max="1200" step="20" value={preferences.width} onChange={event => updatePreferences({ width: Number(event.target.value) })} /></label>
                     {hasWorkspace && <button type="button" ref={workspaceButtonRef} className="chat-workspace-toggle" aria-label="任务工作区" aria-expanded={workspaceOpen} aria-controls="agent-workspace-panel" onClick={() => {
                         if (workspaceOpen) closeWorkspace();
-                        else { setOpenWorkspaceKey(workspaceKey); try { sessionStorage.setItem(`taibu.workspace-open:${workspaceKey}`, '1'); } catch { /* optional */ } }
+                        else { setOpenWorkspaceKey(workspaceKey); try { sessionStorage.setItem(`taibu.workspace-open:${workspaceKey}`, '1'); sessionStorage.removeItem('taibu.workspace-dismissed:' + workspaceKey); } catch { /* optional */ } }
                     }}>
                         <Files size={16} aria-hidden="true" /><span>工作区</span>{resultCount > 0 && <span className="chat-result-count">{resultCount}</span>}
                     </button>}
@@ -349,7 +374,7 @@ export function ChatLayout(props: ChatLayoutProps) {
                     </>
                 )}
             </div>
-            {workspaceOpen && <AgentWorkspacePanel key={workspaceKey} workspaceKey={workspaceKey} artifacts={artifacts} sources={sources} historyTools={historyTools} attachmentIds={attachmentIds} data={latestAgentData} onClose={closeWorkspace} requestedResource={resourceRequest?.scope === workspaceKey ? resourceRequest : undefined} />}
+            {workspaceOpen && <AgentWorkspacePanel key={workspaceKey} workspaceKey={workspaceKey} artifacts={artifacts} sources={sources} historyTools={historyTools} attachmentIds={attachmentIds} data={latestAgentData} onClose={closeWorkspace} onChartQuestion={askAboutChart} requestedResource={resourceRequest?.scope === workspaceKey ? resourceRequest : undefined} />}
 
             {children}
             <AnalysisMethodPicker onSelect={text => onInputChange(inputValue.trim() ? `${inputValue}\n${text}` : text)} />

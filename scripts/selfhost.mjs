@@ -372,6 +372,8 @@ async function up(state, run, build = false) {
   if (!storageReady) await run.sql(`BEGIN;\n${bundle.storage}\nUPDATE local_stack.state SET storage_ready=true;\nCOMMIT;`, '文件存储策略初始化');
   await seed(run, state.config);
   await run.compose(['up', '-d', ...(build ? ['--build'] : []), 'functions', 'web', 'worker', ...(state.config.DEMO_ENABLED === 'true' ? ['demo'] : [])], { timeout: 1_200_000 });
+  // Reload the bind-mounted offline model after a local code update.
+  if (build && state.config.DEMO_ENABLED === 'true') await run.compose(['up', '-d', '--no-deps', '--force-recreate', 'demo']);
   await wait(() => httpReady(state.config.APP_ORIGIN, '/api/health'), '应用');
   await wait(() => httpReady(state.config.APP_ORIGIN, '/api/announcements?latest=1'), '应用数据库');
   await wait(async () => (await run.sql("SELECT EXISTS(SELECT 1 FROM public.agent_workers WHERE engine='pi-durable/1.0.4' AND heartbeat_at > now() - interval '30 seconds')")).trim() === 't', 'Agent worker');

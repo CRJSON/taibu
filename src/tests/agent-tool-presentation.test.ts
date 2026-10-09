@@ -3,13 +3,14 @@ import assert from 'node:assert/strict';
 import { buildToolSuccessPayload, executeTool, listToolDefinitions } from 'taibu-core/mcp';
 import { AGENT_CHART_NAMES, getAgentChart, getAgentDataResults, getAgentSearchResults, getAgentToolArtifactId, getAgentToolText, getAgentUnrepresentedArtifacts, isAgentChartTool, type AgentToolPart } from '../lib/agent/tool-presentation';
 
-test('eight real tool results display the persisted reading in default/full formats and after JSON history restore', async () => {
+test('all eleven real tool results display the persisted reading in default/full formats and after JSON history restore', async () => {
   const definitions = listToolDefinitions();
   for (const name of Object.keys(AGENT_CHART_NAMES)) {
     const definition = definitions.find(tool => tool.name === name)!;
     const input = { ...definition.inputSchema.examples![0] as Record<string, unknown> };
     if (definition.inputSchema.properties?.seed) input.seed = 'ui-presentation-contract';
     if (name === 'tarot') input.referenceYear = 2026;
+    if (name === 'astrology') { input.latitude = 31.2304; input.longitude = 121.4737; input.timezone = 'Asia/Shanghai'; }
     const result = await executeTool(name, input);
     for (const detailLevel of ['default', 'full'] as const) {
       const returned = buildToolSuccessPayload(name, result, { detailLevel });
@@ -39,6 +40,29 @@ test('invalid, incomplete and unknown tool data cannot invent a replacement char
     assert.equal(getAgentToolText(tool), '真实工具文本');
   }
   for (const name of ['unknown', '__proto__', 'constructor', 'bazi_dayun']) assert.equal(isAgentChartTool(name), false);
+});
+
+test('incomplete nested chart fields and duplicate coordinates keep the original text instead of exposing broken targets', async () => {
+  const mutations: Record<string, Array<(chart: Record<string, unknown>) => void>> = {
+    qimen: [chart => { delete (chart.九宫盘 as Record<string, unknown>[])[0].宫位序号; }, chart => { (chart.九宫盘 as Record<string, unknown>[])[1].宫位序号 = (chart.九宫盘 as Record<string, unknown>[])[0].宫位序号; }],
+    taiyi: [chart => { delete ((chart.太乙七十二局 as Record<string, unknown>).十六宫 as Record<string, unknown>[])[0].星将; }, chart => { chart.九星阵列 = [{ 观测层级: '日', 太乙名: '混入另一体系', 宫位: '一宫' }]; }],
+    astrology: [chart => { delete chart.命盘锚点; }, chart => { (chart.本命主星 as Record<string, unknown>[])[0].关键相位 = null; }, chart => { ((chart.扩展信息 as Record<string, unknown>).完整相位矩阵 as Record<string, unknown>).本命 = null; }],
+    almanac: [chart => { delete chart.神煞参考; }, chart => { (chart.神煞参考 as Record<string, unknown>).吉神宜趋 = {}; }, chart => { chart.时辰吉凶 = '未保存时辰列表'; }],
+  };
+  for (const [name, changes] of Object.entries(mutations)) {
+    const input = { ...listToolDefinitions().find(tool => tool.name === name)!.inputSchema.examples![0] as Record<string, unknown> };
+    if (name === 'taiyi') Object.assign(input, { system: 'traditional', mode: 'hour', date: '2026-04-10', hour: 9, timezone: 'Asia/Shanghai' });
+    if (name === 'astrology') Object.assign(input, { latitude: 31.2304, longitude: 121.4737, timezone: 'Asia/Shanghai' });
+    const returned = buildToolSuccessPayload(name, await executeTool(name, input), { detailLevel: 'full' });
+    const canonicalText = returned.content.map(part => part.text).join('\n');
+    for (const mutate of changes) {
+      const chart = structuredClone(returned.structuredContent) as Record<string, unknown>;
+      mutate(chart);
+      const tool: AgentToolPart = { type: 'tool', id: name, name, title: name, status: 'completed', output: { result: chart }, canonicalText };
+      assert.equal(getAgentChart(tool), null, name);
+      assert.equal(getAgentToolText(tool), canonicalText);
+    }
+  }
 });
 
 test('search views keep returned excerpts and only expose HTTP sources', () => {

@@ -3,6 +3,7 @@
  * 4x4 布局，中心显示课名
  */
 import type { DaliurenCanonicalJSON } from 'taibu-core/daliuren';
+import { ChartTarget, isChartTargetSelected, type ChartInteraction } from '@/components/visualization/ChartTarget';
 
 const WANGSUAI_COLORS: Record<string, string> = {
     旺: 'text-red-500 font-bold',
@@ -45,9 +46,12 @@ interface PalaceCellProps {
     gong: DaliurenCanonicalJSON['天地盘'][number];
     isKong: boolean;
     isSanChuan?: 'chu' | 'zhong' | 'mo';
+    index: number;
+    interaction?: ChartInteraction;
 }
 
-function PalaceCell({ gong, isKong, isSanChuan }: PalaceCellProps) {
+function PalaceCell({ gong, isKong, isSanChuan, index, interaction }: PalaceCellProps) {
+    const id = 'daliuren:palace:' + index;
     const wangColor = gong.旺衰 ? WANGSUAI_COLORS[gong.旺衰] || 'text-foreground' : 'text-foreground';
     const jiangColor = gong.天将 ? TIANJIANG_COLORS[gong.天将] || 'text-foreground' : 'text-foreground';
     const kongStyle = isKong ? 'opacity-50' : '';
@@ -59,15 +63,16 @@ function PalaceCell({ gong, isKong, isSanChuan }: PalaceCellProps) {
         : '';
 
     return (
-        <div className={`flex flex-col items-center justify-center p-1 min-h-[64px] bg-background-secondary/50 rounded-lg border border-border/30 ${sanChuanBorder} ${kongStyle}`}>
+        <div data-chart-selected={isChartTargetSelected(interaction, id) || undefined} className={`flex flex-col items-center justify-center p-1 min-h-[64px] bg-background-secondary/50 rounded-lg border border-border/30 ${sanChuanBorder} ${kongStyle}`}>
+            {interaction && <ChartTarget interaction={interaction} id={id} className="text-[10px]">{gong.地盘}宫</ChartTarget>}
             {/* 天将 */}
-            <span className={`text-xs leading-tight ${jiangColor}`}>{gong.天将}</span>
+            <span className={`text-xs leading-tight ${jiangColor}`}><ChartTarget interaction={interaction} id={id + ':天将'}>{gong.天将}</ChartTarget></span>
             {/* 天盘地支 */}
             <span className={`text-sm font-bold leading-tight ${wangColor}`}>
-                {gong.天盘}{isKong ? '⊙' : ''}
+                <ChartTarget interaction={interaction} id={id + ':天盘'}>{gong.天盘}</ChartTarget>{isKong ? '⊙' : ''}
             </span>
             {/* 地盘地支 */}
-            <span className="text-xs text-foreground-secondary leading-tight">{gong.地盘}</span>
+            <span className="text-xs text-foreground-secondary leading-tight"><ChartTarget interaction={interaction} id={id + ':地盘'}>{gong.地盘}</ChartTarget></span>
             {/* 十二长生 */}
             <span className="text-[10px] text-foreground-tertiary leading-tight">{gong.长生十二神}</span>
         </div>
@@ -76,9 +81,10 @@ function PalaceCell({ gong, isKong, isSanChuan }: PalaceCellProps) {
 
 interface TianDiPanGridProps {
     result: DaliurenCanonicalJSON;
+    interaction?: ChartInteraction;
 }
 
-export function TianDiPanGrid({ result }: TianDiPanGridProps) {
+export function TianDiPanGrid({ result, interaction }: TianDiPanGridProps) {
     const kongSet = new Set(result.基本信息.关键状态.空亡);
     const chuZhi = result.三传[0]?.地支;
     const zhongZhi = result.三传[1]?.地支;
@@ -135,6 +141,8 @@ export function TianDiPanGrid({ result }: TianDiPanGridProps) {
                         <PalaceCell
                             key={idx}
                             gong={gong}
+                            index={parseInt(zhiIdx)}
+                            interaction={interaction}
                             isKong={kongSet.has(gong.天盘)}
                             isSanChuan={getSanChuanMark(gong)}
                         />

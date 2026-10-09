@@ -25,6 +25,9 @@ import { validateTodos } from './todos';
 import { ANALYSIS_METHODS, loadAnalysisMethod } from './methods.server';
 import { attachmentBytes, attachmentDto, validateAttachmentIds } from './attachments.server';
 import { AGENT_MEMORY_SELECT } from './memory';
+import { authorizeChartReference, loadAgentChart, loadInspectedChart } from './chart-tools.server';
+import { CHART_SOURCE_KINDS, getChartTargets, validateChartFocus } from './chart-interaction';
+import { isAgentChartTool } from './tool-presentation';
 import { searchKnowledgeWithPersistence } from "@/lib/knowledge-base/search";
 import type {
   KnowledgeSearchPersistence,
@@ -111,7 +114,8 @@ async function featureEnabled(feature: FeatureModuleId) {
 }
 export async function assertAgentToolAccess(store: AgentStore, run: AgentRunRow, name: string, args: Record<string, unknown>) {
   const account = await getUserCreditInfo(run.user_id, { client: store.db });
-  const feature = name.startsWith('bazi_') ? 'bazi' : name.startsWith('ziwei_') ? 'ziwei' : name;
+  const feature = ['inspect_chart', 'focus_chart'].includes(name) ? await authorizeChartReference(store, run, args.reference)
+    : name.startsWith('bazi_') ? 'bazi' : name.startsWith('ziwei_') ? 'ziwei' : name;
   if (FEATURE_MODULE_IDS.includes(feature as FeatureModuleId) && !(await featureEnabled(feature as FeatureModuleId))) throw new Error('该功能已关闭');
   if (name === 'search_knowledge' && (!(await featureEnabled('knowledge-base')) || account.membership === 'free')) throw new Error('当前会员无法使用知识库检索');
   if ((name === 'web_search' || name.startsWith('mcp__')) && (!run.input.webEnabled || account.membership === 'free')) throw new Error('当前任务不能使用联网工具');
@@ -131,6 +135,8 @@ const auxiliaryToolTitles: Record<string, string> = {
   web_search: "联网检索",
   ask_user: "补充必要信息",
   select_final_artifacts: "确定最终成果",
+  inspect_chart: "查看命盘",
+  focus_chart: "定位分析位置",
 };
 function searchRow(
   data: unknown,
@@ -335,7 +341,12 @@ export async function createAgentTools(
             }
           : cached.result;
       }
-      const result = await execute(args, callId, signal);
+      const executed = await execute(args, callId, signal);
+      // Pi 1.0.4 allocates increasing numeric task IDs; tools execute sequentially.
+      // Keep the order in cache JSON rather than relying on a nonexistent timestamp column.
+      const taskOrder = Number(callId.split(':', 1)[0]);
+      const result = name === 'inspect_chart' && Number.isSafeInteger(taskOrder) && taskOrder > 0
+        ? { ...executed, inspectionOrder: taskOrder } : executed;
       signal?.throwIfAborted();
       const a = await store.rpc<AgentArtifactRow>("agent_cache_tool", {
         ...store.lease(run),
@@ -374,16 +385,45 @@ export async function createAgentTools(
           stableArgs.seed = String(stableAgentSeed(run.id, callId));
         const result = await executeTool(def.name, stableArgs);
         const rendered = buildToolSuccessPayload(def.name, result);
+        // Keep the full original reading for inspection, without another calculation or draw.
+        const snapshot = isAgentChartTool(def.name) ? buildToolSuccessPayload(def.name, result, {
+          detailLevel: def.name === 'astrology' && (result as { chartMeta?: { calculationMode?: string } }).chartMeta?.calculationMode === 'approximate' ? 'more' : 'full',
+        }) : null;
         const resultWithText = {
           content: rendered.content,
           details: rendered.structuredContent ?? result,
           canonicalText: rendered.content.map((p) => p.text).join("\n"),
+          ...(snapshot ? { chartSnapshot: { kind: def.name, result: snapshot.structuredContent, canonicalText: snapshot.content.map(part => part.text).join('\n') } } : {}),
         };
         return resultWithText;
       },
       "calculation",
       def.title,
     ),
+  );
+  tools.push(
+    wrap('inspect_chart', '在工作区查看任一占术的真实盘面并取得定位目标 ID。reference 使用 artifact:成果ID，或 read_user_data 返回的已存资料 chartReference。紫微不填 palace 时返回宫位目录；填实际宫名可查看该宫星曜目标。不会保存新成果。',
+      Type.Object({ reference: Type.String({ minLength: 1, maxLength: 64 }), palace: Type.Optional(Type.String({ minLength: 1, maxLength: 20 })) }),
+      async args => {
+        const { reference, value, canonicalText } = await loadAgentChart(store, run, args.reference);
+        let targets = getChartTargets(value);
+        if (args.palace) {
+          if (value.kind !== 'ziwei') throw new Error('宫位筛选仅用于紫微命盘');
+          const palace = value.chart.十二宫位.find(palace => palace.宫位 === args.palace);
+          if (!palace) throw new Error('该宫位不在这张命盘中');
+          const target = targets.find(target => target.kind === 'ziwei_palace' && target.label === palace.宫位 + ' ' + palace.干支);
+          targets = targets.filter(item => 'palaceIndex' in item && target && 'palaceIndex' in target && item.palaceIndex === target.palaceIndex);
+        } else if (value.kind === 'ziwei') targets = targets.filter(target => target.kind === 'ziwei_palace');
+        return { content: [{ type: 'text', text: canonicalText }, { type: 'text', text: JSON.stringify({ reference, title: value.title, summary: value.summary, targets: targets.map(({ id, label }) => ({ id, label })) }) }],
+          details: { chartReference: reference, chartKind: value.kind, result: value.chart }, canonicalText };
+      }),
+    wrap('focus_chart', '展示当前正在分析的命盘位置。必须先 inspect_chart，targetIds 仅用该盘返回的真实 ID；多个 ID 可同时高亮，空数组清除高亮。includeRelated 控制紫微三方四正、大六壬对应盘位及占星本命相位关联，caption 为面向用户的简短分析主题。',
+      Type.Object({ reference: Type.String({ minLength: 1, maxLength: 64 }), targetIds: Type.Array(Type.String({ minLength: 1, maxLength: 100 }), { maxItems: 16 }),
+        includeRelated: Type.Optional(Type.Boolean()), caption: Type.String({ minLength: 1, maxLength: 160 }) }),
+      async args => {
+        const { reference, value } = await loadInspectedChart(store, run, args.reference);
+        return textResult({ chartFocus: validateChartFocus(value, reference, args.targetIds, args.includeRelated ?? true, args.caption) });
+      }),
   );
   tools.push(
     wrap(
@@ -428,7 +468,7 @@ export async function createAgentTools(
               text: await provider.formatForAI(value, { client: store.db }),
             },
           ],
-          details: { id: args.id, type: args.type },
+          details: { id: args.id, type: args.type, ...(Object.hasOwn(CHART_SOURCE_KINDS, args.type) ? { chartReference: args.type + ':' + args.id } : {}) },
         };
       },
     ),

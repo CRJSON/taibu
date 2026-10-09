@@ -11,9 +11,55 @@ function agentReply(body) {
   const call=(id,name,args)=>({content:null,tool_calls:[{id,type:'function',function:{name,arguments:JSON.stringify(args)}}]});
   if(String(first.content).includes('补充信息')&&!completed.has('fixture-ask'))return call('fixture-ask','ask_user',{question:'请补充出生年月日、出生时刻和性别。'});
   if(!completed.has('fixture-bazi'))return call('fixture-bazi','bazi',{gender:'male',birthYear:1990,birthMonth:1,birthDay:15,birthHour:9});
+  if(String(first.content).includes('全体系命盘联动')) {
+    const plans = [
+      ['bazi', {}], ['ziwei', {gender:'male',birthYear:1990,birthMonth:1,birthDay:15,birthHour:9}],
+      ['qimen', {year:2026,month:3,day:15,hour:16,minute:51,timezone:'Asia/Shanghai'}],
+      ['liuyao', {question:'本月事业运势如何？',yongShenTargets:['官鬼'],method:'auto',date:'2026-02-10T09:30:00'}],
+      ['meihua', {question:'这次合作能否谈成？',method:'time',date:'2026-04-04T10:30:00'}],
+      ['daliuren', {date:'2026-03-15',hour:16,minute:53,timezone:'Asia/Shanghai',question:'今日运势如何'}],
+      ['xiaoliuren', {lunarMonth:3,lunarDay:15,hour:8,question:'今日运势如何'}],
+      ['tarot', {spreadType:'three-card',question:'本月运势如何？',referenceYear:2026}],
+      ['taiyi', {mode:'hour',system:'traditional',date:'2026-04-10',hour:9,timezone:'Asia/Shanghai'}],
+      ['astrology', {birthYear:1990,birthMonth:1,birthDay:1,birthHour:12,birthMinute:30,latitude:31.2304,longitude:121.4737,timezone:'Asia/Shanghai',transitDateTime:'2026-04-10T09:30:00'}],
+      ['almanac', {birthYear:1990,birthMonth:1,birthDay:15,birthHour:9,date:'2026-02-14'}],
+    ];
+    const reference = id => 'artifact:' + String(completed.get(id)).match(/成果 ID: ([a-f0-9-]{36})/iu)?.[1];
+    const directory = id => { const text=String(completed.get(id)); return JSON.parse(text.slice(text.lastIndexOf('{"reference":'))); };
+    const selectors = {bazi:'bazi-relation-',qimen:':八门',liuyao:'liuyao:line:2',meihua:'meihua:trigram:体卦',daliuren:'daliuren:transmission:1',xiaoliuren:'xiaoliuren:result',tarot:'tarot:card:1',taiyi:':star:',astrology:':aspect:',almanac:'almanac:hour:'};
+    for(const [name,args] of plans) {
+      const calc=name==='bazi'?'fixture-bazi':'fixture-all-'+name, inspect='fixture-all-inspect-'+name, focus='fixture-all-focus-'+name;
+      if(!completed.has(calc))return call(calc,name,args);
+      if(!completed.has(inspect))return call(inspect,'inspect_chart',{reference:reference(calc)});
+      let targets=directory(inspect).targets;
+      if(name==='ziwei') {
+        const stars='fixture-all-stars';
+        if(!completed.has(stars))return call(stars,'inspect_chart',{reference:reference(calc),palace:targets.find(target=>target.id==='ziwei:palace:0').label.split(' ')[0]});
+        targets=directory(stars).targets.filter(target=>target.id.startsWith('ziwei:star:'));
+      }
+      if(!completed.has(focus))return call(focus,'focus_chart',{reference:reference(calc),targetIds:[targets.find(target=>selectors[name]&&target.id.includes(selectors[name]))?.id??targets[0].id],caption:'正在分析'+name+'的实际盘面位置',includeRelated:true});
+    }
+    if(!completed.has('fixture-all-select'))return call('fixture-all-select','select_final_artifacts',{artifactIds:plans.map(([name])=>reference(name==='bazi'?'fixture-bazi':'fixture-all-'+name).slice(9))});
+    return {content:'全体系命盘联动离线验收完成。十一种盘面均通过真实工具、原生记录和 SSE 定位；此回复仅用于测试。'};
+  }
+  if(String(first.content).includes('命盘联动')) {
+    const reference = id => 'artifact:' + String(completed.get(id)).match(/成果 ID: ([a-f0-9-]{36})/iu)?.[1];
+    const directory = id => {
+      const text = String(completed.get(id));
+      return JSON.parse(text.slice(text.lastIndexOf('{"reference":')));
+    };
+    if(!completed.has('fixture-inspect-bazi'))return call('fixture-inspect-bazi','inspect_chart',{reference:reference('fixture-bazi')});
+    if(!completed.has('fixture-focus-day'))return call('fixture-focus-day','focus_chart',{reference:reference('fixture-bazi'),targetIds:['bazi:cell:2:1'],caption:'正在查看日支'});
+    if(!completed.has('fixture-focus-relation'))return call('fixture-focus-relation','focus_chart',{reference:reference('fixture-bazi'),targetIds:[directory('fixture-inspect-bazi').targets.find(target=>target.id.startsWith('bazi-relation-')).id],caption:'正在查看干支关系'});
+    if(!completed.has('fixture-ziwei'))return call('fixture-ziwei','ziwei',{gender:'male',birthYear:1990,birthMonth:1,birthDay:15,birthHour:9});
+    if(!completed.has('fixture-inspect-ziwei'))return call('fixture-inspect-ziwei','inspect_chart',{reference:reference('fixture-ziwei')});
+    const palace=directory('fixture-inspect-ziwei').targets.find(target=>target.id==='ziwei:palace:0');
+    if(!completed.has('fixture-inspect-stars'))return call('fixture-inspect-stars','inspect_chart',{reference:reference('fixture-ziwei'),palace:palace.label.split(' ')[0]});
+    if(!completed.has('fixture-focus-star'))return call('fixture-focus-star','focus_chart',{reference:reference('fixture-ziwei'),targetIds:[directory('fixture-inspect-stars').targets.find(target=>target.id.startsWith('ziwei:star:')).id],includeRelated:true,caption:'正在查看宫位与星曜'});
+  }
   if(String(first.content).includes('跨命盘')&&!completed.has('fixture-other'))return call('fixture-other','bazi',{gender:'female',birthYear:1995,birthMonth:6,birthDay:20,birthHour:10,birthMinute:30});
   if(!completed.has('fixture-select')) {
-    const artifactIds=[...completed.entries()].filter(([id])=>id.startsWith('fixture-bazi')||id==='fixture-other').map(([,text])=>String(text).match(/成果 ID: ([a-f0-9-]{36})/iu)?.[1]).filter(Boolean);
+    const artifactIds=[...completed.entries()].filter(([id])=>id.startsWith('fixture-bazi')||id==='fixture-other'||id==='fixture-ziwei').map(([,text])=>String(text).match(/成果 ID: ([a-f0-9-]{36})/iu)?.[1]).filter(Boolean);
     return call('fixture-select','select_final_artifacts',{artifactIds});
   }
   return {content:'Agent 离线验收已完成真实工具排盘和成果选择。此文字来自确定性测试模型，用于验证后台执行、恢复和保存流程。'};

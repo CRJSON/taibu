@@ -1,4 +1,6 @@
 export interface AstrologyFactorSnapshotJSON {
+  标识?: string;
+  黄经度?: number;
   星座: string;
   黄经: string;
   宫位?: string;
@@ -8,6 +10,7 @@ export interface AstrologyFactorSnapshotJSON {
 export type AstrologyFactorJSON = AstrologyFactorSnapshotJSON;
 
 export interface AstrologyCompactAspectJSON {
+  对象标识?: string;
   对象: string;
   相位: string;
   容许度: number;
@@ -30,6 +33,8 @@ export interface AstrologyPointPairJSON {
 }
 
 export interface AstrologyAspectJSON {
+  起点标识?: string;
+  终点标识?: string;
   相位: string;
   起点: string;
   终点: string;
@@ -38,6 +43,8 @@ export interface AstrologyAspectJSON {
 }
 
 export interface AstrologyHouseJSON {
+  宫位序号?: number;
+  宫头黄经度?: number;
   宫位: string;
   宫头星座: string;
   宫头黄经: string;

@@ -24,7 +24,7 @@ type LiuyaoRow = {
     conversation_id: string | null;
 };
 
-const buildYaosFromCode = (hexagramCode: string, changedLines: number[]): Yao[] => {
+export const buildYaosFromCode = (hexagramCode: string, changedLines: number[]): Yao[] => {
     return hexagramCode.split('').map((value, index) => ({
         type: (parseInt(value, 10) as 0 | 1),
         change: changedLines.includes(index + 1) ? 'changing' : 'stable',

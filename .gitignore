@@ -127,6 +127,7 @@ docs/manual/*
 !docs/manual/Agent.md
 !docs/agent-experience-implementation.md
 !docs/agent-domain-competence-implementation.md
+!docs/agent-chart-interaction-review.md
 !docs/ui-settings-agent.md
 
 # AI

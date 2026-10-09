@@ -67,12 +67,14 @@ export async function verifyAgentExperience({ page, context, origin, directory, 
   await width.press('Home');
   assert.equal(await width.inputValue(), '560');
   for (let value = 560; value < Number(previousWidth); value += 20) await width.press('ArrowRight');
-  await page.getByRole('button', { name: '任务工作区', exact: true }).click();
+  const workspaceToggle = page.getByRole('button', { name: '任务工作区', exact: true });
+  if (await workspaceToggle.getAttribute('aria-expanded') !== 'true') await workspaceToggle.click();
   const workspace = page.locator('aside#agent-workspace-panel');
+  await workspace.getByRole('button', { name: /^命盘/ }).click();
   await workspace.locator('.agent-workspace-chart-link').first().click();
   const firstTab = await workspace.getByRole('tab').first().textContent();
   await workspace.getByRole('tabpanel').waitFor();
-  await workspace.getByRole('button', { name: '成果', exact: false }).first().click();
+  await workspace.getByRole('button', { name: '命盘', exact: false }).first().click();
   await workspace.locator('.agent-workspace-chart-link').last().click();
   assert.equal(await workspace.getByRole('tab').count(), 2);
   await workspace.getByRole('tab').last().press('ArrowLeft');

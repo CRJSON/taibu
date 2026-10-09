@@ -7,6 +7,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { chromium } from "playwright";
 import { verifyAgentExperience } from './agent-experience-browser.mjs';
 import { verifyAgentDomain } from './agent-domain-browser.mjs';
+import { verifyAgentChartWorkspace } from './agent-chart-browser.mjs';
 import {
   ROOT,
   validateConfig,
@@ -43,6 +44,7 @@ const outside = [],
   errors = [],
   failures = [];
 const created = [];
+const chartOnly = process.argv.includes('--chart-only');
 let page;
 try {
   const context = await browser.newContext({
@@ -97,9 +99,10 @@ try {
     }
     throw new Error(`task did not reach ${status}`);
   };
-  const newChat = async () => {
-    await page.goto(`${config.APP_ORIGIN}/chat`);
-    await page.getByRole("button", { name: "Agent", exact: true }).waitFor();
+  const selectAgentMode = async () => {
+    const mode = page.getByRole("button", { name: "Agent", exact: true });
+    await mode.waitFor();
+    if (await mode.getAttribute('aria-pressed') !== 'true') await mode.click();
     await page.waitForFunction(() =>
       [...document.querySelectorAll("button")].some(
         (button) =>
@@ -107,6 +110,10 @@ try {
           button.getAttribute("aria-pressed") === "true",
       ),
     );
+  };
+  const newChat = async () => {
+    await page.goto(`${config.APP_ORIGIN}/chat`);
+    await selectAgentMode();
   };
   const send = async (text) => {
     await uiReady();
@@ -137,14 +144,7 @@ try {
     .getByRole("button", { name: "登录", exact: true })
     .click();
   await page.getByPlaceholder("输入密码").waitFor({ state: "hidden" });
-  await page.getByRole("button", { name: "Agent", exact: true }).waitFor();
-  await page.waitForFunction(() =>
-    [...document.querySelectorAll("button")].some(
-      (button) =>
-        button.textContent === "Agent" &&
-        button.getAttribute("aria-pressed") === "true",
-    ),
-  );
+  await selectAgentMode();
   assert.equal(
     (await get("/api/agent/status")).ready,
     true,
@@ -152,6 +152,7 @@ try {
   );
   assert.ok((await context.cookies()).some((cookie) => cookie.httpOnly));
 
+  if (!chartOnly) {
   await uiReady();
   const chatBeforeSettings = page.url();
   await page.getByRole('link', { name: '个性化', exact: true }).click();
@@ -258,7 +259,7 @@ try {
   await page.screenshot({ path: path.join(directory, 'agent-empty-acceptance.png'), fullPage: true });
 
   const initial = await credits();
-  assert.ok(initial >= 6, 'browser acceptance requires six chat uses; supply an isolated account with --account');
+  assert.ok(initial >= 7, 'browser acceptance requires seven chat uses; supply an isolated account with --account');
   const first = await send("Agent验收：跨命盘对比，请排盘并在聊天中分析。");
   await page.goto(`${config.APP_ORIGIN}/chat?id=${first.run.conversationId}`);
   const finished = await waitForRun(first.run.id, "completed");
@@ -317,17 +318,19 @@ try {
   await toolCard.getByRole('button', { name: '复制调用参数', exact: true }).click();
   assert.deepEqual(JSON.parse(await page.evaluate(() => navigator.clipboard.readText())), finished.message.agent.parts.find(part => part.type === 'tool').input);
   await toolCard.locator('summary').click();
-  await page.getByRole('button', { name: '任务工作区', exact: true }).click();
+  const workspaceToggle = page.getByRole('button', { name: '任务工作区', exact: true });
+  if (await workspaceToggle.getAttribute('aria-expanded') !== 'true') await workspaceToggle.click();
   const panel = page.locator('aside#agent-workspace-panel');
   await panel.waitFor();
+  await panel.getByRole('button', { name: /^命盘/ }).click();
   const originalPanelWidth = (await panel.boundingBox()).width;
-  await panel.getByRole('separator', { name: '调整工作区宽度', exact: true }).press('ArrowLeft');
-  assert.equal((await panel.boundingBox()).width, originalPanelWidth + 24, 'workspace width can be adjusted with the keyboard');
   await panel.getByRole('separator', { name: '调整工作区宽度', exact: true }).press('ArrowRight');
+  assert.equal((await panel.boundingBox()).width, originalPanelWidth - 24, 'a constrained workspace shrinks from its actual rendered width');
+  await panel.getByRole('separator', { name: '调整工作区宽度', exact: true }).press('ArrowLeft');
   assert.equal(await panel.locator('.agent-workspace-chart-link').count(), 2, 'workspace counts each actual tool reading once');
   await panel.getByRole('button', { name: /^过程/ }).click();
   assert.equal(await panel.locator('details.agent-tool-card').count(), 3);
-  await panel.getByRole('button', { name: /^成果/ }).click();
+  await panel.getByRole('button', { name: /^命盘/ }).click();
   await page.screenshot({ path: path.join(directory, 'agent-workspace-acceptance.png'), fullPage: true });
   await page.emulateMedia({ colorScheme: 'dark' });
   await page.locator('html.dark').waitFor();
@@ -756,12 +759,14 @@ try {
   }
   console.log('聊天阅读：普通与虚拟列表的阅读位置恢复、回到最新通过。');
   await verifyAgentDomain({ page, context, origin: config.APP_ORIGIN, output: path.join(ROOT,'output','playwright') });
+  }
+  await verifyAgentChartWorkspace({ page, newChat, send, waitForRun, credits, output: directory });
   assert.deepEqual(outside, []);
   assert.deepEqual(errors, []);
   assert.deepEqual(failures, []);
-  console.log("普通对话回归通过；浏览器无外部请求、服务端 5xx 或运行时异常。");
+  console.log(chartOnly ? '命盘专项通过；浏览器无外部请求、服务端 5xx 或运行时异常。' : "普通对话回归通过；浏览器无外部请求、服务端 5xx 或运行时异常。");
   console.log(
-    `隔离验收截图：.taibu-local/${project}/agent-acceptance.png、agent-mobile-acceptance.png；任务数=${created.length}`,
+    `隔离验收截图：.taibu-local/${project}/${chartOnly ? 'agent-chart-*.png' : 'agent-acceptance.png、agent-mobile-acceptance.png'}；任务数=${created.length}`,
   );
 } catch (error) {
   console.error(

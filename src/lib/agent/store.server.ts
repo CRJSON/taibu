@@ -42,6 +42,8 @@ export interface AgentArtifactRow {
     content: Array<{ type: "text"; text: string }>;
     details: unknown;
     canonicalText?: string;
+    chartSnapshot?: { kind: string; result: unknown; canonicalText: string };
+    inspectionOrder?: number;
   };
   chart_id?: string;
   chart_type?: string;
@@ -193,5 +195,25 @@ export class AgentStore {
       .eq("kind", "calculation");
     if (error) throw new Error(error.message);
     return (data ?? []) as AgentArtifactRow[];
+  }
+  async chartArtifact(run: AgentRunRow, id: string) {
+    const { data, error } = await this.db.from('agent_run_artifacts')
+      .select('*,agent_runs!inner(user_id,conversation_id)')
+      .eq('id', id).eq('kind', 'calculation')
+      .eq('agent_runs.user_id', run.user_id).eq('agent_runs.conversation_id', run.conversation_id)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    return data as AgentArtifactRow | null;
+  }
+  async inspectedChart(run: AgentRunRow, reference: string): Promise<AgentArtifactRow | null> {
+    const { data, error } = await this.db.from('agent_run_artifacts').select('*')
+      .eq('run_id', run.id).eq('tool_name', 'inspect_chart')
+      .eq('result->details->>chartReference', reference)
+      .order('result->inspectionOrder', { ascending: false, nullsFirst: false }).limit(2);
+    if (error) throw new Error(error.message);
+    const snapshots = (data ?? []) as AgentArtifactRow[];
+    if (snapshots.length > 1 && !Number.isSafeInteger(snapshots[0]?.result.inspectionOrder))
+      throw new Error('该命盘有多次旧版查看记录，请重新调用 inspect_chart 后再定位');
+    return snapshots[0] ?? null;
   }
 }

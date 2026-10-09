@@ -6,7 +6,7 @@
 'use client';
 
 import { useState } from 'react';
-import type { BaziCanonicalJSON } from 'taibu-core/bazi';
+import type { BaziCanonicalJSON, BaziCellJSON } from 'taibu-core/bazi';
 import {
     type DaYunInfo,
     type LiuNianInfo,
@@ -67,6 +67,8 @@ export function ProfessionalTable({
     activeLiuNian,
     activeLiuYue,
     activeLiuRi,
+    highlightedCells,
+    onCellSelect,
 }: {
     canonicalChart: BaziCanonicalJSON;
     isUnknownTime?: boolean;
@@ -74,6 +76,8 @@ export function ProfessionalTable({
     activeLiuNian?: LiuNianInfo;
     activeLiuYue?: LiuYueInfo;
     activeLiuRi?: LiuRiInfo;
+    highlightedCells?: BaziCellJSON[];
+    onCellSelect?: (cell: BaziCellJSON) => void;
 }) {
     const [shenShaExpanded, setShenShaExpanded] = useState(false);
 
@@ -168,6 +172,16 @@ export function ProfessionalTable({
     };
 
     const columnCount = fortuneColumns.length + columns.length;
+    const character = (col: typeof columns[number], part: BaziCellJSON['部位'], index: number) => {
+        const char = part === '天干' ? col.stem : col.branch;
+        const style = { color: col.hidden ? undefined : part === '天干' ? getStemColor(char) : getBranchColor(char) };
+        if (!onCellSelect || col.hidden) return <span className="text-xl sm:text-2xl font-bold" style={style}>{col.hidden ? '*' : char}</span>;
+        const cell: BaziCellJSON = { 柱: col.label as BaziCellJSON['柱'], 部位: part, 字: char };
+        const highlighted = highlightedCells?.some(item => item.柱 === cell.柱 && item.部位 === cell.部位 && item.字 === char) ?? false;
+        return <button type="button" className="chart-cell-button text-xl sm:text-2xl font-bold" style={style}
+            data-chart-target={'bazi:cell:' + index + ':' + (part === '天干' ? 0 : 1)}
+            aria-label={col.label + part + char} aria-pressed={highlighted} onClick={() => onCellSelect(cell)}>{char}</button>;
+    };
 
     return (
         <div className="overflow-x-auto -mx-2 px-1">
@@ -221,9 +235,7 @@ export function ProfessionalTable({
                         ))}
                         {columns.map((col, idx) => (
                             <td key={col.key} className={`py-4 px-1 text-center ${col.hidden ? 'opacity-30' : ''} ${idx === 0 && hasFortuneColumns ? 'border-l border-border/60' : ''}`}>
-                                <span className="text-xl sm:text-2xl font-bold" style={{ color: col.hidden ? undefined : getStemColor(col.stem) }}>
-                                    {col.hidden ? '*' : col.stem}
-                                </span>
+                                {character(col, '天干', idx)}
                             </td>
                         ))}
                     </tr>
@@ -239,9 +251,7 @@ export function ProfessionalTable({
                         ))}
                         {columns.map((col, idx) => (
                             <td key={col.key} className={`py-4 px-1 text-center ${col.hidden ? 'opacity-30' : ''} ${idx === 0 && hasFortuneColumns ? 'border-l border-border/60' : ''}`}>
-                                <span className="text-xl sm:text-2xl font-bold" style={{ color: col.hidden ? undefined : getBranchColor(col.branch) }}>
-                                    {col.hidden ? '*' : col.branch}
-                                </span>
+                                {character(col, '地支', idx)}
                             </td>
                         ))}
                     </tr>

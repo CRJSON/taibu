@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, useSyncExternalStore, lazy, Suspense } from 'react';
-import { ArrowUpRight, Files, Globe, ListChecks, X } from 'lucide-react';
+import { ArrowUpRight, Files, Globe, ListChecks, ScanEye, X } from 'lucide-react';
 import type { AgentMessageData, AgentPart } from '@/lib/agent/types';
 import { AgentArtifactCard } from './AgentArtifactCard';
 import { AgentStatus } from './AgentStatus';
@@ -11,8 +11,10 @@ import { Modal } from '@/components/ui/Modal';
 import { MarkdownContent } from '@/components/ui/MarkdownContent';
 import { AgentToolCard } from './AgentToolCard';
 import { PrivateAttachmentPreview } from './PrivateAttachments';
-import { getAgentChart, getAgentUnrepresentedArtifacts, isAgentChartTool } from '@/lib/agent/tool-presentation';
+import { getAgentChart, getAgentUnrepresentedArtifacts } from '@/lib/agent/tool-presentation';
+import { getAgentChartReference, getChartFocus, getChartResources, getLatestChartFocus } from '@/lib/agent/chart-interaction';
 const ChartPreview = lazy(() => import('./AgentChartPreview').then(module => ({ default: module.AgentChartPreview })));
+const InteractiveChart = lazy(() => import('./AgentInteractiveChart').then(module => ({ default: module.AgentInteractiveChart })));
 
 const desktopQuery = '(min-width: 1280px)';
 function subscribeToViewport(onChange: () => void) {
@@ -21,7 +23,7 @@ function subscribeToViewport(onChange: () => void) {
     return () => media.removeEventListener('change', onChange);
 }
 
-export function AgentWorkspacePanel({ artifacts, sources, data, historyTools, attachmentIds, onClose, workspaceKey, requestedResource }: {
+export function AgentWorkspacePanel({ artifacts, sources, data, historyTools, attachmentIds, onClose, workspaceKey, requestedResource, onChartQuestion }: {
     workspaceKey: string;
     artifacts: AgentArtifact[];
     sources: Extract<AgentPart, { type: 'source' }>[];
@@ -30,12 +32,16 @@ export function AgentWorkspacePanel({ artifacts, sources, data, historyTools, at
     attachmentIds: string[];
     onClose: () => void;
     requestedResource?: { id: string; version: number };
+    onChartQuestion?: (text: string) => void;
 }) {
     const desktop = useSyncExternalStore(subscribeToViewport,
         () => window.matchMedia(desktopQuery).matches, () => false);
     const panelRef = useRef<HTMLElement>(null);
     const dragRef = useRef<{ start: number; width: number } | null>(null);
-    const [width, setWidth] = useState(324);
+    const [width, setWidth] = useState(660);
+    const [followModel, setFollowModel] = useState(() => {
+        try { return !requestedResource && JSON.parse(sessionStorage.getItem('taibu.workspace:' + workspaceKey) ?? 'null')?.followModel !== false; } catch { return !requestedResource; }
+    });
     const [section, setSection] = useState<'results' | 'activity'>('results');
     const [tabs, setTabs] = useState<string[]>(() => {
         try { const saved = JSON.parse(sessionStorage.getItem(`taibu.workspace:${workspaceKey}`) ?? 'null'); return Array.isArray(saved?.tabs) ? saved.tabs.filter((id: unknown): id is string => typeof id === 'string').slice(0, 20) : []; } catch { return []; }
@@ -46,17 +52,34 @@ export function AgentWorkspacePanel({ artifacts, sources, data, historyTools, at
     });
     const scrollRef = useRef<HTMLDivElement>(null);
     const tools = historyTools;
-    const charts = tools.filter(tool => tool.status === 'completed' && isAgentChartTool(tool.name));
+    const charts = getChartResources(tools);
+    const chartByReference = new Map(charts.flatMap(resource => resource.reference ? [[resource.reference, resource] as const] : []));
+    const modelFocus = getLatestChartFocus(tools);
+    const lastChartEvent = [...tools].reverse().find(tool => getChartFocus(tool) || getAgentChart(tool));
+    const modelReference = lastChartEvent ? getChartFocus(lastChartEvent)?.reference ?? getAgentChartReference(lastChartEvent) : null;
+    const modelChart = charts.find(chart => chart.reference === modelReference) ?? charts.at(-1);
+    const modelResourceId = modelChart ? 'tool:' + modelChart.tool.id : null;
     const savedOnlyArtifacts = getAgentUnrepresentedArtifacts(tools, artifacts);
     const resources = [
-        ...artifacts.map(artifact => ({ id: `chart:${artifact.id}`, title: artifact.title, body: <Suspense fallback={<p>加载预览…</p>}><ChartPreview artifact={artifact} tools={tools} /></Suspense> })),
+        ...artifacts.map(artifact => ({ id: `chart:${artifact.id}`, title: artifact.title, body: <Suspense fallback={<p>加载预览…</p>}><ChartPreview artifact={artifact} tools={tools}
+            focus={modelFocus} followModel={followModel} onManual={() => { setSelected('chart:' + artifact.id); setFollowModel(false); }} onAsk={onChartQuestion} /></Suspense> })),
         ...sources.map(source => ({ id: `source:${source.id}`, title: source.title || '来源', body: <><a href={source.url} target="_blank" rel="noopener noreferrer" className="agent-source-link">打开原始来源 <ArrowUpRight size={14} /></a><MarkdownContent content={source.content || '此来源未提供摘要。'} /></> })),
-        ...tools.map(tool => ({ id: `tool:${tool.id}`, title: getAgentChart(tool)?.title ?? tool.title, body: <AgentToolCard tool={tool} runStatus={data?.status ?? 'completed'} fullResult /> })),
+        ...tools.map(tool => {
+            const original = getAgentChart(tool);
+            const reference = getAgentChartReference(tool);
+            const inspected = original && reference ? chartByReference.get(reference) : undefined;
+            const value = inspected?.value ?? original;
+            return { id: 'tool:' + tool.id, title: value?.title ?? tool.title, body: value ? <Suspense fallback={<p role="status">加载命盘…</p>}>
+                <InteractiveChart key={reference ?? tool.id} value={value} tool={inspected?.tool ?? tool} reference={reference}
+                    focus={getLatestChartFocus(tools, reference ?? undefined)} followModel={followModel} onManual={() => { setSelected('tool:' + tool.id); setFollowModel(false); }} onAsk={onChartQuestion} />
+            </Suspense> : <AgentToolCard tool={tool} runStatus={data?.status ?? 'completed'} fullResult /> };
+        }),
         ...attachmentIds.map((id, index) => ({ id: `attachment:${id}`, title: `资料 ${index + 1}`, body: <PrivateAttachmentPreview key={id} id={id} inline /> })),
     ];
-    const visibleTabs = tabs.filter(id => resources.some(resource => resource.id === id));
-    const activeResource = resources.find(resource => resource.id === selected);
-    const openResource = (id: string) => { setTabs(current => current.includes(id) ? current : [...current.slice(-19), id]); setSelected(id); };
+    const activeId = followModel ? modelResourceId ?? selected : selected;
+    const visibleTabs = [...new Set([...tabs, ...(activeId ? [activeId] : [])])].filter(id => resources.some(resource => resource.id === id));
+    const activeResource = resources.find(resource => resource.id === activeId);
+    const openResource = (id: string) => { setFollowModel(false); setTabs(current => current.includes(id) ? current : [...current.slice(-19), id]); setSelected(id); };
     useEffect(() => {
         if (!requestedResource) return;
         let current = true;
@@ -64,20 +87,21 @@ export function AgentWorkspacePanel({ artifacts, sources, data, historyTools, at
             if (!current) return;
             setTabs(tabs => tabs.includes(requestedResource.id) ? tabs : [...tabs.slice(-19), requestedResource.id]);
             setSelected(requestedResource.id);
+            setFollowModel(false);
         });
         return () => { current = false; };
     }, [requestedResource]);
-    useEffect(() => { try { sessionStorage.setItem(`taibu.workspace:${workspaceKey}`, JSON.stringify({ tabs, selected })); } catch { /* Storage may be unavailable. */ } }, [tabs, selected, workspaceKey]);
+    useEffect(() => { try { sessionStorage.setItem(`taibu.workspace:${workspaceKey}`, JSON.stringify({ tabs, selected: activeId, followModel })); } catch { /* Storage may be unavailable. */ } }, [tabs, activeId, followModel, workspaceKey]);
     useEffect(() => {
         const element = scrollRef.current;
         if (!element) return;
-        const key = `taibu.workspace-scroll:${workspaceKey}:${selected ?? section}`;
+        const key = `taibu.workspace-scroll:${workspaceKey}:${activeId ?? section}`;
         try { element.scrollTop = Number(sessionStorage.getItem(key) ?? 0); } catch { /* optional */ }
         const remember = () => { try { sessionStorage.setItem(key, String(element.scrollTop)); } catch { /* optional */ } };
         element.addEventListener('scroll', remember);
         return () => element.removeEventListener('scroll', remember);
-    }, [workspaceKey, selected, section]);
-    const adjustWidth = (next: number) => setWidth(Math.max(280, Math.min(next, Math.min(520, (panelRef.current?.parentElement?.clientWidth ?? 1040) - 480))));
+    }, [workspaceKey, activeId, section]);
+    const adjustWidth = (next: number) => setWidth(Math.max(280, Math.min(next, Math.min(780, (panelRef.current?.parentElement?.clientWidth ?? 1040) - 360))));
 
     const content = <div className="agent-panel-content">
         <div className="agent-panel-header">
@@ -85,25 +109,28 @@ export function AgentWorkspacePanel({ artifacts, sources, data, historyTools, at
             <button type="button" onClick={onClose} aria-label="关闭任务工作区" className="agent-icon-button"><X size={18} /></button>
         </div>
         <div className="agent-panel-tabs" role="group" aria-label="工作区内容">
-            <button type="button" aria-pressed={!activeResource && section === 'results'} onClick={() => { setSection('results'); setSelected(null); }}><Files size={14} />成果<span>{charts.length + savedOnlyArtifacts.length}</span></button>
-            <button type="button" aria-pressed={!activeResource && section === 'activity'} onClick={() => { setSection('activity'); setSelected(null); }}><ListChecks size={14} />过程<span>{tools.length}</span></button>
+            <button type="button" aria-pressed={!activeResource && section === 'results'} onClick={() => { setFollowModel(false); setSection('results'); setSelected(null); }}><Files size={14} />命盘<span>{charts.length + savedOnlyArtifacts.length}</span></button>
+            <button type="button" aria-pressed={!activeResource && section === 'activity'} onClick={() => { setFollowModel(false); setSection('activity'); setSelected(null); }}><ListChecks size={14} />过程<span>{tools.length}</span></button>
+            <button type="button" className="agent-follow-chart" aria-pressed={followModel} disabled={!modelChart} onClick={() => {
+                if (followModel) setSelected(activeId); setFollowModel(!followModel);
+            }}><ScanEye size={14} />跟随模型</button>
         </div>
         {visibleTabs.length > 0 && <div className="agent-resource-tabs" role="tablist" aria-label="资源标签页">{visibleTabs.map((id, index) => {
             const resource = resources.find(item => item.id === id);
             if (!resource) return null;
             return <div key={id} draggable onDragStart={event => event.dataTransfer.setData('text/plain', id)} onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); const from = event.dataTransfer.getData('text/plain'); if (!tabs.includes(from)) return; setTabs(current => { const next = current.filter(item => item !== from); next.splice(index, 0, from); return next; }); }}>
-                <button type="button" role="tab" aria-selected={selected === id} tabIndex={selected === id || (!activeResource && index === 0) ? 0 : -1} onClick={() => setSelected(id)} onKeyDown={event => {
+                <button type="button" role="tab" aria-selected={activeId === id} tabIndex={activeId === id || (!activeResource && index === 0) ? 0 : -1} onClick={() => openResource(id)} onKeyDown={event => {
                     if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
                     event.preventDefault(); const next = event.key === 'Home' ? 0 : event.key === 'End' ? visibleTabs.length - 1 : (index + (event.key === 'ArrowLeft' ? -1 : 1) + visibleTabs.length) % visibleTabs.length;
                     if (event.altKey) setTabs(current => { const result = [...current]; const from = result.indexOf(id); const to = result.indexOf(visibleTabs[next]); [result[from], result[to]] = [result[to], result[from]]; return result; });
-                    else { setSelected(visibleTabs[next]); (event.currentTarget.closest('[role=tablist]')?.querySelectorAll<HTMLElement>('[role=tab]')[next])?.focus(); }
-                }}>{resource.title}</button><button type="button" aria-label={`关闭${resource.title}标签`} onClick={() => { setTabs(current => current.filter(item => item !== id)); if (selected === id) setSelected(visibleTabs[index - 1] ?? visibleTabs[index + 1] ?? null); }}><X size={12} /></button>
+                    else { openResource(visibleTabs[next]); (event.currentTarget.closest('[role=tablist]')?.querySelectorAll<HTMLElement>('[role=tab]')[next])?.focus(); }
+                }}>{resource.title}</button><button type="button" aria-label={`关闭${resource.title}标签`} onClick={() => { setFollowModel(false); setTabs(current => current.filter(item => item !== id)); if (activeId === id) setSelected(visibleTabs[index - 1] ?? visibleTabs[index + 1] ?? null); }}><X size={12} /></button>
             </div>;
         })}</div>}
         <div ref={scrollRef} className="agent-panel-scroll" role={activeResource ? 'tabpanel' : undefined} aria-label={activeResource?.title}>
             {activeResource ? activeResource.body : section === 'results' ? <>
                 <p className="agent-panel-description">本次对话的命盘与来源。分析和任务过程保留在聊天中。</p>
-                {charts.length > 0 && <div className="agent-panel-artifacts">{charts.map(tool => <button type="button" key={tool.id} className="agent-workspace-chart-link" onClick={() => openResource(`tool:${tool.id}`)}><span>{getAgentChart(tool)?.title ?? tool.title}</span><small>{getAgentChart(tool)?.summary ?? '查看工具返回内容'}</small><ArrowUpRight size={14} /></button>)}</div>}
+                {charts.length > 0 && <div className="agent-panel-artifacts">{charts.map(({ tool, value }) => <button type="button" key={tool.id} className="agent-workspace-chart-link" onClick={() => openResource(`tool:${tool.id}`)}><span>{value.title}</span><small>{value.summary}</small><ArrowUpRight size={14} /></button>)}</div>}
                 {savedOnlyArtifacts.length ? <div className="agent-panel-artifacts">
                     {savedOnlyArtifacts.map(artifact => <div key={getAgentArtifactHref(artifact)}><AgentArtifactCard artifact={artifact} /><button type="button" className="agent-secondary-button mt-2" onClick={() => openResource(`chart:${artifact.id}`)}>预览命盘</button></div>)}
                 </div> : !charts.length && <div className="agent-panel-empty"><Files size={28} /><h3>还没有成果</h3><p>任务生成的命盘会显示在这里。</p></div>}
@@ -124,11 +151,11 @@ export function AgentWorkspacePanel({ artifacts, sources, data, historyTools, at
         </div>
     </div>;
     return desktop ? <aside ref={panelRef} id="agent-workspace-panel" className="agent-workspace-panel" style={{ width }} aria-labelledby="agent-workspace-heading">
-        <div className="agent-panel-resizer" role="separator" tabIndex={0} aria-label="调整工作区宽度" aria-orientation="vertical" aria-valuenow={width} aria-valuemin={280} aria-valuemax={520}
-            onPointerDown={event => { dragRef.current = { start: event.clientX, width }; event.currentTarget.setPointerCapture(event.pointerId); }}
+        <div className="agent-panel-resizer" role="separator" tabIndex={0} aria-label="调整工作区宽度" aria-orientation="vertical" aria-valuenow={width} aria-valuemin={280} aria-valuemax={780}
+            onPointerDown={event => { dragRef.current = { start: event.clientX, width: panelRef.current?.getBoundingClientRect().width ?? width }; event.currentTarget.setPointerCapture(event.pointerId); }}
             onPointerMove={event => { const drag = dragRef.current; if (drag) adjustWidth(drag.width + drag.start - event.clientX); }}
             onPointerUp={() => { dragRef.current = null; }} onPointerCancel={() => { dragRef.current = null; }}
-            onKeyDown={event => { if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); adjustWidth(width + (event.key === 'ArrowLeft' ? 24 : -24)); } }} />
+            onKeyDown={event => { if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); adjustWidth((panelRef.current?.getBoundingClientRect().width ?? width) + (event.key === 'ArrowLeft' ? 24 : -24)); } }} />
         {content}</aside>
         : <Modal open id="agent-workspace-panel" onClose={onClose} className="agent-workspace-dialog" labelledBy="agent-workspace-heading">{content}</Modal>;
 }

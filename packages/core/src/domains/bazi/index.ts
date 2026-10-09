@@ -7,5 +7,5 @@ export {
 } from './calculate.js';
 export { renderBaziCanonicalJSON as toBaziJson } from './json.js';
 export { renderBaziCanonicalText as toBaziText } from './text.js';
-export type { BaziCanonicalJSON, BaziPillarJSON } from './json-types.js';
+export type { BaziCanonicalJSON, BaziPillarJSON, BaziCellJSON, BaziRelationJSON } from './json-types.js';
 export type { BaziInput, BaziOutput } from './types.js';

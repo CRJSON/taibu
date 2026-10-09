@@ -18,10 +18,25 @@ export interface BaziCanonicalJSON {
   };
   四柱: BaziPillarJSON[];
   干支关系: string[];
+  /** Exact calculation coordinates; optional for previously persisted charts. */
+  干支关系明细?: BaziRelationJSON[];
   大运?: {
     起运信息: string;
     大运列表: DayunItemJSON[];
   };
+}
+
+export interface BaziCellJSON {
+  柱: '年柱' | '月柱' | '日柱' | '时柱';
+  部位: '天干' | '地支';
+  字: string;
+}
+
+export interface BaziRelationJSON {
+  id: string;
+  类型: string;
+  说明: string;
+  位置: BaziCellJSON[];
 }
 
 // ===== 八字 =====

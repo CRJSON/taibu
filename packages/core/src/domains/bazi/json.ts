@@ -1,6 +1,6 @@
 import { withRulesJSON } from '../../shared/calculation-rules.js';
 import type {
-  BaziCanonicalJSON,
+  BaziCanonicalJSON, BaziCellJSON, BaziRelationJSON,
 } from './json-types.js';
 import type {
   BranchRelationJSON,
@@ -15,7 +15,7 @@ import {
 import type {
   BaziOutput
 } from './types.js';
-import { GAN_WUXING } from '../../shared/utils.js';
+import { GAN_WUXING, getElementRelation } from '../../shared/utils.js';
 import type {
   BaziCanonicalTextOptions
 } from '../shared/text-options.js';
@@ -177,6 +177,40 @@ function buildBaziCanonicalRelations(result: Pick<BaziOutput, 'fourPillars' | 'r
 
 export const renderBaziCanonicalJSON = withRulesJSON(renderBaziCanonicalJSONBase);
 
+/** Preserve the positions computed by Core, including repeated stems/branches. */
+function buildRelationCoordinates(chart: BaziOutput): BaziRelationJSON[] {
+  const pillars = [chart.fourPillars.year, chart.fourPillars.month, chart.fourPillars.day, chart.fourPillars.hour];
+  const names = ['年柱', '月柱', '日柱', '时柱'] as const;
+  const positions = ['年支', '月支', '日支', '时支'];
+  const cell = (position: string, part: BaziCellJSON['部位']): BaziCellJSON | null => {
+    const index = positions.indexOf(position);
+    if (index < 0) return null;
+    const char = part === '天干' ? pillars[index].stem : pillars[index].branch;
+    return char && char !== '*' ? { 柱: names[index], 部位: part, 字: char } : null;
+  };
+  const result: BaziRelationJSON[] = [];
+  const add = (type: string, description: string, cells: Array<BaziCellJSON | null>) => {
+    if (cells.length < 2 || cells.some(item => item === null)) return;
+    result.push({ id: 'bazi-relation-' + result.length, 类型: type, 说明: description, 位置: cells as BaziCellJSON[] });
+  };
+  for (const relation of chart.relations) add(relation.type, relation.description, relation.pillars?.map(position => cell(position, '地支')) ?? []);
+  for (const relation of chart.tianGanWuHe) add('合', relation.stemA + relation.stemB + '合' + relation.resultElement, relation.positions?.map(position => cell(position, '天干')) ?? []);
+  for (const relation of chart.tianGanChongKe) add('冲克', relation.stemA + relation.stemB + '冲克', relation.positions?.map(position => cell(position, '天干')) ?? []);
+  for (const relation of chart.diZhiBanHe) add('半合', relation.branches.join('') + '半合' + relation.resultElement, relation.positions?.map(position => cell(position, '地支')) ?? []);
+  for (const relation of chart.diZhiSanHui) add('三会', relation.branches.join('') + '三会' + relation.resultElement, relation.positions?.map(position => cell(position, '地支')) ?? []);
+  for (let i = 0; i < pillars.length; i++) for (let j = i + 1; j < pillars.length; j++) {
+    const fromElement = GAN_WUXING[pillars[i].stem], toElement = GAN_WUXING[pillars[j].stem];
+    if (!fromElement || !toElement) continue;
+    const relation = getElementRelation(fromElement, toElement);
+    if (relation === 'same') continue;
+    const reversed = relation === 'produced' || relation === 'controlled';
+    const type = relation === 'produce' || relation === 'produced' ? '生' : '克';
+    const from = reversed ? j : i, to = reversed ? i : j;
+    add(type, names[from] + pillars[from].stem + type + names[to] + pillars[to].stem, [cell(positions[from], '天干'), cell(positions[to], '天干')]);
+  }
+  return result;
+}
+
 function renderBaziCanonicalJSONBase(
   chart: BaziOutput,
   options: BaziCanonicalTextOptions = {},
@@ -219,7 +253,7 @@ function renderBaziCanonicalJSONBase(
 
   const relations = buildBaziCanonicalRelations(chart);
 
-  const json: BaziCanonicalJSON = { 基本信息: basicInfo, 四柱: fourPillars, 干支关系: relations };
+  const json: BaziCanonicalJSON = { 基本信息: basicInfo, 四柱: fourPillars, 干支关系: relations, 干支关系明细: buildRelationCoordinates(chart) };
 
   if (dayun) {
     json.大运 = {

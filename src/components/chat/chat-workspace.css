@@ -214,7 +214,7 @@
 .agent-tool-value pre { white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--font-mono); font-size: calc(11 / 16 * 1rem); line-height: 1.7; }
 .agent-tool-stack { display: flex; flex-direction: column; gap: 8px; }
 .agent-error { color: var(--chat-warning); background: color-mix(in srgb, var(--chat-warning) 6%, transparent); border-radius: 8px; padding: 12px; font-size: calc(13 / 16 * 1rem); overflow-wrap: anywhere; }
-.agent-workspace-panel { position: relative; flex-shrink: 0; min-width: 280px; max-width: min(520px, 40%); min-height: 0; border-left: 1px solid var(--border); background: var(--chat-raised); }
+.agent-workspace-panel { position: relative; flex-shrink: 0; min-width: 280px; max-width: min(780px, calc(100% - 360px)); min-height: 0; border-left: 1px solid var(--border); background: var(--chat-raised); }
 .agent-panel-resizer { position: absolute; top: 0; bottom: 0; left: -4px; width: 8px; cursor: col-resize; touch-action: none; z-index: 2; }
 .agent-panel-resizer:hover, .agent-panel-resizer:focus-visible { background: color-mix(in srgb, var(--accent) 30%, transparent); }
 .agent-panel-content { display: flex; flex-direction: column; height: 100%; min-height: 0; }

@@ -56,16 +56,35 @@ import { AgentQuestionDialog } from '@/components/chat/agent/AgentQuestionDialog
 import { AgentMessage } from '@/components/chat/AgentMessage';
 import { AgentWorkspacePanel } from '@/components/chat/agent/AgentWorkspacePanel';
 import { AgentResultContext } from '@/components/chat/agent/AgentResultContext';
+import { getAgentChart } from '@/lib/agent/tool-presentation';
+import { getChartTargets } from '@/lib/agent/chart-interaction';
 const initialToolParts = AGENT_TOOL_FIXTURE_PARTS;
 function AgentResultsProbe() {
   const [open, setOpen] = useState(false);
   const [request, setRequest] = useState(undefined);
+  const [parts, setParts] = useState(initialToolParts);
   const { user } = useSessionSafe();
-  const data = { version: 1, runId: 'ui-results', status: 'completed', parts: initialToolParts };
+  const data = { version: 1, runId: 'ui-results', status: 'completed', parts };
+  window.fixture.chartTargets = kind => getChartTargets(getAgentChart(parts.find(tool => tool.name === kind)));
+  window.fixture.chartFocus = (kind, ids, caption, savedReference) => {
+    const original = parts.find(tool => tool.name === kind);
+    const reference = savedReference ?? 'artifact:' + (kind === 'bazi' ? '11111111-1111-4111-8111-111111111111' : kind === 'ziwei' ? '22222222-2222-4222-8222-222222222222' : String(initialToolParts.indexOf(initialToolParts.find(tool => tool.name === kind)) + 1).padStart(8, '0') + '-1111-4111-8111-111111111111');
+    const inspect = { ...original, id: 'inspect-' + kind, name: 'inspect_chart', output: { chartReference: reference, chartKind: kind, result: original.output.result } };
+    const focus = { type: 'tool', id: 'focus-' + (window.fixture.chartRevision = (window.fixture.chartRevision ?? 0) + 1), name: 'focus_chart', title: '定位分析位置', status: 'completed',
+      output: { chartFocus: { version: 1, reference, targetIds: ids, includeRelated: true, caption } } };
+    setParts(previous => [...previous.filter(tool => tool.id !== inspect.id), inspect, focus]);
+  };
+  window.fixture.chartInspect = (changed = false) => {
+    const original = parts.find(tool => tool.name === 'bazi');
+    const inspect = { ...original, id: 'reinspect-bazi-' + (window.fixture.chartRevision = (window.fixture.chartRevision ?? 0) + 1), name: 'inspect_chart',
+      output: { chartReference: 'bazi_chart:11111111-1111-4111-8111-111111111111', chartKind: 'bazi', result: changed ? REVISED_BAZI_FIXTURE_RESULT : original.output.result } };
+    setParts(previous => [...previous, inspect]);
+  };
+  window.fixture.traditionalTaiyi = () => setParts(previous => previous.filter(tool => tool.id !== 'inspect-taiyi').map(tool => tool.name === 'taiyi' ? TRADITIONAL_TAIYI_FIXTURE_PART : tool));
   return <section data-testid="agent-results"><AgentResultContext.Provider value={{ openResource(id) { setRequest(previous => ({ id, version: (previous?.version ?? 0) + 1 })); setOpen(true); } }}>
     <AgentMessage data={data} />
     <button onClick={() => { setRequest(previous => ({ id: 'chart:bazi', version: (previous?.version ?? 0) + 1 })); setOpen(true); }}>恢复已有成果标签</button>
-    {open && <AgentWorkspacePanel workspaceKey={(user?.id ?? 'visitor') + ':ui-fixture'} artifacts={[{ type: 'artifact', id: 'bazi', title: '已保存八字', chartType: 'bazi', chartId: 'saved-bazi' }]} sources={[]} historyTools={initialToolParts} attachmentIds={[]} data={data} requestedResource={request} onClose={() => setOpen(false)} />}
+    {open && <AgentWorkspacePanel workspaceKey={(user?.id ?? 'visitor') + ':ui-fixture'} artifacts={[{ type: 'artifact', id: 'bazi', title: '已保存八字', chartType: 'bazi', chartId: 'saved-bazi' }]} sources={[]} historyTools={parts} attachmentIds={[]} data={data} requestedResource={request} onChartQuestion={text => { window.fixture.chartQuestion = text; }} onClose={() => setOpen(false)} />}
   </AgentResultContext.Provider></section>;
 }
 
@@ -252,19 +271,23 @@ export async function build(outputDirectory) {
   const outfile = resolve(outputDirectory, 'fixture.js');
   const { executeTool, buildToolSuccessPayload, listToolDefinitions } = await import('taibu-core/mcp');
   const toolParts = [];
-  for (const name of ['bazi', 'ziwei', 'qimen', 'liuyao', 'meihua', 'daliuren', 'xiaoliuren', 'tarot']) {
+  for (const name of ['bazi', 'ziwei', 'qimen', 'liuyao', 'meihua', 'daliuren', 'xiaoliuren', 'tarot', 'taiyi', 'astrology', 'almanac']) {
     const definition = listToolDefinitions().find(tool => tool.name === name);
     const input = { ...definition.inputSchema.examples[0] };
     if (definition.inputSchema.properties?.seed) input.seed = 'browser-ui-contract';
     if (name === 'tarot') input.referenceYear = 2026;
-    const rendered = buildToolSuccessPayload(name, await executeTool(name, input));
+    if (name === 'astrology') Object.assign(input, { latitude: 31.2304, longitude: 121.4737, timezone: 'Asia/Shanghai' });
+    const rendered = buildToolSuccessPayload(name, await executeTool(name, input), { detailLevel: ['almanac', 'astrology', 'liuyao', 'meihua'].includes(name) ? 'full' : 'default' });
     toolParts.push({ type: 'tool', id: name, name, title: definition.title, status: 'completed', input,
       output: { artifactId: name, result: rendered.structuredContent }, canonicalText: rendered.content.map(item => item.text).join('\n') });
   }
   toolParts.push({ type: 'tool', id: 'incomplete', name: 'bazi', title: '字段不足的命盘', status: 'completed', output: {}, canonicalText: '规范文本仍可访问' });
+  const traditional = buildToolSuccessPayload('taiyi', await executeTool('taiyi', { system: 'traditional', mode: 'hour', date: '2026-04-10', hour: 9, timezone: 'Asia/Shanghai' }));
+  const traditionalPart = { ...toolParts.find(tool => tool.name === 'taiyi'), output: { artifactId: 'taiyi', result: traditional.structuredContent }, canonicalText: traditional.content.map(part => part.text).join('\n') };
+  const revisedBazi = buildToolSuccessPayload('bazi', await executeTool('bazi', { ...toolParts.find(tool => tool.name === 'bazi').input, birthYear: 2001, birthMonth: 10, birthDay: 1 }));
 
   await bundle({
-    stdin: { contents: entry.replace('AGENT_TOOL_FIXTURE_PARTS', JSON.stringify(toolParts)), loader: 'jsx', resolveDir: root, sourcefile: 'p5-browser-entry.jsx' },
+    stdin: { contents: entry.replace('AGENT_TOOL_FIXTURE_PARTS', JSON.stringify(toolParts)).replace('TRADITIONAL_TAIYI_FIXTURE_PART', JSON.stringify(traditionalPart)).replace('REVISED_BAZI_FIXTURE_RESULT', JSON.stringify(revisedBazi.structuredContent)), loader: 'jsx', resolveDir: root, sourcefile: 'p5-browser-entry.jsx' },
     outfile, bundle: true, format: 'iife', platform: 'browser', jsx: 'automatic',
     tsconfig: resolve(root, 'tsconfig.json'),
     define: { 'process.env.NODE_ENV': '"development"', 'process.env': '{}' },
@@ -1442,7 +1465,8 @@ export async function run(existingPage, bundlePath) {
     await page.evaluate(() => window.fixture.mount.results(true));
     const results = page.locator('[data-testid="agent-results"]');
     await results.locator('[data-chart-kind="tarot"]').waitFor();
-    check('Eight real persisted tool results automatically render with the process folded', await results.locator('[data-chart-kind]').count() === 8 && await results.getByRole('button', { name: /任务过程/ }).getAttribute('aria-expanded') === 'false');
+    await results.locator('[data-chart-kind="almanac"]').waitFor();
+    check('All eleven real persisted tool results automatically render with the process folded', await results.locator('[data-chart-kind]').count() === 11 && await results.getByRole('button', { name: /任务过程/ }).getAttribute('aria-expanded') === 'false');
     check('Automatic chart previews do not steal focus', await page.getByRole('button', { name: 'Fixture Alice', exact: true }).evaluate(button => button === document.activeElement));
     check('Slim Ziwei results render all twelve returned palaces', await results.locator('[data-chart-kind="ziwei"] [role="button"]').count() === 12);
     const baziResult = results.locator('[data-tool-result="bazi"]');
@@ -1455,8 +1479,9 @@ export async function run(existingPage, bundlePath) {
     check('Closing a chart returns focus to its expand button', await baziResult.getByRole('button', { name: '展开命盘', exact: true }).evaluate(button => button === document.activeElement));
     await baziResult.getByRole('button', { name: '固定到工作区', exact: true }).click();
     await page.getByRole('dialog', { name: '任务工作区', exact: true }).waitFor();
+    await page.locator('#agent-workspace-panel [data-chart-kind="bazi"]').waitFor();
     check('Pinning opens the corresponding real tool result in the workspace', await page.locator('#agent-workspace-panel [data-chart-kind="bazi"]').count() === 1);
-    check('Workspace counts final saved links and their original readings only once', await page.locator('#agent-workspace-panel .agent-panel-tabs button').first().innerText() === '成果9');
+    check('Workspace counts valid readings once and excludes the incomplete result', await page.locator('#agent-workspace-panel .agent-panel-tabs button').first().innerText() === '命盘11');
     await page.getByRole('button', { name: '关闭任务工作区', exact: true }).click();
     await results.getByRole('button', { name: '恢复已有成果标签', exact: true }).click();
     await page.locator('#agent-workspace-panel [data-chart-kind="bazi"]').waitFor();
@@ -1472,11 +1497,75 @@ export async function run(existingPage, bundlePath) {
     await page.keyboard.press('Escape');
     await page.setViewportSize({ width: 1200, height: 1000 });
     check('Incomplete chart retains canonical text instead of generating another reading', await results.locator('[data-tool-result="incomplete"]').innerText().then(text => text.includes('命盘数据不完整') && text.includes('规范文本仍可访问')));
+    await results.locator('[data-tool-result="bazi"]').getByRole('button', { name: '固定到工作区', exact: true }).click();
+    const interactive = page.locator('#agent-workspace-panel');
+    await page.evaluate(() => window.fixture.chartFocus('bazi', ['bazi:cell:2:1'], '模型查看日支'));
+    await interactive.getByRole('button', { name: '跟随模型', exact: true }).click();
+    await interactive.locator('[data-chart-target="bazi:cell:2:1"][aria-pressed=true]').waitFor();
+    check('A native chart action highlights the exact day branch', await interactive.locator('.agent-board-focus').innerText().then(text => text.includes('模型查看日支')));
+    await interactive.locator('[data-chart-target="bazi:cell:2:0"]').click();
+    await page.evaluate(() => window.fixture.chartFocus('bazi', ['bazi:cell:2:1'], '继续查看日支'));
+    check('Manual chart exploration pauses model following', await interactive.getByRole('button', { name: '跟随模型', exact: true }).getAttribute('aria-pressed') === 'false' && await interactive.locator('[data-chart-target="bazi:cell:2:0"]').getAttribute('aria-pressed') === 'true');
+    await interactive.getByRole('button', { name: '跟随模型', exact: true }).click();
+    await interactive.locator('[data-chart-target="bazi:cell:2:1"][aria-pressed=true]').waitFor();
+    const relation = interactive.locator('.agent-board-relations button').first();
+    await relation.click();
+    check('Selecting a bazi relation highlights every returned endpoint', await interactive.locator('.chart-cell-button[aria-pressed=true]').count() >= 2 && await interactive.locator('.agent-board-relation-path').count() === 1);
+    await interactive.getByRole('button', { name: '追问当前位置', exact: true }).click();
+    check('Chart questions carry the real chart reference into a draft', await page.evaluate(() => window.fixture.chartQuestion.includes('artifact:11111111-1111-4111-8111-111111111111')));
+    const starId = await page.evaluate(() => window.fixture.chartTargets('ziwei').find(target => target.kind === 'ziwei_star' && target.group === '主星及四化').id);
+    await page.evaluate(id => window.fixture.chartFocus('ziwei', [id], '模型查看紫微星曜'), starId);
+    await interactive.getByRole('button', { name: '跟随模型', exact: true }).click();
+    const star = interactive.locator('[data-chart-target="' + starId + '"]');
+    await star.waitFor();
+    check('Ziwei model focus selects the returned palace and its exact star', await star.getAttribute('aria-pressed') === 'true' && await interactive.locator('[data-chart-selected=true]').count() === 1 && await interactive.locator('svg line').count() === 3);
+    await interactive.getByRole('checkbox', { name: '三方四正', exact: true }).uncheck();
+    check('Ziwei related-palace visibility is an actual chart interaction', await interactive.locator('svg line').count() === 0);
+    await star.focus();
+    await page.keyboard.press('Enter');
+    check('Star selection works from the keyboard without nested palace activation', await star.getAttribute('aria-pressed') === 'true');
+    for (const kind of ['qimen', 'liuyao', 'meihua', 'daliuren', 'xiaoliuren', 'tarot', 'taiyi', 'astrology', 'almanac']) {
+      const targets = await page.evaluate(kind => window.fixture.chartTargets(kind), kind);
+      await page.evaluate(({ kind, id }) => window.fixture.chartFocus(kind, [id], '模型分析' + kind), { kind, id: targets[0].id });
+      const following = interactive.getByRole('button', { name: '跟随模型', exact: true });
+      if (await following.getAttribute('aria-pressed') !== 'true') await following.click();
+      await interactive.locator('[data-chart-kind="' + kind + '"]').waitFor();
+      await interactive.locator('[data-chart-target="' + targets[0].id + '"][aria-pressed=true]').waitFor();
+      const missing = await interactive.evaluate((panel, targets) => targets.filter(target => ![...panel.querySelectorAll('[data-chart-target]')].some(node => node.dataset.chartTarget === target.id)).map(target => target.id), targets);
+      check(kind + ' exposes every returned target in its real chart and follows model focus', missing.length === 0);
+      await page.evaluate(({ kind, id }) => window.fixture.chartFocus(kind, [id], '模型定位末项'), { kind, id: targets.at(-1).id });
+      await interactive.locator('[data-chart-target="' + targets.at(-1).id + '"][aria-pressed=true]').waitFor();
+      await interactive.locator('[data-chart-target="' + targets.at(-1).id + '"]').click();
+      await interactive.getByRole('button', { name: '追问当前位置', exact: true }).click();
+      check(kind + ' supports manual selection and referenced draft questions', await following.getAttribute('aria-pressed') === 'false' && await page.evaluate(() => window.fixture.chartQuestion.includes('artifact:')));
+    }
+    await page.evaluate(() => window.fixture.traditionalTaiyi());
+    await renderBarrier();
+    const traditionalTargets = await page.evaluate(() => window.fixture.chartTargets('taiyi'));
+    const traditionalStar = traditionalTargets.find(target => target.id.includes(':palace:') && target.id.includes(':star:'));
+    await page.evaluate(id => window.fixture.chartFocus('taiyi', [id], '查看传统太乙星将'), traditionalStar.id);
+    await interactive.getByRole('button', { name: '跟随模型', exact: true }).click();
+    await interactive.locator('[data-chart-target="' + traditionalStar.id + '"][aria-pressed=true]').waitFor();
+    check('Traditional Taiyi keeps its sixteen directions and central palace without inventing a nine-star board', traditionalTargets.filter(target => /^taiyi:palace:\d+$/.test(target.id)).length === 17 && await interactive.locator('[data-chart-kind="taiyi"]').count() === 1);
+    await page.evaluate(() => window.fixture.chartFocus('bazi', ['bazi:cell:2:1'], '旧盘焦点', 'bazi_chart:11111111-1111-4111-8111-111111111111'));
+    await interactive.locator('[data-chart-target="bazi:cell:2:1"][aria-pressed=true]').waitFor();
+    await page.evaluate(() => window.fixture.chartInspect());
+    await renderBarrier();
+    check('Reinspection clears prior model coordinates and captions before any new focus', await interactive.locator('.agent-board-focus').getAttribute('data-chart-focus') === '' && !(await interactive.locator('.agent-board-focus').innerText()).includes('旧盘焦点'));
+    await interactive.locator('[data-chart-target="bazi:cell:2:0"]').click();
+    await page.evaluate(() => window.fixture.chartInspect());
+    await renderBarrier();
+    check('Reinspecting unchanged chart data preserves paused manual exploration', await interactive.locator('[data-chart-target="bazi:cell:2:0"]').getAttribute('aria-pressed') === 'true');
+    await page.evaluate(() => window.fixture.chartInspect(true));
+    await renderBarrier();
+    check('Edited saved chart data invalidates manual coordinates on the same resource tab', await interactive.locator('.agent-board-focus').getAttribute('data-chart-focus') === '' && await interactive.locator('.chart-cell-button[aria-pressed=true]').count() === 0);
+    await interactive.getByRole('button', { name: '关闭任务工作区', exact: true }).click();
     await page.evaluate(() => window.fixture.mount.results(false));
     await renderBarrier();
     await page.evaluate(() => window.fixture.mount.results(true));
     await results.locator('[data-chart-kind="tarot"]').waitFor();
-    check('History remount restores all eight UI readings without new API operations', requests.length === callsBeforeResults && await results.locator('[data-chart-kind]').count() === 8);
+    await results.locator('[data-chart-kind="almanac"]').waitFor();
+    check('History remount restores all eleven UI readings without new API operations', requests.length === callsBeforeResults && await results.locator('[data-chart-kind]').count() === 11);
     await page.evaluate(() => window.fixture.mount.results(false));
 
     check('No unhandled network requests escaped fixtures', blocked.length === 0);

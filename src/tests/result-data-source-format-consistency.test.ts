@@ -72,6 +72,8 @@ test('qimen data source formatForAI should reuse canonical qimen text', async ()
     panType: 'zhuan',
     juMethod: 'chaibu',
     zhiFuJiGong: 'jiLiuYi',
+    juNumber: row.ju_number,
+    dunType: 'yang',
   });
 
   assert.equal(

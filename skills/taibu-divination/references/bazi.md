@@ -36,6 +36,7 @@ echo '{"gender":"female","birthYear":1995,"birthMonth":6,"birthDay":20,"birthHou
 - `基本信息`
 - `四柱`：四柱列表
 - `干支关系`：干支关系列表
+- `干支关系明细`：可交互的关系坐标；旧结果可省略列表
 - `大运`
 - `计算规则`
 

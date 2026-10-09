@@ -7,6 +7,7 @@
 'use client';
 
 import type { QimenPalaceJSON } from 'taibu-core/qimen';
+import { ChartTarget, isChartTargetSelected, type ChartInteraction } from '@/components/visualization/ChartTarget';
 
 /** 五行旺衰颜色映射 */
 const PHASE_COLORS: Record<string, string> = {
@@ -48,6 +49,7 @@ interface QimenGridProps {
     palaces: QimenPalaceJSON[];
     monthPhaseMap?: Record<string, string>;
     ju: string;
+    interaction?: ChartInteraction;
 }
 
 function PalaceCell({
@@ -55,11 +57,13 @@ function PalaceCell({
     monthPhaseMap,
     isCenterPalace,
     ju,
+    interaction,
 }: {
     palace: QimenPalaceJSON;
     monthPhaseMap?: Record<string, string>;
     isCenterPalace: boolean;
     ju: string;
+    interaction?: ChartInteraction;
 }) {
     if (isCenterPalace) {
         const juMatch = ju.match(/^(.*?)(\d+)局$/u);
@@ -90,25 +94,25 @@ function PalaceCell({
             {/* 地盘天干 + 八神 */}
             <div className="flex items-center justify-between">
                 <span className={`text-sm md:text-base font-medium ${earthColor}`}>
-                    {palace.地盘天干}
+                    <ChartTarget interaction={interaction} id={`qimen:palace:${palace.宫位序号}:地盘天干`}>{palace.地盘天干}</ChartTarget>
                 </span>
                 <span className="text-[10px] md:text-xs text-foreground-secondary">
-                    {palace.八神}
+                    <ChartTarget interaction={interaction} id={`qimen:palace:${palace.宫位序号}:八神`}>{palace.八神}</ChartTarget>
                 </span>
             </div>
             {/* 九星 + 天盘天干 */}
             <div className="flex items-center justify-between">
                 <span className="text-xs md:text-sm text-foreground-secondary">
-                    {palace.九星}
+                    <ChartTarget interaction={interaction} id={`qimen:palace:${palace.宫位序号}:九星`}>{palace.九星}</ChartTarget>
                 </span>
                 <span className={`text-sm md:text-base font-medium ${heavenColor}`}>
-                    {palace.天盘天干}
+                    <ChartTarget interaction={interaction} id={`qimen:palace:${palace.宫位序号}:天盘天干`}>{palace.天盘天干}</ChartTarget>
                 </span>
             </div>
             {/* 八门 */}
             <div className="flex items-center justify-between">
                 <span className="text-xs md:text-sm text-foreground-secondary">
-                    {palace.八门}
+                    <ChartTarget interaction={interaction} id={`qimen:palace:${palace.宫位序号}:八门`}>{palace.八门}</ChartTarget>
                 </span>
             </div>
             {/* 星五行 / 门五行 / 宫五行 */}
@@ -134,7 +138,7 @@ function PalaceCell({
     );
 }
 
-export function QimenGrid({ palaces, monthPhaseMap, ju }: QimenGridProps) {
+export function QimenGrid({ palaces, monthPhaseMap, ju, interaction }: QimenGridProps) {
     const palaceMap = new Map(palaces.map(p => [p.宫位序号, p]));
 
     return (
@@ -146,17 +150,19 @@ export function QimenGrid({ palaces, monthPhaseMap, ju }: QimenGridProps) {
                 return (
                     <div
                         key={num}
+                        data-chart-selected={isChartTargetSelected(interaction, 'qimen:palace:' + num) || undefined}
                         className="bg-background min-h-[100px] md:min-h-[140px] relative"
                     >
                         {/* 宫名角标 */}
                         <span className="absolute top-0.5 left-1 text-[9px] md:text-[10px] text-foreground-tertiary/60">
-                            {palace.宫名}
+                            <ChartTarget interaction={interaction} id={'qimen:palace:' + num}>{palace.宫名}</ChartTarget>
                         </span>
                         <PalaceCell
                             palace={palace}
                             monthPhaseMap={monthPhaseMap}
                             isCenterPalace={isCenterPalace}
                             ju={ju}
+                            interaction={interaction}
                         />
                     </div>
                 );

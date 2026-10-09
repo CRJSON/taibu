@@ -37,6 +37,10 @@ export const baziCalculateOutputSchema: OutputSchema = obj({
     空亡: str('是否空亡'),
   }), '四柱'),
   干支关系: arr(str(), '干支关系'),
+  干支关系明细: arr(obj({
+    id: str('关系定位 ID'), 类型: str('关系类型'), 说明: str('关系说明'),
+    位置: arr(obj({ 柱: str('柱名'), 部位: str('天干或地支'), 字: str('实际干支') }), '关系的实际柱位端点'),
+  }), '可交互的关系坐标；旧结果可省略'),
   大运: obj({
     起运信息: str('起运信息'),
     大运列表: arr(obj({

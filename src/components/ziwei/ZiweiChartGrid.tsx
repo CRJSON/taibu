@@ -26,6 +26,13 @@ interface ZiweiChartProps {
     onCopyJson?: () => void;
     horoscopeHighlight?: HoroscopeHighlight;
     horoscopeInfo?: HoroscopeInfo;
+    interaction?: {
+        palaceIndices: number[];
+        stars: Array<{ palaceIndex: number; group: '主星及四化' | '辅星' | '杂曜'; starIndex: number }>;
+        includeRelated: boolean;
+        onPalaceSelect: (index: number) => void;
+        onStarSelect: (palaceIndex: number, group: '主星及四化' | '辅星' | '杂曜', starIndex: number) => void;
+    };
 }
 
 // 五行颜色映射：天干地支五行颜色统一走 display helpers
@@ -54,6 +61,7 @@ export function ZiweiChartGrid({
     onCopyJson,
     horoscopeHighlight = {},
     horoscopeInfo,
+    interaction,
 }: ZiweiChartProps) {
     // Slim persisted tool results omit the optional index. Place their returned
     // palaces by branch; iztro's index starts at 寅. No chart is recalculated.
@@ -67,14 +75,15 @@ export function ZiweiChartGrid({
     const { showToast } = useToast();
 
     const defaultSelectedPalace = typeof lifePalaceIndex === 'number' && lifePalaceIndex >= 0 ? lifePalaceIndex : null;
-    const activeSelectedPalace = selectedPalace === undefined ? defaultSelectedPalace : selectedPalace;
+    const activeSelectedPalace = interaction ? interaction.palaceIndices[0] ?? null : selectedPalace === undefined ? defaultSelectedPalace : selectedPalace;
 
     const getCanonicalPalaceByBranch = (branchIndex: number) => {
         return canonicalChart.十二宫位.find((p) => getBranchIndex(p.干支.slice(-1)) === branchIndex);
     };
 
     // 计算三方四正高亮
-    const sanFangSiZhengPalaces = activeSelectedPalace !== null ? getTriangleSquare(activeSelectedPalace).square : [];
+    const showRelated = !interaction || interaction.includeRelated;
+    const sanFangSiZhengPalaces = activeSelectedPalace !== null && showRelated ? getTriangleSquare(activeSelectedPalace).square : [];
 
     // 获取宫位高亮类型（多色支持）
     const getHighlightTypes = (palaceIndex: number) => {
@@ -173,7 +182,7 @@ export function ZiweiChartGrid({
             </div>
             {/* 三方四正连线SVG层 */}
             <div className="relative">
-                {activeSelectedPalace !== null && (
+                {activeSelectedPalace !== null && showRelated && (
                     <svg
                         className="absolute inset-0 w-full h-full pointer-events-none z-10"
                         viewBox="0 0 100 100"
@@ -359,16 +368,16 @@ export function ZiweiChartGrid({
                                 <PalaceCard
                                     key={`palace-${branchIdx}`}
                                     palace={palace}
-                                    isSelected={activeSelectedPalace === palaceIndex}
+                                    isSelected={interaction ? interaction.palaceIndices.includes(palaceIndex) : activeSelectedPalace === palaceIndex}
                                     isLifePalace={isLifePalace}
                                     isHighlighted={isHighlighted}
                                     highlightTypes={highlightTypes}
                                     isSanFangSiZheng={sanFangSiZhengPalaces.includes(palaceIndex) && activeSelectedPalace !== palaceIndex}
-                                    showAdjStars={showAdjStars}
+                                    showAdjStars={showAdjStars || Boolean(interaction?.stars.some(star => star.palaceIndex === palaceIndex && star.group === '杂曜'))}
                                     flowInfo={flowInfo}
-                                    onClick={() => setSelectedPalace(
-                                        activeSelectedPalace === palaceIndex ? null : palaceIndex
-                                    )}
+                                    highlightedStars={interaction?.stars.filter(star => star.palaceIndex === palaceIndex)}
+                                    onStarSelect={interaction ? (group, starIndex) => interaction.onStarSelect(palaceIndex, group, starIndex) : undefined}
+                                    onClick={() => interaction ? interaction.onPalaceSelect(palaceIndex) : setSelectedPalace(activeSelectedPalace === palaceIndex ? null : palaceIndex)}
                                 />
                             );
                         })
