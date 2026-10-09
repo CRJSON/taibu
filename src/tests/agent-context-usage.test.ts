@@ -19,9 +19,10 @@ test('Pi context uses provider totals without double-counting cached or reasonin
 });
 
 test('Pi context distinguishes subsequent estimates from measured usage', () => {
+    // pi-ai 1.1.0 estimates trailing content at 3.5 chars/token: ceil(8 / 3.5) = 3.
     const result = projectAgentContextUsage([user, assistant, { role: 'toolResult', toolCallId: 'tool', toolName: 'read', isError: false, timestamp: 3, content: [{ type: 'text', text: '12345678' }] }], 0);
-    assert.equal(result.tokens, 1002);
-    assert.equal(result.estimatedTokens, 2);
+    assert.equal(result.tokens, 1003);
+    assert.equal(result.estimatedTokens, 3);
     assert.equal(result.source, 'mixed');
 });
 
