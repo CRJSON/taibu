@@ -11,6 +11,7 @@ import { executeAgentRun } from '../lib/agent/runtime.server';
 import { emptyPiAssistant } from '../lib/agent/pi-stream.server';
 import { row, config, MemoryStore } from './helpers/agent-runtime-fixture';
 import type { PiStreamFn } from '../lib/agent/types';
+import { parallelAnalysisResults } from '../lib/agent/parallel-results';
 
 test('templates are bounded and substitute draft text literally; speech never overwrites a changed draft', () => {
     const template = { id: 'career', name: '事业', content: '请分析：{{question}}' };
@@ -115,6 +116,11 @@ test('parallel children are isolated, all token usage is projected, and interrup
     assert.ok(requests.some(request => request.model === 'bazi-model' && request.effort === 'max'));
     assert.ok(requests.some(request => request.model === 'qimen-model' && request.effort === 'xhigh'));
     assert.ok(requests.every(request => request.model !== config.id), 'children never silently use the root model');
+    const collaboration = checkpoint.parts.find(part => part.type === 'tool' && part.name === 'parallel_analysis');
+    assert.deepEqual(parallelAnalysisResults(collaboration?.type === 'tool' ? collaboration.output : undefined).map(member => [member.name, member.modelName, member.reasoningEffort, member.focus, member.status]), [
+        ['八字专项', '八字专项', 'max', '核对事业依据', 'completed'],
+        ['奇门复核', '奇门复核', 'xhigh', '独立复核', 'completed'],
+    ], 'member cards show the model, effort and focus each child actually ran with');
     assert.ok(checkpoint.runtime!.usage!.models['taibu/bazi-model']);
     assert.ok(checkpoint.runtime!.usage!.models['taibu/qimen-model']);
     assert.equal(store.writes.filter(write => /create_run|deduct|charge|credit/.test(write.name)).length, 0);

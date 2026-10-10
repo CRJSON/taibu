@@ -125,6 +125,8 @@ export interface AgentRunView {
   commandMessageIds?: string[];
   queue?: Array<{ sequence: number; mode: 'steer' | 'follow_up' | 'reply'; message: ChatMessage; revision: number; sortOrder: number; state: 'pending' | 'claimed' | 'admitted' | 'consumed' | 'cancelled' }>;
   configuration?: import('@/lib/chat/model-settings').NextTaskConfiguration;
+  /** Settled credit state of this task: one charge covers its replies and follow-ups. */
+  billing?: 'charged' | 'exempt' | 'refunded';
 }
 
 export interface AgentRunEvent {

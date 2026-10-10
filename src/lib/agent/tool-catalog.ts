@@ -69,5 +69,5 @@ export function getAgentToolFamily(name: string): AgentToolFamily {
  * fallbacks and exports never have to re-render or guess from raw JSON.
  */
 export function projectsAgentCanonicalText(name: string): boolean {
-  return isAgentChartTool(name) || name === 'inspect_chart' || name === 'read_user_data';
+  return isAgentChartTool(name) || TOOL_FAMILIES.get(name) === 'calculation' || name === 'inspect_chart' || name === 'read_user_data';
 }

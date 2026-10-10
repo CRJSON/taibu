@@ -6,8 +6,14 @@ export interface ParallelAnalysisResult {
   name?: string;
   modelName?: string;
   model?: string;
+  /** Effort the child conversation was configured with; 'off' when reasoning is disabled. */
+  reasoningEffort?: string;
+  /** The user's configured division of work for this member. */
+  focus?: string;
   answer?: string;
 }
+
+const OPTIONAL_TEXT = ['agentId', 'name', 'modelName', 'model', 'reasoningEffort', 'focus', 'answer'] as const;
 
 export function parallelAnalysisResults(value: unknown): ParallelAnalysisResult[] {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return [];
@@ -16,5 +22,5 @@ export function parallelAnalysisResults(value: unknown): ParallelAnalysisResult[
   return analyses.filter((item): item is ParallelAnalysisResult => item && typeof item === 'object' &&
     typeof item.system === 'string' && typeof item.conversationId === 'number' &&
     ['running', 'completed', 'failed'].includes(item.status) &&
-    ['agentId', 'name', 'modelName', 'model', 'answer'].every(key => item[key] === undefined || typeof item[key] === 'string'));
+    OPTIONAL_TEXT.every(key => item[key] === undefined || typeof item[key] === 'string'));
 }

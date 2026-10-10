@@ -137,3 +137,32 @@ test('knowledge hit counts are recorded only for searches whose results were cac
   await find(tools, 'search_knowledge').execute('9:kb', { query: '庚金' });
   assert.deepEqual(run.checkpoint.knowledgeQueries, { '9:kb': 2 }, 'replays overwrite one entry per call');
 });
+
+/** user_settings has memory on; agent_write_memory returns the full table row like the SQL function. */
+class MemoryToolStore extends MemoryStore {
+  constructor() {
+    super();
+    const settings = { chat_preferences: { memoryEnabled: true } };
+    const query = { select: () => query, eq: () => query, maybeSingle: async () => ({ data: settings, error: null }) };
+    Object.defineProperty(this, 'db', { value: { from: () => query } });
+  }
+  override async rpc<T>(name: string, args: Record<string, unknown>): Promise<T> {
+    if (name !== 'agent_write_memory') return super.rpc<T>(name, args);
+    this.writes.push({ name, args: structuredClone(args) });
+    return {
+      id: randomUUID(), user_id: randomUUID(), fingerprint: 'fingerprint', source_run_id: args.p_run_id, source_text: args.p_evidence,
+      title: args.p_title, content: args.p_content, kind: args.p_kind, created_at: '2026-10-10T00:00:00Z', updated_at: '2026-10-10T00:00:00Z',
+    } as T;
+  }
+}
+
+test('a remembered fact exposes only the fields the account owner manages', async () => {
+  const store = new MemoryToolStore(), run = row();
+  run.input.memoryEnabled = true;
+  const tools = await createAgentTools(store, run, run.checkpoint);
+  const fact = '以后都用公历时间来记录';
+  const result = await find(tools, 'remember_user_fact').execute('7:memory', { title: '历法偏好', content: fact, kind: 'preference', evidence: fact });
+  assert.deepEqual(Object.keys(result.details as object).sort(), ['content', 'id', 'kind', 'title', 'updated_at']);
+  assert.equal((result.details as { content: string }).content, fact);
+  for (const hidden of ['user_id', 'fingerprint', 'source_run_id', run.id]) assert.ok(!result.content[0].text.includes(hidden), `${hidden} stays out of the model and the transcript`);
+});

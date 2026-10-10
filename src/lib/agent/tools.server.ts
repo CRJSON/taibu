@@ -24,7 +24,7 @@ import { normalizeQuestions } from './questions';
 import { validateTodos } from './todos';
 import { ANALYSIS_METHODS, loadAnalysisMethod } from './methods.server';
 import { attachmentBytes, attachmentDto, validateAttachmentIds } from './attachments.server';
-import { AGENT_MEMORY_SELECT } from './memory';
+import { AGENT_MEMORY_SELECT, publicMemory, type AgentMemory } from './memory';
 import { authorizeChartReference, loadAgentChart, loadInspectedChart } from './chart-tools.server';
 import { CHART_SOURCE_KINDS, getChartTargets, validateChartFocus } from './chart-interaction';
 import { isAgentChartTool } from './tool-catalog';
@@ -581,7 +581,7 @@ export async function createAgentTools(
       if (error) throw new Error('读取记忆失败');
       return textResult(data ?? []);
     }),
-    wrap('remember_user_fact', '摘录用户明确表达的长期偏好或事实，content 必须等于 evidence 的用户原话（去除首尾空白）；不要保存推断、密钥或任务中间结果', Type.Object({ title: Type.String({ minLength: 1, maxLength: 80 }), content: Type.String({ minLength: 8, maxLength: 500 }), kind: Type.Union([Type.Literal('preference'), Type.Literal('context')]), evidence: Type.String({ minLength: 8, maxLength: 500 }) }), async args => textResult(await store.rpc('agent_write_memory', { ...store.lease(run), p_title: args.title, p_content: args.content, p_kind: args.kind, p_evidence: args.evidence }))),
+    wrap('remember_user_fact', '摘录用户明确表达的长期偏好或事实，content 必须等于 evidence 的用户原话（去除首尾空白）；不要保存推断、密钥或任务中间结果', Type.Object({ title: Type.String({ minLength: 1, maxLength: 80 }), content: Type.String({ minLength: 8, maxLength: 500 }), kind: Type.Union([Type.Literal('preference'), Type.Literal('context')]), evidence: Type.String({ minLength: 8, maxLength: 500 }) }), async args => textResult(publicMemory(await store.rpc<AgentMemory>('agent_write_memory', { ...store.lease(run), p_title: args.title, p_content: args.content, p_kind: args.kind, p_evidence: args.evidence })))),
   );
   return tools;
 }

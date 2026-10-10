@@ -358,9 +358,11 @@ test('public task views include consumed input IDs while execution reads only pe
       return query;
     },
   } as unknown as ConstructorParameters<typeof AgentStore>[0]);
-  const run = { id: 'run', status: 'completed', input: { model:'fixture',reasoning:false,webEnabled:false }, public_message: { id: 'agent:run', role: 'assistant', content: '', createdAt: '' } } as AgentRunRow;
+  const run = { id: 'run', status: 'completed', input: { model:'fixture',reasoning:false,webEnabled:false }, public_message: { id: 'agent:run', role: 'assistant', content: '', createdAt: '' }, billing: 'refunded' } as AgentRunRow;
   assert.deepEqual((await store.commands(run)).map(command => command.message.id), ['pending']);
-  assert.deepEqual((await store.view(run)).commandMessageIds, ['pending', 'consumed']);
+  const view = await store.view(run);
+  assert.deepEqual(view.commandMessageIds, ['pending', 'consumed']);
+  assert.equal(view.billing, 'refunded', 'the workspace reports the settled credit state, not the initial charge');
 });
 
 test('Agent commands persist a server-owned task association and discard supplied metadata', async (t) => {

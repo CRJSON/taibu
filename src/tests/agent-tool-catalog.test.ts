@@ -43,6 +43,10 @@ test('every Core tool and every registered Agent tool belongs to a presentation 
   }
   assert.equal(getAgentToolFamily('mcp__archive__search'), 'external');
   assert.equal(getAgentToolFamily('focus_chart'), 'chart');
+  for (const name of ['bazi_dayun', 'bazi_pillars_resolve', 'ziwei_horoscope', 'ziwei_flying_star', 'inspect_chart', 'read_user_data'])
+    assert.equal(projectsAgentCanonicalText(name), true, name);
+  for (const name of ['focus_chart', 'web_search', 'todo_write', 'mcp__archive__search'])
+    assert.equal(projectsAgentCanonicalText(name), false, `${name} returns structured data, not canonical text`);
   for (const name of ['unknown', '__proto__', 'constructor', 'toString', '']) {
     assert.equal(getAgentToolFamily(name), 'other', JSON.stringify(name));
     assert.equal(isAgentChartTool(name), false);
@@ -50,9 +54,11 @@ test('every Core tool and every registered Agent tool belongs to a presentation 
   }
 });
 
-test('the projection keeps canonical text on every chart kind for text fallbacks', async () => {
+test('the projection keeps canonical text on every Core chart and calculation for text fallbacks', async () => {
   const definitions = listToolDefinitions();
-  const charts = Object.keys(AGENT_CHART_NAMES).map((name) => {
+  const calculations = definitions.filter(definition => getAgentToolFamily(definition.name) === 'calculation').map(definition => definition.name);
+  assert.deepEqual(calculations.sort(), ['bazi_dayun', 'bazi_pillars_resolve', 'ziwei_flying_star', 'ziwei_horoscope']);
+  const charts = [...Object.keys(AGENT_CHART_NAMES), ...calculations].map((name) => {
     const args = { ...(definitions.find((definition) => definition.name === name)!.inputSchema.examples![0] as Record<string, unknown>) };
     // Agent seeds come from the task and call; explicit seeds are blocked by policy.
     delete args.seed;
