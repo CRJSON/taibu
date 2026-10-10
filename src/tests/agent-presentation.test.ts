@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { ChatMessage } from '../types';
-import { collectAgentArtifacts, formatAgentToolDuration, getAgentArtifactHref, getAgentToolState, groupAgentParts, getAgentActivityLabel, type AgentArtifact } from '../components/chat/agent/presentation';
+import { collectAgentArtifacts, formatAgentToolDuration, getAgentArtifactHref, getAgentToolState, getAgentResponseTiming, getAgentTaskSpan, groupAgentParts, getAgentActivityLabel, type AgentArtifact } from '../components/chat/agent/presentation';
 
 const chart: AgentArtifact = { type: 'artifact', id: 'chart-part', title: '命盘', chartType: 'bazi', chartId: 'chart/with?special=字符' };
 function message(parts: AgentArtifact[]): ChatMessage {
@@ -53,7 +53,7 @@ test('A terminal task never leaves unfinished tools spinning forever', () => {
 });
 
 test('Completed cards show the durable-measured tool time without inventing a value for unfinished steps', () => {
-    assert.equal(formatAgentToolDuration(0), '1 毫秒');
+    assert.equal(formatAgentToolDuration(0), '不足 1 毫秒');
     assert.equal(formatAgentToolDuration(240), '240 毫秒');
     assert.equal(formatAgentToolDuration(999), '999 毫秒');
     assert.equal(formatAgentToolDuration(1000), '1 秒');
@@ -65,6 +65,18 @@ test('Completed cards show the durable-measured tool time without inventing a va
     assert.equal(completed.durationMs, 2400);
     const running = { type: 'tool', id: 'tool', name: 'bazi', title: '八字', status: 'running' } as const;
     assert.equal('durationMs' in running, false);
+});
+
+test('response measurements survive JSON history without counting duplicate IDs or inventing old measurements', () => {
+    assert.equal(getAgentResponseTiming(undefined), null);
+    const responses = [{ id: 'old' }, { id: 'first', durationMs: 1500 }, { id: 'second', durationMs: 0 }, { id: 'first', durationMs: 1500 }, { id: 'invalid', durationMs: -1 }];
+    assert.deepEqual(getAgentResponseTiming(JSON.parse(JSON.stringify(responses))), { count: 2, durationMs: 1500 });
+    assert.equal(getAgentResponseTiming([{ id: 'invalid', durationMs: NaN }, { id: 'invalid2', durationMs: Infinity }]), null);
+    assert.equal(getAgentTaskSpan({ startedAt: 1000, endedAt: 6500 }), 5500);
+    assert.equal(getAgentTaskSpan({ startedAt: 1000 }), null);
+    assert.equal(getAgentTaskSpan({ endedAt: 6500 }), null);
+    assert.equal(getAgentTaskSpan({ startedAt: 2000, endedAt: 1000 }), null);
+    assert.equal(getAgentTaskSpan({ startedAt: NaN, endedAt: 1000 }), null);
 });
 
 test('Activity grouping preserves narration, question IDs and tool ordering', () => {

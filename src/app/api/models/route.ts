@@ -66,6 +66,7 @@ export async function GET(request: NextRequest) {
                 name: m.name,
                 vendor: m.vendor,
                 supportsReasoning: m.supportsReasoning,
+                reasoningEffortFormat: m.reasoningEffortFormat ?? null,
                 isReasoningDefault: m.isReasoningDefault,
                 allowed: access.allowed,
                 blockedReason: access.blockedReason,

@@ -77,7 +77,7 @@ export async function POST(request: NextRequest) {
         fallbackPersonality,
         '',
         requestedModelId,
-        { reasoning: reasoningEnabled, systemPromptOverride: systemPrompt }
+        { reasoning: reasoningEnabled, reasoningEffort: reasoningEnabled ? resolvedBody.reasoningEffort : null, systemPromptOverride: systemPrompt }
       );
 
       const response = streamResult.toUIMessageStreamResponse({
@@ -112,7 +112,7 @@ export async function POST(request: NextRequest) {
       fallbackPersonality,
       requestedModelId,
       '',
-      { reasoning: reasoningEnabled, systemPromptOverride: systemPrompt }
+      { reasoning: reasoningEnabled, reasoningEffort: reasoningEnabled ? resolvedBody.reasoningEffort : null, systemPromptOverride: systemPrompt }
     );
 
     observation.finish({ generation: content?.trim() ? 'completed' : 'empty' });

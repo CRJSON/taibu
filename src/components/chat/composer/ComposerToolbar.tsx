@@ -30,11 +30,12 @@ import type { PromptLayerDiagnostic } from '@/types';
 import { getNavItemById } from '@/lib/navigation/registry';
 import type { ChatMode } from '@/lib/chat/use-chat-state';
 import type { AgentRuntimeInfo } from '@/lib/agent/types';
-import { AgentContextUsage } from '../agent/AgentContextUsage';
+import { AgentContextDetails } from '../agent/AgentContextUsage';
+import type { ModelSettingsProps } from '@/lib/chat/model-settings';
 import { FloatingPanel } from '@/components/ui/FloatingPanel';
 import { Modal } from '@/components/ui/Modal';
 
-interface ComposerToolbarProps {
+interface ComposerToolbarProps extends ModelSettingsProps {
     domainControls?: ReactNode;
     agentMode?: boolean;
     agentRuntime?: AgentRuntimeInfo;
@@ -293,23 +294,6 @@ export function ComposerToolbar(props: ComposerToolbarProps) {
 
             </div>
             <div className="chat-composer-controls flex min-w-0 items-center gap-1.5 ml-auto">
-                {agentMode ? <AgentContextUsage key={agentRuntime?.model.id ?? 'new'} runtime={agentRuntime} /> : <div className="chat-prompt-preview flex h-9 w-9 items-center justify-center">
-                    <PromptPreview
-                        promptPreviewLoading={promptPreviewLoading}
-                        hasPromptDiagnostics={hasPromptDiagnostics}
-                        promptDiagnosticsOpen={promptDiagnosticsOpen}
-                        setPromptDiagnosticsOpen={setPromptDiagnosticsOpen}
-                        contextProgressPercent={contextProgressPercent}
-                        promptProgressPercent={promptProgressPercent}
-                        promptUsageLabel={promptUsageLabel}
-                        promptPreviewTokens={promptPreviewTokens}
-                        promptPreviewBudget={promptPreviewBudget}
-                        displayLayers={displayLayers}
-                        displayUserMessageTokens={displayUserMessageTokens}
-                        formatLayerLabel={formatLayerLabel}
-                    />
-                </div>}
-
                 <div className="relative ml-0.5 flex items-center gap-1">
                     <button
                         ref={providerRef}
@@ -342,6 +326,16 @@ export function ComposerToolbar(props: ComposerToolbarProps) {
                                 onModelChange={onModelChange}
                                 reasoningEnabled={reasoningEnabled}
                                 onReasoningChange={onReasoningChange}
+                                reasoningEffort={props.reasoningEffort}
+                                onReasoningEffortChange={props.onReasoningEffortChange}
+                                collaborators={agentMode ? props.collaborators : undefined}
+                                onCollaboratorsChange={agentMode ? props.onCollaboratorsChange : undefined}
+                                contextDetails={agentMode ? <AgentContextDetails runtime={agentRuntime} /> : <PromptPreview embedded
+                                    promptPreviewLoading={promptPreviewLoading} hasPromptDiagnostics={hasPromptDiagnostics}
+                                    promptDiagnosticsOpen={promptDiagnosticsOpen} setPromptDiagnosticsOpen={setPromptDiagnosticsOpen}
+                                    contextProgressPercent={contextProgressPercent} promptProgressPercent={promptProgressPercent}
+                                    promptUsageLabel={promptUsageLabel} promptPreviewTokens={promptPreviewTokens} promptPreviewBudget={promptPreviewBudget}
+                                    displayLayers={displayLayers} displayUserMessageTokens={displayUserMessageTokens} formatLayerLabel={formatLayerLabel} />}
                                 userId={userId}
                                 membershipType={membershipType}
                                 disabled={disabled}

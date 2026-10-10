@@ -28,6 +28,7 @@ import type { MembershipType } from '@/lib/user/membership';
 import { normalizeIdentityUserProfile } from '@/lib/user/settings';
 import { AI_RATE_LIMIT_CONFIG, checkRateLimit } from '@/lib/rate-limit';
 import { normalizeVisualizationSettings } from '@/lib/visualization/settings';
+import { parseReasoningEffort } from '@/lib/chat/model-settings';
 
 const INTERNAL_SECRET = process.env.INTERNAL_API_SECRET;
 const MANAGED_CHAT_RATE_LIMIT_KEY = '/api/chat';
@@ -67,6 +68,7 @@ export async function parseChatRequestBody(request: NextRequest): Promise<ChatRe
   if (!body.messages || !Array.isArray(body.messages)) {
     return jsonError('无效的消息格式', 400);
   }
+  try { body.reasoningEffort = parseReasoningEffort(body.reasoningEffort); } catch { return jsonError('推理档位无效', 400); }
   body.userProfile = normalizeIdentityUserProfile(body.userProfile);
   body.visualizationSettings = normalizeVisualizationSettings(body.visualizationSettings);
   return body;
@@ -80,6 +82,7 @@ function toPreparationInput(body: ChatRequestBody): ChatPreparationInput {
     mangpaiMode: body.mangpaiMode,
     model: body.model,
     reasoning: body.reasoning,
+    reasoningEffort: body.reasoningEffort,
     difyContext: body.difyContext,
     mentions: body.mentions,
     dreamMode: body.dreamMode,

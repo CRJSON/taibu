@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
   "baselineRevision": "5725dde",
-  "sourceFingerprint": "5d4c20a93d7f93de36cb2bb67e3ecbaf0e0a96f0b748ee42d89d80f2fccded38",
+  "sourceFingerprint": "4cbd89664d4bd6d11a404ed70c2752a76e3d735262fe5d1243d16891d2d2b56a",
   "target": "empty local self-hosted application schema; NOT production parity or a migration replay",
   "bootstrapOrder": [
     "platform roles/extensions",
@@ -18,7 +18,7 @@
   "sources": [
     {
       "file": "supabase/tabel_export_from_supabase.sql",
-      "sha256": "a32e24ca8331120b55a7a47ccbf551ae11c480077f9c7b9fff785b54936f3448"
+      "sha256": "0580244c2996ea41ee36c20312f76e88c4426a606fcf8363e13315c60d91fa22"
     },
     {
       "file": "supabase/migrations/20260118_create_gamification_tables.sql",
@@ -193,6 +193,14 @@
       "sha256": "bcd3996445aff8a3f610b6e38078f9df94999030b814fcb71f4e23f540e4a687"
     },
     {
+      "file": "supabase/migrations/20261009_120000_ai_reasoning_effort_levels.sql",
+      "sha256": "b20e45bcea4a96d43476c3656a1220d2bfd104d860eb935835928bd92bd42673"
+    },
+    {
+      "file": "supabase/migrations/20261010_100000_agent_current_engine_only.sql",
+      "sha256": "6d78410e8a10b710bc9d03a28920b6a066ea3c035e29b96d89bd72bac216fa06"
+    },
+    {
       "file": "supabase/selfhost/source-views.sql",
       "sha256": "3ec59bffedd43530835e728dd9e9fac580ed09bbacb23e64fe460cb2775c6342"
     },
@@ -214,7 +222,7 @@
     },
     {
       "file": "scripts/selfhost-schema.mjs",
-      "sha256": "0f3d3287e2e528c7000184355d38604644dfdf2231a44f900a5851560fd803bc"
+      "sha256": "35793ad484be00669ffb6303488ca0ea0c33f4eba1b6e751787a84608725dc0f"
     },
     {
       "file": "src/app/api/supabase/storage/route.ts",
@@ -661,7 +669,7 @@
       "callers": [
         "src/lib/agent/worker-entry.ts"
       ],
-      "source": "supabase/migrations/20261009_100000_agent_pi_durable_1_1.sql",
+      "source": "supabase/migrations/20261010_100000_agent_current_engine_only.sql",
       "status": "defined",
       "reason": null
     },
@@ -736,7 +744,7 @@
         "src/lib/agent/worker-entry.ts",
         "src/lib/agent/worker-entry.ts"
       ],
-      "source": "supabase/migrations/20261009_100000_agent_pi_durable_1_1.sql",
+      "source": "supabase/migrations/20261010_100000_agent_current_engine_only.sql",
       "status": "defined",
       "reason": null
     },
@@ -2589,7 +2597,7 @@
   "artifacts": [
     {
       "file": "supabase/selfhost/001-application.sql",
-      "sha256": "59c1ff20bf1b7f2a116d2808540bbec539d293e470d29b5d1c59b2218579e664"
+      "sha256": "22ccb19e7aa68c1897d22f004a4d7442b6f1e2ef9244d0fac6d6deae0ac80781"
     },
     {
       "file": "supabase/selfhost/002-storage.sql",

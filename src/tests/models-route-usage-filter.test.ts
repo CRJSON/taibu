@@ -38,6 +38,7 @@ test('/api/models should only expose chat and vision models', async (t) => {
       apiUrl: '',
       apiKeyEnvVar: '',
       supportsReasoning: true,
+      reasoningEffortFormat: 'reasoning_object',
       supportsVision: true,
     },
     {
@@ -84,6 +85,8 @@ test('/api/models should only expose chat and vision models', async (t) => {
   const body = await response.json();
 
   assert.equal(response.status, 200);
+  assert.equal(body.models[0].reasoningEffortFormat, null);
+  assert.equal(body.models[1].reasoningEffortFormat, 'reasoning_object');
   assert.deepEqual(
     body.models.map((model: { id: string }) => model.id),
     ['deepseek-v3.2', 'qwen-vl-plus'],

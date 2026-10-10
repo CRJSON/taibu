@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { readFile } from 'node:fs/promises';
 
 const quote = (value) => `'${String(value).replaceAll("'", "''")}'`;
 const json = (value) => `${quote(JSON.stringify(value))}::jsonb`;
@@ -41,7 +42,8 @@ export async function agentDatabaseContracts(
     },
   });
   const checkpoint = {
-    version: 1,
+    version: 2,
+    durable: { engine: 'pi-durable/1.1.0' },
     messages: [],
     parts: [],
     finalArtifacts: [],
@@ -59,8 +61,10 @@ export async function agentDatabaseContracts(
       `SELECT to_jsonb(public.agent_create_run(${quote(id)},${quote(owner)},${quote(conversationId)},${quote(options.request ?? id)},${quote(options.hash ?? "same-hash")},${json(options.input ?? input(id))},${json(options.checkpoint ?? checkpoint)},${json(assistant(id))},${json({ version: 1, data: "encrypted-fixture", iv: "nonce", tag: "tag" })},${options.charge !== false}));`,
     );
   };
-  const claim = async (worker = "worker-a") =>
-    parsed(`SELECT to_jsonb(public.agent_claim_run(${quote(worker)}));`);
+  const claim = async (worker = "worker-a") => {
+    await admin(`SELECT public.agent_worker_heartbeat(${quote(worker)},'pi-durable/1.1.0');`);
+    return parsed(`SELECT to_jsonb(public.agent_claim_run(${quote(worker)}));`);
+  };
   const lease = (run) =>
     `${quote(run.id)},${quote(run.worker_id)},${run.fence}`;
   const finish = (
@@ -182,8 +186,8 @@ export async function agentDatabaseContracts(
   await t.test("Pi Durable commits checkpoints atomically, deduplicates receipts, and consumes only placed commands", async () => {
     const nativeCheckpoint = { ...checkpoint, version: 2, durable: { engine: "pi-durable/1.1.0", seeded: true } };
     const queued = await create(await createConversation(), { checkpoint: nativeCheckpoint });
-    await admin("SELECT public.agent_worker_heartbeat('old-engine');");
-    assert.equal(await claim("old-engine"), null, "Core workers cannot claim V2 checkpoints");
+    await assert.rejects(admin("SELECT public.agent_worker_heartbeat('old-engine','pi-agent-core/1.0.2');"), /AGENT_ENGINE_UNSUPPORTED/);
+    assert.equal(await parsed("SELECT to_jsonb(public.agent_claim_run('old-engine'));"), null, "unregistered workers cannot claim tasks");
     await admin("SELECT public.agent_worker_heartbeat('durable-worker','pi-durable/1.1.0');");
     const run = await claim("durable-worker");
     assert.equal(run.id, queued.id);
@@ -206,7 +210,7 @@ export async function agentDatabaseContracts(
     await assert.rejects(asActor(owner, `SELECT * FROM public.agent_durable_commits;`), /42501/);
     await assert.rejects(asActor(other, `SELECT public.agent_durable_read(${lease(run)},0);`), /AGENT_ADMIN_REQUIRED/);
     await asOwner(`UPDATE public.agent_runs SET lease_until=now()-interval '1 second' WHERE id=${quote(run.id)};`);
-    assert.equal(await claim("old-engine"), null, "mixed-version restart leaves native tasks to Durable workers");
+    assert.equal(await parsed("SELECT to_jsonb(public.agent_claim_run('old-engine'));"), null);
     await admin("SELECT public.agent_worker_heartbeat('durable-replacement','pi-durable/1.1.0');");
     const replacement = await claim("durable-replacement");
     assert.equal(replacement.fence, run.fence + 1);
@@ -236,19 +240,57 @@ export async function agentDatabaseContracts(
     assert.equal(await balance(), before, "one original debit and refund survive every pause");
   });
 
-  await t.test("Durable workers claim their own engine generation or older, never a newer native run", async () => {
-    const oldRun = await create(await createConversation(), { checkpoint: { ...checkpoint, version: 2, durable: { engine: "pi-durable/1.0.4", seeded: true } } });
-    const newRun = await create(await createConversation(), { checkpoint: { ...checkpoint, version: 2, durable: { engine: "pi-durable/1.1.0", seeded: true } } });
-    await assert.rejects(admin("SELECT public.agent_worker_heartbeat('bad-engine','pi-durable/9.9.9');"), /AGENT_ENGINE_UNSUPPORTED/);
-    await admin("SELECT public.agent_worker_heartbeat('v11-worker','pi-durable/1.1.0');");
-    await admin("SELECT public.agent_worker_heartbeat('v104-worker','pi-durable/1.0.4');");
-    const resumed = await claim("v11-worker");
-    assert.equal(resumed.id, oldRun.id, "the upgraded worker resumes the in-flight 1.0.4 run");
-    assert.equal(await claim("v104-worker"), null, "a stale 1.0.4 worker never adopts a 1.1.0 native run");
-    const adopted = await claim("v11-worker");
-    assert.equal(adopted.id, newRun.id);
-    await finish(resumed, "failed");
-    await finish(adopted, "failed");
+  await t.test('only the current engine may heartbeat, create or claim; unsupported creation never debits', async () => {
+    const before = await balance();
+    for (const engine of ['pi-durable/1.0.4', 'pi-agent-core/1.0.2', 'pi-durable/9.9.9']) {
+      await assert.rejects(admin(`SELECT public.agent_worker_heartbeat('unsupported',${quote(engine)});`), /AGENT_ENGINE_UNSUPPORTED/);
+      await assert.rejects(create(await createConversation(), { checkpoint: { ...checkpoint, durable: { engine } } }), /AGENT_ENGINE_UNSUPPORTED/);
+    }
+    await assert.rejects(create(await createConversation(), { checkpoint: { ...checkpoint, version: 1 } }), /AGENT_ENGINE_UNSUPPORTED/);
+    assert.equal(await balance(), before);
+    const next = await create(await createConversation());
+    assert.equal(await parsed("SELECT to_jsonb(public.agent_claim_run('unsupported'));"), null);
+    const current = await claim('v11-worker');
+    assert.equal(current.id, next.id);
+    await finish(current, 'failed');
+  });
+
+  await t.test('engine retirement fences every old active state, settles once and preserves completed history and artifacts', async () => {
+    const before = await balance(), active = [];
+    for (const status of ['queued', 'running', 'awaiting_input', 'cancelling']) {
+      const queued = await create(await createConversation()), run = await claim(`retire-${status}`);
+      const artifact = await saveTool(run);
+      await command(run, randomUUID(), 'follow_up', '旧任务待处理消息');
+      const output = { ...assistant(run.id), content: status === 'running' ? '已有局部回答' : '' };
+      await asOwner(`UPDATE public.agent_runs SET checkpoint=${json({ ...checkpoint, durable: { engine: 'pi-durable/1.0.4' } })},status=${quote(status)},cancel_requested=${status === 'cancelling'},public_message=${json(output)} WHERE id=${quote(queued.id)};`);
+      active.push({ run, artifact });
+    }
+    const historical = await create(await createConversation(), { charge: false });
+    await finish(await claim(), 'completed', { ...assistant(historical.id), content: '历史答复保留' });
+    await asOwner(`UPDATE public.agent_runs SET checkpoint=${json({ ...checkpoint, durable: { engine: 'pi-durable/1.0.4' } })} WHERE id=${quote(historical.id)};`);
+    const current = await create(await createConversation(), { charge: false });
+    const migration = await readFile(new URL('../../supabase/migrations/20261010_100000_agent_current_engine_only.sql', import.meta.url), 'utf8');
+    await sql(migration);
+    for (const { run, artifact } of active) {
+      const ended = await get(run.id);
+      assert.ok(['failed', 'cancelled'].includes(ended.status));
+      assert.equal(ended.worker_id, null); assert.equal(ended.lease_until, null); assert.equal(ended.fence, run.fence + 1);
+      assert.match(ended.public_message.agent.error, /运行版本已更新/);
+      assert.equal(await asOwner(`SELECT count(*) FROM public.agent_run_credentials WHERE run_id=${quote(run.id)};`), '0');
+      assert.equal(await asOwner(`SELECT count(*) FROM public.agent_run_commands WHERE run_id=${quote(run.id)} AND NOT consumed;`), '0');
+      assert.equal(await asOwner(`SELECT count(*) FROM public.agent_run_events WHERE run_id=${quote(run.id)} AND type IN ('failed','cancelled');`), '1');
+      assert.equal(await asOwner(`SELECT count(*) FROM public.agent_run_artifacts WHERE id=${quote(artifact.id)};`), '1');
+      const messages = JSON.parse(await asOwner(`SELECT messages FROM public.conversations WHERE id=${quote(run.conversation_id)};`));
+      assert.equal(messages.at(-1).agent.status, ended.status);
+      await assert.rejects(finish(run, 'failed'), /AGENT_LEASE_LOST/);
+    }
+    assert.equal(await balance(), before - 1, 'only the old partial answer stays charged');
+    assert.equal((await get(historical.id)).public_message.content, '历史答复保留');
+    assert.equal((await get(current.id)).status, 'queued');
+    await sql(migration);
+    assert.equal(await balance(), before - 1);
+    for (const { run } of active) assert.equal(await asOwner(`SELECT count(*) FROM public.agent_run_events WHERE run_id=${quote(run.id)} AND type IN ('failed','cancelled');`), '1');
+    await finish(await claim(), 'failed');
   });
 
   await t.test(

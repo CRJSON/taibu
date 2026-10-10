@@ -44,8 +44,9 @@ import { ConversationMinimap } from './ConversationMinimap';
 import { useReadingPreferences } from '@/lib/chat/use-reading-preferences';
 import type { CSSProperties } from 'react';
 import './chat-workspace.css';
+import type { ModelSettingsProps } from '@/lib/chat/model-settings';
 
-interface ChatLayoutProps {
+interface ChatLayoutProps extends ModelSettingsProps {
     agent?: ReturnType<typeof import('@/lib/agent/use-agent-chat').useAgentChat>;
     onQueueMessage?: () => Promise<void>;
     // Active conversation
@@ -250,6 +251,8 @@ export function ChatLayout(props: ChatLayoutProps) {
     };
     const composerProps = {
         draftKey: workspaceKey,
+        reasoningEffort: props.reasoningEffort, onReasoningEffortChange: props.onReasoningEffortChange,
+        collaborators: props.collaborators, onCollaboratorsChange: props.onCollaboratorsChange,
         agentMode: isAgentMode,
         agentRuntime: (props.agent?.run?.conversationId === activeConversationId ? props.agent.run.message.agent?.runtime : undefined) ?? latestAgentData?.runtime,
         awaitingInput: props.agent?.run?.status === 'awaiting_input',
@@ -295,7 +298,6 @@ export function ChatLayout(props: ChatLayoutProps) {
                             <button type="button" aria-pressed={props.agent.mode === 'plain'} disabled={props.agent.active} onClick={() => props.agent?.setMode('plain')}>普通对话</button>
                         </div>
                         {isAgentMode && <label className="chat-web-switch" title={!props.agent.capabilities.webAvailable ? '当前环境未配置联网搜索' : membershipType === 'free' ? '联网搜索需要 Plus 会员' : props.agent.active ? '下个独立任务使用此配置' : 'Agent 会在需要时搜索网络'}><Globe size={14} aria-hidden="true" /><span>{props.agent.active ? '下次联网' : '按需联网'}</span><input type="checkbox" aria-label="按需联网" checked={props.agent.webEnabled && props.agent.capabilities.webAvailable && membershipType !== 'free'} disabled={!props.agent.capabilities.webAvailable || membershipType === 'free'} onChange={e => props.agent?.setWebEnabled(e.target.checked)} /></label>}
-                        {props.agent.active && <span className="text-xs">当前任务：{currentRun?.message.agent?.runtime?.model.name ?? '原配置'} · 下次使用：{selectedModel}{reasoningEnabled ? ' / 思考' : ''}</span>}
                         {props.agent.active ? <span className="chat-task-note" role="status">{props.agent.reconnecting ? '正在重新连接任务' : props.agent.run?.status === 'awaiting_input' ? '补充信息后继续同一任务' : '后台执行中，离开页面后仍会继续'}</span> : !props.agent.capabilities.ready && userId ? <span className="chat-task-note">后台任务暂不可用，可使用普通对话</span> : isAgentMode && latestAgentData ? <span className="ml-auto"><AgentStatus status={latestAgentData.status} /></span> : null}
                     </div>
                 )}

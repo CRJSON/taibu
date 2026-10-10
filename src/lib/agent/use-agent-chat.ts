@@ -38,8 +38,8 @@ export function useAgentChat(
   const [restoring, setRestoring] = useState(false);
   const [syncingRunId, setSyncingRunId] = useState<string | null>(null);
   const [webEnabled, setWebEnabled] = useState(true);
-  useNextTaskConfiguration(userId, state.activeConversationId, { model: state.selectedModel, reasoning: state.reasoningEnabled, webEnabled }, value => {
-    state.setSelectedModel(value.model); state.setReasoningEnabled(value.reasoning); setWebEnabled(value.webEnabled);
+  useNextTaskConfiguration(userId, state.activeConversationId, { model: state.selectedModel, reasoning: state.reasoningEnabled, reasoningEffort: state.reasoningEffort, collaborators: state.collaborators, webEnabled }, value => {
+    state.setSelectedModel(value.model); state.setReasoningEnabled(value.reasoning); state.setReasoningEffort(value.reasoningEffort); state.setCollaborators(value.collaborators); setWebEnabled(value.webEnabled);
   });
   const identity = useRef({ userId, epoch: 0 });
   if (identity.current.userId !== userId) {
@@ -234,6 +234,8 @@ export function useAgentChat(
       message,
       model: options.model,
       reasoning: options.reasoning,
+      reasoningEffort: state.reasoningEffort,
+      collaborators: options.provider ? [] : state.collaborators,
       mentions: options.mentions,
       fileContent: options.fileContent,
       replaceFromMessageId: options.replaceFromMessageId,

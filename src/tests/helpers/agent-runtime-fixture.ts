@@ -1,13 +1,18 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { createAssistantMessageEventStream, getCurrentTools, type AssistantMessage } from "@earendil-works/pi-ai";
+import { createAssistantMessageEventStream, getCurrentTools, getSystemMessageText, type AssistantMessage } from "@earendil-works/pi-ai";
 import type { StorageWrite } from "@earendil-works/pi-durable";
 import type { PiStreamFn as StreamFn } from "../../lib/agent/types";
 import { AgentStore, type AgentRunRow, type AgentArtifactRow, type AgentCommandRow } from "../../lib/agent/store.server";
 import { emptyPiAssistant } from "../../lib/agent/pi-stream.server";
 import type { AIModelConfig } from "../../types";
 import { countTokens } from "../../lib/token-utils";
+import { AGENT_SUMMARY_PROMPT } from '../../lib/agent/summary-usage.server';
+
+export function isSummaryTranscript(context: Parameters<StreamFn>[1]) {
+  return context.messages.some(message => message.role === 'system' && getSystemMessageText(message) === AGENT_SUMMARY_PROMPT);
+}
 export const config: AIModelConfig = {
   id: "fixture",
   name: "fixture",
@@ -28,7 +33,8 @@ export const row = (): AgentRunRow => {
     request_hash: "hash",
     status: "running",
     checkpoint: {
-      version: 1,
+      version: 2,
+      durable: { engine: 'pi-durable/1.1.0' },
       messages: [
         { role: "user", content: "请用工具分析", timestamp: Date.now() },
       ],
@@ -133,11 +139,11 @@ export function scripted(
 ): StreamFn {
   let round = 0;
   return (model, context) => {
-    assert.ok(getCurrentTools(context.messages).length);
-    onContext?.(context.messages);
+    const summary = isSummaryTranscript(context);
+    if (!summary) { assert.ok(getCurrentTools(context.messages).length); onContext?.(context.messages); }
     const output = createAssistantMessageEventStream(),
       message = emptyPiAssistant(model);
-    message.content = build(round++);
+    message.content = summary ? [{ type: 'text', text: '用户要求八字分析；计算记录、最终成果ID和来源保留在最近回合。' }] : build(round++);
     message.usage.input = countTokens(JSON.stringify(context.messages));
     message.usage.totalTokens = message.usage.input;
     message.stopReason = message.content.some((p) => p.type === "toolCall")

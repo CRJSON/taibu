@@ -1,8 +1,10 @@
-/**
- * Pi Durable engine generation recorded in worker heartbeats and native (V2)
- * checkpoints. Bumped together with the pinned runtime (1.0.4 → 1.1.0); the SQL
- * engine whitelist and native-run claim gating live in
- * supabase/migrations/20261009_100000_agent_pi_durable_1_1.sql, which keeps
- * accepting the historical pi-durable/1.0.4 marker for existing runs.
- */
+import type { AgentCheckpoint } from './types';
+
+/** Only the pinned runtime may execute a checkpoint; upgrades retire older runs. */
 export const AGENT_ENGINE = "pi-durable/1.1.0";
+
+export function isCurrentAgentCheckpoint(value: unknown): value is AgentCheckpoint {
+  if (!value || typeof value !== 'object') return false;
+  const checkpoint = value as Partial<AgentCheckpoint>;
+  return checkpoint.version === 2 && checkpoint.durable?.engine === AGENT_ENGINE;
+}

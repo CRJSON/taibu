@@ -130,6 +130,32 @@ function setup(t: TestContext) {
   return { owner, conversation, writes, body, request, client, api, credits, rate, features };
 }
 
+test('Agent admission freezes reasoning and independently authorized collaborator settings in the single charged run', async t => {
+  const fixture = setup(t);
+  const configs = require('../lib/server/ai-config') as typeof import('../lib/server/ai-config');
+  t.mock.method(configs, 'getModelConfigAsync', async (id: string) => ({ ...model, id }));
+  const collaborators = ['first', 'second'].map(id => ({ id, name: id, model: id, focus: '核对依据', reasoning: true, reasoningEffort: 'max' }));
+  const response = await agentEndpoint(() => createAgentTask(fixture.request({ ...fixture.body, reasoning: true, reasoningEffort: 'xhigh', collaborators })));
+  assert.equal(response.status, 201);
+  assert.equal(fixture.writes.length, 1);
+  const input = fixture.writes[0].args.p_input as AgentRunRow['input'];
+  assert.equal(input.reasoningEffort, 'xhigh'); assert.deepEqual(input.collaborators, collaborators);
+  assert.equal(fixture.writes[0].args.p_charge, true);
+});
+
+test('invalid reasoning/team input and inaccessible collaborator models fail before creation or debit', async t => {
+  const fixture = setup(t);
+  const member = { id: 'first', name: '分析', model: 'fixture', focus: '', reasoning: false, reasoningEffort: null };
+  for (const extra of [{ reasoningEffort: 'unknown' }, { reasoningEffort: 0 }, { collaborators: [member] }, { collaborators: [member, member] }]) {
+    const response = await agentEndpoint(() => createAgentTask(fixture.request({ ...fixture.body, ...extra })));
+    assert.equal(response.status, 400);
+  }
+  const configs = require('../lib/server/ai-config') as typeof import('../lib/server/ai-config');
+  t.mock.method(configs, 'getModelConfigAsync', async (id: string) => ({ ...model, id, requiredTier: id === 'restricted' ? 'pro' : 'free' }));
+  const response = await agentEndpoint(() => createAgentTask(fixture.request({ ...fixture.body, collaborators: [member, { ...member, id: 'second', model: 'restricted' }] })));
+  assert.equal(response.status, 403); assert.equal(fixture.writes.length, 0);
+});
+
 test("Agent admission honors a denied rate-limit result for platform and BYOK without creating or charging a task", async (t) => {
   const fixture = setup(t);
   t.mock.method(fixture.rate, "checkRateLimit", async (owner: string, endpoint: string) => {

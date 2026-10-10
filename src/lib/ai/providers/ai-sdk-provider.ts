@@ -37,7 +37,7 @@ export function getApiKey(envVar: string): string | undefined {
  */
 export function createModelFromConfig(
     config: AIModelConfig,
-    options?: { reasoning?: boolean; apiKey?: string; fetch?: typeof globalThis.fetch },
+    options?: { reasoning?: boolean; reasoningEffort?: AIReasoningEffort; apiKey?: string; fetch?: typeof globalThis.fetch },
 ): LanguageModel {
     const apiKey = options?.apiKey ?? getApiKey(config.apiKeyEnvVar);
     if (!apiKey || apiKey === 'your_api_key_here') {
@@ -45,12 +45,18 @@ export function createModelFromConfig(
     }
 
     const baseURL = normalizeBaseUrl(config.apiUrl);
+    const requestParameters = buildModelRequestParameters(config, options);
+    const baseFetch = options?.fetch ?? gatewayFetch;
     const provider = createOpenAI({
         apiKey,
         baseURL,
         // 自定义 fetch：部分网关上游的 Cloudflare WAF 会拦截 Node.js 默认指纹，
         // 使用浏览器风格请求头绕过 bot 检测
-        fetch: options?.fetch ?? gatewayFetch,
+        fetch: Object.keys(requestParameters).length ? async (input, init) => {
+            if (typeof init?.body !== 'string') return baseFetch(input, init);
+            const body = JSON.parse(init.body) as Record<string, unknown>;
+            return baseFetch(input, { ...init, body: JSON.stringify({ ...body, ...requestParameters }) });
+        } : baseFetch,
     });
 
     // 推理模式下使用 reasoningModelId（如 deepseek-pro 的独立推理模型）
@@ -129,6 +135,35 @@ function buildThinkingParams(
     return {};
 }
 
+// Keep the SDK-generated transcript, tools and output budget authoritative.
+const RESERVED_MODEL_BODY_FIELDS = new Set(['model', 'messages', 'tools', 'tool_choice', 'stream', 'stream_options', 'max_tokens', 'max_completion_tokens', '__proto__', 'constructor', 'prototype']);
+const SDK_BODY_NAMES: Record<string, string> = { reasoningEffort: 'reasoning_effort', logitBias: 'logit_bias', topLogprobs: 'top_logprobs', parallelToolCalls: 'parallel_tool_calls', serviceTier: 'service_tier', maxCompletionTokens: 'max_completion_tokens', maxTokens: 'max_tokens', maxOutputTokens: 'max_completion_tokens' };
+
+/** Compatible gateways accept provider extensions that the OpenAI SDK schema omits. */
+function buildModelRequestParameters(config: AIModelConfig, options?: Pick<AIProviderOptions, 'reasoning' | 'reasoningEffort'>) {
+    const parameters: Record<string, JSONValue> = {};
+    for (const [key, value] of Object.entries(config.customParameters ?? {})) {
+        const name = Object.hasOwn(SDK_BODY_NAMES, key) ? SDK_BODY_NAMES[key] : key;
+        if (!RESERVED_MODEL_BODY_FIELDS.has(name)) parameters[name] = value as JSONValue;
+    }
+    if (options?.reasoning === false) {
+        delete parameters.reasoning_effort;
+        delete parameters.reasoning;
+        if (parameters.enable_thinking !== undefined || (config.supportsReasoning && ENABLE_THINKING_VENDORS.has(config.vendor))) parameters.enable_thinking = false;
+        const template = parameters.chat_template_kwargs;
+        if (template && typeof template === 'object' && !Array.isArray(template) && Object.hasOwn(template, 'enable_thinking')) parameters.chat_template_kwargs = { ...template, enable_thinking: false };
+        const thinking = parameters.thinking;
+        if (thinking && typeof thinking === 'object' && !Array.isArray(thinking) && thinking.type === 'enabled') parameters.thinking = { type: 'disabled' };
+    }
+    if (options?.reasoning) {
+        const effort = options.reasoningEffort ?? config.defaultReasoningEffort;
+        if (config.reasoningEffortFormat === 'reasoning_effort' && effort) { delete parameters.reasoning; parameters.reasoning_effort = effort; }
+        else if (config.reasoningEffortFormat === 'reasoning_object' && effort) { delete parameters.reasoning_effort; parameters.reasoning = { effort }; }
+        else Object.assign(parameters, buildThinkingParams(config.vendor, true));
+    }
+    return parameters;
+}
+
 /**
  * 构建 AI SDK 调用的 provider-specific 选项
  */
@@ -136,25 +171,14 @@ export function buildProviderOptions(
     config: AIModelConfig,
     options?: AIProviderOptions,
 ): ProviderOptions | undefined {
-    const providerOptions: Record<string, JSONValue> = {};
+    const parameters = buildModelRequestParameters(config, options);
+    const providerOptions = Object.fromEntries(Object.entries(parameters).map(([name, value]) => [
+        Object.keys(SDK_BODY_NAMES).find(key => SDK_BODY_NAMES[key] === name) ?? name, value,
+    ]));
 
-    // 推理模式：reasoningEffortFormat 优先（标准 API 字段），否则走 vendor 特定开关
-    if (options?.reasoning) {
-        const effort = options.reasoningEffort ?? config.defaultReasoningEffort;
-        if (config.reasoningEffortFormat === 'reasoning_effort' && effort) {
-            providerOptions.reasoningEffort = effort;
-        } else if (config.reasoningEffortFormat === 'reasoning_object' && effort) {
-            providerOptions.reasoning = { effort };
-        } else {
-            // GLM/DeepSeek/Moonshot/Qwen 等使用 vendor 特定参数激活推理
-            Object.assign(providerOptions, buildThinkingParams(config.vendor, true));
-        }
-    }
-
-    // 自定义参数透传
-    if (config.customParameters && typeof config.customParameters === 'object') {
-        Object.assign(providerOptions, config.customParameters);
-    }
+    // max is a Pi/provider extension; the Chat Completions SDK only validates through xhigh.
+    // The existing model fetch adapter sends the actual value to the compatible gateway.
+    if (providerOptions.reasoningEffort === 'max') delete providerOptions.reasoningEffort;
 
     if (Object.keys(providerOptions).length === 0) return undefined;
 

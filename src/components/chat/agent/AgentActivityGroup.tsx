@@ -45,6 +45,6 @@ export function AgentActivityGroup({ parts, data, active = false }: { parts: Age
                 </div>
             </div>)}
         </div>
-        <div className="agent-activity-results">{tools.filter(tool => resultIds.has(tool.id)).map(tool => <AgentToolResult key={tool.id} tool={tool} />)}</div>
+        <div className="agent-activity-results">{tools.filter(tool => resultIds.has(tool.id) || tool.name === 'parallel_analysis').map(tool => <AgentToolResult key={tool.id} tool={tool} />)}</div>
     </section>;
 }

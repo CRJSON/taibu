@@ -4,9 +4,16 @@ import type { AssistantMessage } from "@earendil-works/pi-ai";
 import type { Conversation, Cursor, EntryRecord, LiveState, ToolTaskInput } from "@earendil-works/pi-durable";
 import { CompactionEntry } from "@earendil-works/pi-durable";
 import type { AgentDurableStorage } from "./durable-storage.server";
-import type { AgentCheckpoint, AgentPart, DomainTool } from "./types";
+import type { AgentCheckpoint, AgentPart, AgentRuntimeInfo, DomainTool } from "./types";
 import { projectAgentContextUsage } from "./context-usage";
 import { projectAgentUsage } from './usage';
+
+function taskTiming(task?: { startedAt?: number; endedAt?: number }) {
+  return {
+    ...(typeof task?.startedAt === 'number' && Number.isFinite(task.startedAt) && task.startedAt >= 0 ? { startedAt: task.startedAt } : {}),
+    ...(typeof task?.endedAt === 'number' && Number.isFinite(task.endedAt) && task.endedAt >= 0 ? { endedAt: task.endedAt } : {}),
+  };
+}
 
 /** Public messages are a projection; Durable entries remain the execution truth. */
 export async function projectDurableConversation(
@@ -47,6 +54,7 @@ export async function projectDurableConversation(
   ));
   const previous = new Map(checkpoint.parts.map(p => [`${p.type}:${p.id}`, p]));
   const native: AgentPart[] = [];
+  const responses: NonNullable<AgentRuntimeInfo['responses']> = [];
   const cards = new Map<string, Extract<AgentPart, { type: "tool" }>>();
   const byCall = new Map<string, string>();
   const attached = new Map<string, AgentPart[]>();
@@ -79,10 +87,15 @@ export async function projectDurableConversation(
   };
   for (const [index, entry] of history.entries()) {
     if (entry.kind === "taibu.history") continue;
-    for (const message of entry.model ?? []) {
+    for (const [messageIndex, message] of (entry.model ?? []).entries()) {
       if (message.role === "assistant" && !(message.stopReason === "aborted" && entry.byTaskId &&
-        (answeredTasks.get(entry.byTaskId) ?? -1) > index))
+        (answeredTasks.get(entry.byTaskId) ?? -1) > index)) {
         assistantParts(message, `native:${entry.id}`, String(entry.id));
+        const task = entry.byTaskId ? await storage.task(entry.byTaskId, context) : undefined;
+        responses.push({ id: `${entry.id}:${messageIndex}`, ...taskTiming(task),
+          ...(typeof message.durationMs === 'number' && Number.isFinite(message.durationMs) && message.durationMs >= 0 ? { durationMs: message.durationMs } : {}),
+        });
+      }
       if (message.role === "toolResult") {
         const task = entry.byTaskId ? await storage.task(entry.byTaskId, context) : undefined;
         const assistant = (task?.input as ToolTaskInput | undefined)?.assistant;
@@ -91,7 +104,8 @@ export async function projectDurableConversation(
         if (card) {
           card.status = message.isError ? "failed" : "completed";
           card.output = message.details ?? message.content;
-          if (typeof message.durationMs === "number") card.durationMs = message.durationMs;
+          Object.assign(card, taskTiming(task));
+          if (typeof message.durationMs === 'number' && Number.isFinite(message.durationMs) && message.durationMs >= 0) card.durationMs = message.durationMs;
           if (['bazi', 'ziwei', 'liuyao', 'meihua', 'tarot', 'qimen', 'daliuren', 'xiaoliuren', 'read_user_data', 'inspect_chart'].includes(card.name)) card.canonicalText = message.content.filter(part => part.type === 'text').map(part => part.type === 'text' ? part.text : '').join('\n');
           if (entry.byTaskId) attach(card.id, `${entry.byTaskId}:${message.toolCallId}`);
         }
@@ -111,6 +125,7 @@ export async function projectDurableConversation(
     const key = assistant ? `native-tool:${assistant}:${slot.callId}` : byCall.get(slot.callId);
     const card = key ? cards.get(key) : undefined;
     if (card) {
+      Object.assign(card, taskTiming(task));
       if (slot.taskId) attach(card.id, `${slot.taskId}:${slot.callId}`);
       if (slot.status === "done" && !slot.entry) card.status = "failed";
       if (slot.status !== "done") {
@@ -129,4 +144,5 @@ export async function projectDurableConversation(
     ...native.flatMap(p => [p, ...(p.type === "tool" ? attached.get(p.id) ?? [] : [])]),
   ];
   if (replaceLegacyStreaming && !generation) checkpoint.streamingAssistantId = undefined;
+  if (checkpoint.runtime) checkpoint.runtime.responses = responses;
 }

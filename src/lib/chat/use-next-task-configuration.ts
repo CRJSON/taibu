@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { requestBrowserJson } from '@/lib/browser-api';
-type Configuration = { model: string; reasoning: boolean; webEnabled: boolean };
+import { parseNextTaskConfiguration, type NextTaskConfiguration as Configuration } from './model-settings';
 export function useNextTaskConfiguration(userId: string | null, conversationId: string | null, configuration: Configuration, apply: (value: Configuration) => void) {
     const key = `${userId ?? 'visitor'}:${conversationId ?? 'new'}`;
     const [loaded, setLoaded] = useState<string | null>(null);
@@ -18,15 +18,16 @@ export function useNextTaskConfiguration(userId: string | null, conversationId: 
             if (!conversationId) {
                 try {
                     const raw = JSON.parse(localStorage.getItem(`taibu.next-task:${userId}`) ?? 'null');
-                    if (raw && typeof raw.model === 'string' && raw.model.length <= 200 && typeof raw.reasoning === 'boolean' && typeof raw.webEnabled === 'boolean') accountDefault = { model: raw.model, reasoning: raw.reasoning, webEnabled: raw.webEnabled };
+                    if (raw) accountDefault = parseNextTaskConfiguration(raw);
                 } catch { /* optional account preference cache */ }
             }
             const result = conversationId ? await requestBrowserJson<{ configuration: Configuration | null }>(`/api/conversations/${conversationId}/configuration`, { signal: controller.signal }) : { data: { configuration: accountDefault }, error: null };
             if (controller.signal.aborted) return;
             if (result?.error) return; // Never overwrite unread persisted settings after a failed load.
             if (result?.data?.configuration && initial === JSON.stringify(latest.current.configuration)) {
-                saved.current.set(key, JSON.stringify(result.data.configuration));
-                latest.current.apply(result.data.configuration);
+                const configuration = parseNextTaskConfiguration(result.data.configuration);
+                saved.current.set(key, JSON.stringify(configuration));
+                latest.current.apply(configuration);
             } else saved.current.delete(key);
             setLoaded(key);
         };

@@ -5,7 +5,7 @@ import { Calculator, Check, ChevronRight, CircleAlert, CircleHelp, Copy, Databas
 import type { AgentRunStatus } from '@/lib/agent/types';
 import { MarkdownContent } from '@/components/ui/MarkdownContent';
 import { useToast } from '@/components/ui/Toast';
-import { formatAgentToolDuration, formatAgentValue, getAgentToolState, summarizeAgentTool, type AgentTool } from './presentation';
+import { formatAgentToolDuration, formatAgentValue, getAgentTaskSpan, getAgentToolState, summarizeAgentTool, type AgentTool } from './presentation';
 import { AgentToolResult } from './AgentToolResult';
 
 function ToolValue({ value }: { value: unknown }) {
@@ -49,6 +49,7 @@ export function AgentToolCard({ tool, runStatus, showResult = true, fullResult =
     const [expanded, setExpanded] = useState<boolean | null>(null);
     const state = getAgentToolState(tool, runStatus);
     const summary = summarizeAgentTool(tool);
+    const span = getAgentTaskSpan(tool);
     const ToolIcon = tool.name === 'bazi' || tool.name === 'ziwei' ? Calculator : tool.name === 'ask_user' ? CircleHelp
         : tool.name.includes('search') ? Search : tool.name === 'select_final_artifacts' ? ListChecks : tool.name.includes('user') ? Database : Wrench;
     const Icon = state.status === 'running' ? LoaderCircle : state.status === 'failed' ? CircleAlert
@@ -60,11 +61,12 @@ export function AgentToolCard({ tool, runStatus, showResult = true, fullResult =
                 <Icon size={14} className={state.status === 'running' ? 'animate-spin motion-reduce:animate-none' : undefined} aria-hidden="true" />
             </span>
             <span className="agent-tool-label"><span>{tool.title}</span>{summary && <small>{summary}</small>}</span>
-            {typeof tool.durationMs === 'number' && <span className="agent-tool-time">{formatAgentToolDuration(tool.durationMs)}</span>}
+            {['completed', 'failed'].includes(state.status) && typeof tool.durationMs === 'number' && Number.isFinite(tool.durationMs) && tool.durationMs >= 0 && <span className="agent-tool-time" title="本次工具调用的实际执行用时">{formatAgentToolDuration(tool.durationMs)}</span>}
             <span className="agent-tool-state">{state.label}</span>
             <ChevronRight size={14} className="agent-tool-chevron" aria-hidden="true" />
         </summary>
         {open && <div className="agent-tool-details">
+            {span !== null && <p className="agent-tool-section agent-task-span">执行阶段 {formatAgentToolDuration(span)}（包含等待和恢复）</p>}
             {tool.input !== undefined && <ToolSection label="调用参数" value={tool.input} />}
             {tool.output !== undefined && <ToolSection label="工具结果" value={tool.output} />}
             {tool.input === undefined && tool.output === undefined && <p className="p-3 text-xs text-foreground-secondary">{state.status === 'running' ? '正在等待工具返回结果…' : '该步骤没有返回详情。'}</p>}

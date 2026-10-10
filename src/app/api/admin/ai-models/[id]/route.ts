@@ -7,6 +7,7 @@
 import { NextRequest } from 'next/server';
 import { requireAdminUser, jsonError, jsonOk, getSystemAdminClient } from '@/lib/api-utils';
 import { clearModelCache } from '@/lib/server/ai-config';
+import { AI_REASONING_EFFORTS } from '@/types';
 import type {
     AIReasoningEffort,
     AIReasoningEffortFormat,
@@ -16,7 +17,7 @@ import type {
 
 const VALID_USAGE_TYPES: AIUsageType[] = ['chat', 'vision', 'embedding', 'rerank'];
 const VALID_ROUTING_MODES: AIRoutingMode[] = ['auto', 'newapi', 'octopus'];
-const VALID_REASONING_EFFORTS: AIReasoningEffort[] = ['minimal', 'low', 'medium', 'high'];
+const VALID_REASONING_EFFORTS: readonly AIReasoningEffort[] = AI_REASONING_EFFORTS;
 const VALID_REASONING_EFFORT_FORMATS: AIReasoningEffortFormat[] = ['reasoning_object', 'reasoning_effort'];
 
 function normalizeCustomParameters(input: unknown): Record<string, unknown> | null {

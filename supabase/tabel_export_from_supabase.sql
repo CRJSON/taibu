@@ -70,7 +70,7 @@ CREATE TABLE public.ai_models (
   default_top_p numeric DEFAULT 1,
   default_presence_penalty numeric DEFAULT 0,
   default_frequency_penalty numeric DEFAULT 0,
-  default_reasoning_effort text CHECK (default_reasoning_effort IS NULL OR (default_reasoning_effort = ANY (ARRAY['minimal'::text, 'low'::text, 'medium'::text, 'high'::text]))),
+  default_reasoning_effort text CHECK (default_reasoning_effort IS NULL OR (default_reasoning_effort = ANY (ARRAY['minimal'::text, 'low'::text, 'medium'::text, 'high'::text, 'xhigh'::text, 'max'::text]))),
   reasoning_effort_format text CHECK (reasoning_effort_format IS NULL OR (reasoning_effort_format = ANY (ARRAY['reasoning_object'::text, 'reasoning_effort'::text]))),
   custom_parameters jsonb,
   CONSTRAINT ai_models_pkey PRIMARY KEY (id)

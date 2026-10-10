@@ -47,6 +47,8 @@ export const SQL_SOURCE_MANIFEST = {
   agentQuestionDedupe: 'supabase/migrations/20261008_100000_agent_question_dedupe.sql',
   agentCompetence: 'supabase/migrations/20261008_180000_agent_competence.sql',
   agentDurableUpgrade: 'supabase/migrations/20261009_100000_agent_pi_durable_1_1.sql',
+  reasoningEffortLevels: 'supabase/migrations/20261009_120000_ai_reasoning_effort_levels.sql',
+  agentCurrentEngine: 'supabase/migrations/20261010_100000_agent_current_engine_only.sql',
   userSettings: 'supabase/migrations/20260110_add_user_settings_and_fix_notifications_rls.sql',
   chartTimeResolution: 'supabase/migrations/20261005_110000_chart_time_resolution.sql',
   agentChartIdentity: 'supabase/migrations/20261005_120000_agent_chart_identity.sql',
@@ -201,12 +203,13 @@ $$;`}`,
     requireMatch([...sources.credits.matchAll(/^ALTER TABLE public\.daily_checkins[\s\S]*?;/gm)].map(match => match[0]), 'daily check-in amendment'),
     policies(sources.creditPolicies, 'daily_checkins'),
     sources.providers,
+    snapshotTable(sources.snapshot, 'ai_models'),
     ...(realAuth ? [
       // Profile PATCH selects the full settings contract. Keep its existing
       // chart foreign keys; these two empty tables are only FK anchors here.
       sources.chartDetail,
       sources.appSettings,
-      ...['ai_models', 'ai_gateways', 'ai_model_gateway_bindings'].map(name => snapshotTable(sources.snapshot, name)),
+      ...['ai_gateways', 'ai_model_gateway_bindings'].map(name => snapshotTable(sources.snapshot, name)),
       policies(sources.modelPolicies, 'ai_models'),
       policies(sources.gatewayPolicies, 'ai_gateways'),
       policies(sources.gatewayPolicies, 'ai_model_gateway_bindings'),
@@ -300,6 +303,8 @@ RESET ROLE;`,
     sources.agentQuestionDedupe,
     sources.agentCompetence,
     sources.agentDurableUpgrade,
+    sources.reasoningEffortLevels,
+    sources.agentCurrentEngine,
     'RESET ROLE;',
   ].join('\n\n');
 }

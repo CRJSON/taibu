@@ -26,7 +26,7 @@ import {
 import { MockLanguageModelV3 } from "ai/test";
 import { estimateContextTokens } from '@earendil-works/pi-ai/utils/estimate';
 
-import { config, row, MemoryStore, scripted } from "./helpers/agent-runtime-fixture";
+import { config, row, MemoryStore, scripted, isSummaryTranscript } from "./helpers/agent-runtime-fixture";
 beforeEach((t) => {
   assert.ok("mock" in t);
   const credits =
@@ -43,9 +43,6 @@ beforeEach((t) => {
   t.mock.method(settings, "readFeatureModuleStateFresh", async () => ({ status: "enabled" as const }));
   t.mock.method(sdk, "isModelAvailable", () => true);
   t.mock.method(sdk, "createModelFromConfig", () => new MockLanguageModelV3());
-  t.mock.method(sdk, "callWithAISDK", async () => ({
-    text: "用户要求八字分析；计算记录、最终成果ID和来源保留在最近回合。",
-  }));
 });
 
 test("Pi completes more than common loop defaults using real core tools with no per-task cap", async () => {
@@ -232,33 +229,6 @@ test("two pending questions use separate human replies without consuming a queue
   finished = store.writes.filter(w => w.name === "agent_finish_run").at(-1)!;
   assert.equal(finished.args.p_status, "completed");
   assert.equal(store.pending.length, 0);
-});
-
-test("a V1 committed question migrates while paused, then continues on its first V2 reply", async () => {
-  const store = new MemoryStore(), run = row();
-  const assistant = emptyPiAssistant({ id: "fixture", provider: "taibu" } as Parameters<typeof emptyPiAssistant>[0]);
-  assistant.stopReason = "toolUse";
-  assistant.content = [{ type: "toolCall", id: "legacy-question", name: "ask_user", arguments: { question: "出生日期？" } }];
-  run.checkpoint.messages.push(assistant);
-  run.checkpoint.question = "出生日期？";
-  store.drafts.set("legacy-question", {
-    id: randomUUID(), call_id: "legacy-question", tool_name: "ask_user", kind: "tool",
-    args: { question: "出生日期？" },
-    result: { content: [{ type: "text", text: "等待补充" }], details: { question: "出生日期？", awaitingUser: true } },
-  });
-  await executeAgentRun(store, run, undefined, { config, streamFn: () => { throw new Error("must wait for the human reply"); } });
-  let finished = store.writes.filter(w => w.name === "agent_finish_run").at(-1)!;
-  assert.equal(finished.args.p_status, "awaiting_input");
-  run.checkpoint = finished.args.p_checkpoint as AgentRunRow["checkpoint"];
-  run.fence++;
-  store.pending.push({ sequence: 9, mode: "reply", message: { id: "legacy-reply", role: "user", content: "1990年1月15日9时，男性", createdAt: new Date().toISOString() } });
-  await executeAgentRun(store, run, undefined, { config, streamFn: scripted(() => [{ type: "text", text: "旧任务补充后完成" }], messages => {
-    assert.ok(messages.some(m => m.role === "user" && JSON.stringify(m.content).includes("男性")));
-  }) });
-  finished = store.writes.filter(w => w.name === "agent_finish_run").at(-1)!;
-  assert.equal(finished.args.p_status, "completed");
-  assert.equal(store.pending.length, 0);
-  assert.equal(store.writes.filter(w => w.name === "agent_cache_tool").length, 0);
 });
 
 test("repeated model call IDs identify distinct native ToolTasks", async () => {
@@ -940,9 +910,17 @@ test('known contexts start background compaction below the blocking threshold wh
   const barrier = new Promise<void>(resolve => { release = resolve; });
   const safeguard = setTimeout(() => release(), 1000);
   t.after(() => clearTimeout(safeguard));
-  const sdk = require('../lib/ai/providers/ai-sdk-provider') as typeof import('../lib/ai/providers/ai-sdk-provider');
-  t.mock.method(sdk, 'callWithAISDK', async () => { summaryStarted = true; await barrier; summaryFinished = true; return { text: '保留原目标与历史事实' }; });
   const streamFn: StreamFn = (model, context) => {
+    if (isSummaryTranscript(context)) {
+      summaryStarted = true;
+      const output = createAssistantMessageEventStream(), message = emptyPiAssistant(model);
+      void barrier.then(() => {
+        summaryFinished = true;
+        message.content = [{ type: 'text', text: '保留原目标与历史事实' }];
+        output.push({ type: 'done', reason: 'stop', message }); output.end(message);
+      });
+      return output;
+    }
     const tokens = estimateContextTokens(context.messages).tokens;
     assert.ok(tokens < model.contextWindow - 8096, `tokens ${tokens} must stay below the blocking line`);
     const output = createAssistantMessageEventStream(), message = emptyPiAssistant(model);
@@ -981,7 +959,8 @@ test("unknown capacity still uses Pi's bounded compaction recovery on a reported
   const store = new MemoryStore(), run = row();
   run.checkpoint.messages = Array.from({ length: 5 }, (_, index) => ({ role: "user" as const, content: `old turn ${index}: ${"history ".repeat(5000)}`, timestamp: index + 1 }));
   let calls = 0;
-  const streamFn: StreamFn = model => {
+  const streamFn: StreamFn = (model, context, options) => {
+    if (isSummaryTranscript(context)) return scripted(() => [])(model, context, options);
     assert.equal(model.contextWindow, 0);
     const stream = createAssistantMessageEventStream(), message = emptyPiAssistant(model);
     if (calls++ === 0) {
@@ -1004,4 +983,15 @@ test("unknown capacity still uses Pi's bounded compaction recovery on a reported
   assert.equal(finish.args.p_status, "completed");
   assert.equal((finish.args.p_message as AgentRunRow["public_message"]).agent?.runtime?.context?.compactions, 1);
   assert.equal(finish.args.p_record, null);
+});
+
+test('unsupported checkpoint engines are rejected before opening storage or invoking a model or tool', async () => {
+  for (const checkpoint of [{ version: 1 }, { version: 2 }, { version: 2, durable: { engine: 'pi-durable/1.0.4' } }, { version: 2, durable: { engine: 'pi-durable/9.9.9' } }]) {
+    const store = new MemoryStore(), run = row();
+    run.checkpoint = { ...run.checkpoint, ...checkpoint } as AgentRunRow['checkpoint'];
+    if (!('durable' in checkpoint)) delete (run.checkpoint as Partial<AgentRunRow['checkpoint']>).durable;
+    await assert.rejects(executeAgentRun(store, run, undefined, { config, streamFn: () => { throw new Error('model must not run'); } }), /AGENT_ENGINE_UNSUPPORTED/);
+    assert.equal(store.writes.length, 0);
+    assert.equal(store.drafts.size, 0);
+  }
 });

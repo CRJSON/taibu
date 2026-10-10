@@ -252,7 +252,7 @@ const PI_DURABLE_MIGRATIONS = [
   ['20261009_100000_agent_pi_durable_1_1', 'bcd3996445aff8a3f610b6e38078f9df94999030b814fcb71f4e23f540e4a687'],
 ].map(([name, sha256]) => ({ file: `supabase/migrations/${name}.sql`, sha256 }));
 const PI_DURABLE_FINGERPRINT = '223d3ed92db07a499114b15eb8be07f258a1e54effc47ee0a1bb812ec7403824';
-const REVIEWED_SCHEMA_UPGRADES = [{
+const REVIEWED_PRE_REASONING_SCHEMA_UPGRADES = [{
   previous: '9a6fd07d2d17f61ee6669d20d4910f2b3b7c621d3d07d9ceeba2b0af26df90be',
   current: 'e639cd6d5a7d70ed5450bd5ee5cc7cd44f3a0924b5b91ce33d719df2c99cec9f',
   file: 'supabase/migrations/20261007_100000_agent_chat_results.sql',
@@ -302,6 +302,31 @@ const REVIEWED_SCHEMA_UPGRADES = [{
   current: PI_DURABLE_FINGERPRINT,
   files: [...EXPERIENCE_MIGRATIONS.slice(-1), ...PI_DURABLE_MIGRATIONS],
 }];
+const REASONING_EFFORT_FINGERPRINT = '29359295c5ffdf9c652bc33d766fbcb4a0456d712ed982fdc19b274a5d2ee8b6';
+const REASONING_EFFORT_MIGRATIONS = [{
+  file: 'supabase/migrations/20261009_120000_ai_reasoning_effort_levels.sql',
+  sha256: 'b20e45bcea4a96d43476c3656a1220d2bfd104d860eb935835928bd92bd42673',
+}];
+const REVIEWED_PRE_CURRENT_ENGINE_SCHEMA_UPGRADES = [
+  ...REVIEWED_PRE_REASONING_SCHEMA_UPGRADES,
+  ...REVIEWED_PRE_REASONING_SCHEMA_UPGRADES.filter(entry => entry.current === PI_DURABLE_FINGERPRINT).map(entry => ({
+    previous: entry.previous, current: REASONING_EFFORT_FINGERPRINT,
+    files: [...entry.files, ...REASONING_EFFORT_MIGRATIONS],
+  })),
+  { previous: PI_DURABLE_FINGERPRINT, current: REASONING_EFFORT_FINGERPRINT, files: REASONING_EFFORT_MIGRATIONS },
+];
+const CURRENT_ENGINE_FINGERPRINT = '6c272730dec136ce350d145c4f1d12b15fc5a30632b8996a1cf01de6a0971116';
+const CURRENT_ENGINE_MIGRATIONS = [{
+  file: 'supabase/migrations/20261010_100000_agent_current_engine_only.sql',
+  sha256: '6d78410e8a10b710bc9d03a28920b6a066ea3c035e29b96d89bd72bac216fa06',
+}];
+const REVIEWED_SCHEMA_UPGRADES = [
+  ...REVIEWED_PRE_CURRENT_ENGINE_SCHEMA_UPGRADES,
+  ...REVIEWED_PRE_CURRENT_ENGINE_SCHEMA_UPGRADES.filter(entry => entry.current === REASONING_EFFORT_FINGERPRINT).map(entry => ({
+    previous: entry.previous, current: CURRENT_ENGINE_FINGERPRINT, files: [...entry.files, ...CURRENT_ENGINE_MIGRATIONS],
+  })),
+  { previous: REASONING_EFFORT_FINGERPRINT, current: CURRENT_ENGINE_FINGERPRINT, files: CURRENT_ENGINE_MIGRATIONS },
+];
 
 export function reviewedSchemaUpgrade(fingerprint, bundle) {
   return REVIEWED_SCHEMA_UPGRADES.find(entry => entry.previous === fingerprint && entry.current === bundle.fingerprint) ?? null;

@@ -7,6 +7,7 @@ import {
   getSystemMessageText,
   normalizeContext,
   isContextOverflow,
+  isRetryableAssistantError,
   type Api,
   type AssistantMessage,
   type JsonValue,
@@ -140,7 +141,7 @@ export function agentModelSources(config: AIModelConfig, apiKey?: string) {
 }
 export function createPiSDKStream(
   config: AIModelConfig,
-  settings: { reasoning: boolean; apiKey?: string; resolveImages?: (messages:ModelMessage[])=>Promise<ModelMessage[]> },
+  settings: { reasoning: boolean; nativeReasoning?: boolean; apiKey?: string; resolveImages?: (messages:ModelMessage[])=>Promise<ModelMessage[]> },
 ): StreamFn {
   return (piModel, context, options) => {
     const output = createAssistantMessageEventStream();
@@ -152,6 +153,7 @@ export function createPiSDKStream(
       try {
         const sources = agentModelSources(config, settings.apiKey);
         if (!sources.length) throw new Error("模型服务未配置");
+        const reasoning = settings.reasoning && piModel.reasoning !== false && (!settings.nativeReasoning || options?.reasoning !== undefined);
         const declared = getCurrentTools(context.messages);
         const tools = Object.fromEntries(
           declared.map((t) => [
@@ -173,11 +175,12 @@ export function createPiSDKStream(
               // Emit our public error event instead of logging provider secrets.
               onError: () => {},
               model: createModelFromConfig(source, {
-                reasoning: settings.reasoning,
+                reasoning,
+                reasoningEffort: options?.reasoning ?? source.defaultReasoningEffort,
                 apiKey: settings.apiKey,
                 fetch: settings.apiKey ? agentSafeFetch : undefined,
               }),
-              messages: settings.resolveImages ? await settings.resolveImages(toAgentModelMessages(context.messages)) : toAgentModelMessages(context.messages),
+              messages: settings.resolveImages && piModel.input?.includes('image') ? await settings.resolveImages(toAgentModelMessages(context.messages)) : toAgentModelMessages(context.messages),
               tools,
               maxRetries: 0,
               abortSignal: requestSignal,
@@ -187,8 +190,8 @@ export function createPiSDKStream(
               presencePenalty: source.defaultPresencePenalty ?? undefined,
               frequencyPenalty: source.defaultFrequencyPenalty ?? undefined,
               providerOptions: buildProviderOptions(source, {
-                reasoning: settings.reasoning,
-                reasoningEffort: source.defaultReasoningEffort,
+                reasoning,
+                reasoningEffort: options?.reasoning ?? source.defaultReasoningEffort,
               }),
             });
             const blocks = new Map<string, number>();
@@ -316,11 +319,8 @@ export function createPiSDKStream(
               } else if (event.type === "tool-error") {
                 throw new Error("模型返回无效的工具参数");
               } else if (event.type === "finish") {
-                if (
-                  event.finishReason === "error" ||
-                  event.finishReason === "content-filter" ||
-                  event.finishReason === "other"
-                )
+                if (event.finishReason === "error") throw new Error('provider returned error (finish_reason: error)');
+                if (event.finishReason === "content-filter" || event.finishReason === "other")
                   throw new Error("模型未正常完成回复");
                 finished = true;
                 message.stopReason =
@@ -357,7 +357,12 @@ export function createPiSDKStream(
             const empty = error instanceof Error && error.message === 'AGENT_EMPTY_RESPONSE';
             if (empty && emptyRecoveries++ >= 1) throw error;
             const status = (error as { statusCode?: number } | null)?.statusCode;
-            const transient = status === 408 || status === 429 || (typeof status === 'number' && status >= 500) || (error instanceof Error && /timeout|network|fetch failed|ECONNRESET/iu.test(error.message));
+            const errorMessage = error instanceof Error ? error.message : '';
+            const transient = isRetryableAssistantError({ ...message, stopReason: 'error', errorMessage: [
+              errorMessage,
+              (error as { code?: string } | null)?.code === 'ECONNRESET' || /ECONNRESET/iu.test(errorMessage) ? 'network error' : '',
+              typeof status === 'number' && status >= 500 ? 'server_error' : status === 408 ? 'timeout' : status === 429 ? '429' : '',
+            ].join(' ') });
             if (!empty && !transient && sourceIndex >= sources.length - 1) throw error;
             started = false; message.content = []; message.stopReason = 'stop';
           }

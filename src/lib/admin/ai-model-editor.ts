@@ -1,4 +1,5 @@
 import { getVendorName, VENDOR_PRESETS as VENDOR_PRESET_KEYS } from '@/lib/ai/vendor-labels';
+import type { AIReasoningEffort } from '@/types';
 
 // 类型定义
 export interface ModelSource {
@@ -36,7 +37,7 @@ export interface AIModel {
     defaultPresencePenalty: number | null;
     defaultFrequencyPenalty: number | null;
     defaultMaxTokens: number | null;
-    defaultReasoningEffort: 'minimal' | 'low' | 'medium' | 'high' | null;
+    defaultReasoningEffort: AIReasoningEffort | null;
     reasoningEffortFormat: 'reasoning_object' | 'reasoning_effort' | null;
     customParameters: Record<string, unknown> | null;
     description: string | null;

@@ -10,6 +10,7 @@ import { CanonicalChartView } from './CanonicalChartView';
 import { useAgentResultWorkspace } from './AgentResultContext';
 import './agent-results.css';
 import { getChartFocus } from '@/lib/agent/chart-interaction';
+import { parallelAnalysisResults } from '@/lib/agent/parallel-results';
 
 function TextFallback({ tool, incomplete = false }: { tool: AgentToolPart; incomplete?: boolean }) {
   const text = getAgentToolText(tool);
@@ -24,6 +25,15 @@ export function AgentToolResult({ tool, full = false }: { tool: AgentToolPart; f
   const workspace = useAgentResultWorkspace();
   const [expanded, setExpanded] = useState(false);
   const value = useMemo(() => getAgentChart(tool), [tool]);
+  const analyses = tool.name === 'parallel_analysis' ? parallelAnalysisResults(tool.output) : [];
+  if (analyses.length) return <section className="agent-result-list agent-collaboration-results" aria-label="协作分析">
+    <h3>协作分析 <span>{analyses.length}</span></h3>
+    {analyses.map(analysis => <details key={analysis.conversationId}>
+      <summary><span>{analysis.name ?? analysis.system}<small>{analysis.modelName ?? analysis.model ?? '主模型'}</small></span>
+        <span>{analysis.status === 'completed' ? '已完成' : analysis.status === 'failed' || tool.status === 'failed' ? '未完成' : '分析中'}</span></summary>
+      {analysis.answer && <MarkdownContent content={analysis.answer} />}
+    </details>)}
+  </section>;
   if (tool.status !== 'completed') return null;
   const focus = getChartFocus(tool);
   if (focus) return <p className="agent-focus-receipt"><span>盘面已定位</span>{focus.caption}</p>;

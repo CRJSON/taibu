@@ -99,6 +99,7 @@ export async function verifyAgentExperience({ page, context, origin, directory, 
   await composer().fill('/clear');
   await composer().press('Enter');
   assert.equal(await composer().inputValue(), '', 'slash commands do not submit a model task');
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   await composer().press('ArrowUp');
   assert.ok((await composer().inputValue()).includes('Agent验收'), 'input history recalls the previous submitted question');
   await composer().fill('');

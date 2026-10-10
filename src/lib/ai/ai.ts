@@ -393,6 +393,7 @@ export interface AICallOptions {
     abortSignal?: AbortSignal;
     beforeModelAttempt?: () => Promise<void>;
     reasoning?: boolean;  // 开启推理模式
+    reasoningEffort?: import('@/types').AIReasoningEffort | null;
     temperature?: number;
     maxTokens?: number;
     imageBase64?: string;
@@ -476,12 +477,13 @@ export async function callAI(
     const systemPrompt = buildSystemPrompt(personality, chartContext, options);
     return await runWithSourceFallback(config, async (runtimeConfig) => {
         const reasoning = runtimeConfig.isReasoningDefault || options?.reasoning;
-        const model = createModelFromConfig(runtimeConfig, { reasoning });
+        const model = createModelFromConfig(runtimeConfig, { reasoning, reasoningEffort: options?.reasoningEffort ?? undefined });
         const coreMessages = toCoreMessages(messages);
         try { await options?.beforeModelAttempt?.(); } catch (cause) { throw Object.assign(new Error(cause instanceof Error ? cause.message : '模型调用被阻止'), { code: 'MODEL_ATTEMPT_BLOCKED' }); }
         const result = await callWithAISDK(model, coreMessages, systemPrompt, runtimeConfig, {
             abortSignal: options?.abortSignal,
             reasoning,
+            reasoningEffort: options?.reasoningEffort ?? undefined,
             temperature: options?.temperature,
             maxTokens: options?.maxTokens,
         });
@@ -508,10 +510,11 @@ export async function callAIStream(
     const systemPrompt = buildSystemPrompt(personality, chartContext, options);
     return await runWithSourceFallback(config, async (runtimeConfig) => {
         const reasoning = runtimeConfig.isReasoningDefault || options?.reasoning;
-        const model = createModelFromConfig(runtimeConfig, { reasoning });
+        const model = createModelFromConfig(runtimeConfig, { reasoning, reasoningEffort: options?.reasoningEffort ?? undefined });
         const coreMessages = toCoreMessages(messages);
         const result = await streamWithAISDK(model, coreMessages, systemPrompt, runtimeConfig, {
             reasoning,
+            reasoningEffort: options?.reasoningEffort ?? undefined,
             temperature: options?.temperature,
             maxTokens: options?.maxTokens,
         });
@@ -536,10 +539,11 @@ export async function callAIUIMessageResult(
     const systemPrompt = buildSystemPrompt(personality, chartContext, options);
     return await runWithSourceFallback(config, async (runtimeConfig) => {
         const reasoning = runtimeConfig.isReasoningDefault || options?.reasoning;
-        const model = createModelFromConfig(runtimeConfig, { reasoning });
+        const model = createModelFromConfig(runtimeConfig, { reasoning, reasoningEffort: options?.reasoningEffort ?? undefined });
         const coreMessages = toCoreMessages(messages);
         const result = await streamWithAISDK(model, coreMessages, systemPrompt, runtimeConfig, {
             reasoning,
+            reasoningEffort: options?.reasoningEffort ?? undefined,
             temperature: options?.temperature,
             maxTokens: options?.maxTokens,
         });
@@ -562,13 +566,14 @@ export async function callAIVision(
 
     return await runWithSourceFallback(config, async (runtimeConfig) => {
         const reasoning = runtimeConfig.isReasoningDefault || options?.reasoning;
-        const model = createModelFromConfig(runtimeConfig, { reasoning });
+        const model = createModelFromConfig(runtimeConfig, { reasoning, reasoningEffort: options?.reasoningEffort ?? undefined });
         const coreMessages = toCoreMessages(messages, {
             imageBase64: options?.imageBase64,
             imageMimeType: options?.imageMimeType,
         });
         const result = await callWithAISDK(model, coreMessages, systemPrompt, runtimeConfig, {
             reasoning,
+            reasoningEffort: options?.reasoningEffort ?? undefined,
             temperature: options?.temperature,
             maxTokens: options?.maxTokens,
         });

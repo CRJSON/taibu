@@ -34,7 +34,8 @@ import {
 import { encryptAgentCredential } from "./credentials.server";
 import { validateAgentProviderUrl } from "./safe-fetch.server";
 import { isAgentRunTerminal, type AgentCheckpoint } from "./types";
-import { AGENT_ENGINE } from "./engine";
+import { AGENT_ENGINE, isCurrentAgentCheckpoint } from "./engine";
+import { parseReasoningEffort, parseAgentCollaborators } from '@/lib/chat/model-settings';
 import { piHistory } from "./history.server";
 import { normalizeQuestions, validateAnswers, formatQuestionAnswers } from './questions';
 import { validateAttachmentIds } from './attachments.server';
@@ -76,6 +77,9 @@ async function requestBody(request: NextRequest) {
   }
 }
 function createBody(value: Record<string, unknown>) {
+  let reasoningEffort, collaborators;
+  try { reasoningEffort = parseReasoningEffort(value.reasoningEffort); collaborators = parseAgentCollaborators(value.collaborators); }
+  catch (error) { throw new AgentApiError(error instanceof Error ? error.message : '模型配置无效'); }
   const message = object(value.message);
   if (
     typeof value.conversationId !== "string" ||
@@ -157,6 +161,8 @@ function createBody(value: Record<string, unknown>) {
     customProvider,
     webEnabled: value.webEnabled !== false,
     reasoning: value.reasoning === true,
+    reasoningEffort,
+    collaborators,
     dreamMode: value.dreamMode === true,
     mangpaiMode: value.mangpaiMode === true,
     fileContent:
@@ -268,6 +274,8 @@ export async function createAgentTask(request: NextRequest) {
       : null,
     webEnabled: body.webEnabled !== false,
     reasoning: body.reasoning === true,
+    reasoningEffort: body.reasoningEffort,
+    collaborators: body.collaborators,
     replaceFromMessageId: body.replaceFromMessageId ?? null,
     mentions: Array.isArray(body.mentions) ? body.mentions : [],
     fileContent: typeof body.fileContent === "string" ? body.fileContent : null,
@@ -336,6 +344,14 @@ export async function createAgentTask(request: NextRequest) {
     );
   if (!custom && !account.hasCredits)
     throw new AgentApiError("积分不足", 402, "INSUFFICIENT_CREDITS");
+  if (custom && body.collaborators.length) throw new AgentApiError('多模型协作需要使用平台模型；可在模型菜单中关闭协作');
+  for (const member of body.collaborators) {
+    const selected = await getModelConfigAsync(member.model);
+    if (!selected) throw new AgentApiError(`协作模型不存在：${member.name}`);
+    if (!isModelAllowedForMembership(selected, account.effectiveMembership) ||
+      (member.reasoning && !isReasoningAllowedForMembership(selected, account.effectiveMembership)))
+      throw new AgentApiError(`当前会员不能使用 ${member.name} 的模型或推理配置`, 403, 'MEMBERSHIP_REQUIRED');
+  }
   const limit = await checkRateLimit(auth.user.id, "/api/chat", AI_RATE_LIMIT_CONFIG);
   if (!limit.allowed)
     throw new AgentApiError("请求过于频繁，请稍后再试", 429, "RATE_LIMITED");
@@ -389,7 +405,7 @@ export async function createAgentTask(request: NextRequest) {
     ? null
     : await store.currentRun(body.conversationId, auth.user.id);
   const replay =
-    previous?.status === "completed" &&
+    previous?.status === "completed" && isCurrentAgentCheckpoint(previous.checkpoint) &&
     history.at(-1)?.id === previous.public_message.id
       ? previous.checkpoint.messages.filter((m) => m.role !== "system")
       : null;
@@ -415,6 +431,8 @@ export async function createAgentTask(request: NextRequest) {
   const input = {
     model: modelId,
     reasoning,
+    reasoningEffort: reasoning ? body.reasoningEffort : null,
+    collaborators: body.collaborators,
     webEnabled: body.webEnabled !== false,
     systemPrompt: prepared.systemPrompt,
     memoryEnabled: prepared.agentMemoryEnabled === true,

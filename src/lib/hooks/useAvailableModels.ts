@@ -14,6 +14,7 @@ type AvailableModel = {
   name: string;
   vendor: AIVendor;
   supportsReasoning: boolean;
+  reasoningEffortFormat?: 'reasoning_object' | 'reasoning_effort' | null;
   isReasoningDefault?: boolean;
   allowed?: boolean;
   blockedReason?: string | null;

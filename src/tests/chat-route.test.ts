@@ -792,6 +792,54 @@ test('chat route grants secret-validated bypass without leaking credentials into
     assert.equal(state.aiUiCalls, 1);
 });
 
+test('chat forwards the selected conversation reasoning level after permission checks', async t => {
+    const state = setupRouteMocks(t, createUIChunkStream([{ type: 'text-delta', id: 't1', delta: 'ok' }]));
+    const ai = require('../lib/ai/ai') as typeof import('../lib/ai/ai');
+    const original = ai.callAIUIMessageResult;
+    let observed = false;
+    t.mock.method(ai, 'callAIUIMessageResult', async (...args: Parameters<typeof original>) => {
+        observed = true;
+        assert.equal(args[4]?.reasoning, true);
+        assert.equal(args[4]?.reasoningEffort, 'xhigh');
+        return original(...args);
+    });
+    const { POST } = await import('../app/api/chat/route');
+    const response = await POST(createChatRequest({ reasoning: true, reasoningEffort: 'xhigh' }));
+    await response.text();
+    assert.equal(response.status, 200);
+    assert.equal(observed, true);
+    assert.equal(state.useCreditCalls, 1);
+});
+
+test('chat clears a requested reasoning level when reasoning permission is unavailable', async t => {
+    setupRouteMocks(t, createUIChunkStream([{ type: 'text-delta', id: 't1', delta: 'ok' }]));
+    const access = require('../lib/ai/ai-access') as typeof import('../lib/ai/ai-access');
+    t.mock.method(access, 'isReasoningAllowedForMembership', () => false);
+    const ai = require('../lib/ai/ai') as typeof import('../lib/ai/ai');
+    const original = ai.callAIUIMessageResult;
+    let observed = false;
+    t.mock.method(ai, 'callAIUIMessageResult', async (...args: Parameters<typeof original>) => {
+        observed = true;
+        assert.equal(args[4]?.reasoning, false);
+        assert.equal(args[4]?.reasoningEffort, null);
+        return original(...args);
+    });
+    const { POST } = await import('../app/api/chat/route');
+    const response = await POST(createChatRequest({ reasoning: true, reasoningEffort: 'max' }));
+    await response.text();
+    assert.equal(response.status, 200);
+    assert.equal(observed, true);
+});
+
+test('invalid conversation reasoning levels fail before charging or model execution', async t => {
+    const state = setupRouteMocks(t, createUIChunkStream([]));
+    const { POST } = await import('../app/api/chat/route');
+    const response = await POST(createChatRequest({ reasoning: true, reasoningEffort: 'extreme' }));
+    assert.equal(response.status, 400);
+    assert.equal(state.useCreditCalls, 0);
+    assert.equal(state.aiUiCalls, 0);
+});
+
 for (const mode of ['managed', 'trusted', 'direct', 'preview'] as const) {
     for (const expiredAccessCookie of [true, false]) {
         test(`${mode} KB search uses refreshed identity with ${expiredAccessCookie ? 'stale access' : 'refresh-only'} cookies`, async (t) => {

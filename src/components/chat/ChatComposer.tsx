@@ -27,6 +27,7 @@ import type { AgentRuntimeInfo } from '@/lib/agent/types';
 import { useComposerCommands } from './composer/ComposerCommands';
 import { usePrivateAttachments } from '@/lib/chat/use-private-attachments';
 import { PrivateAttachments } from './agent/PrivateAttachments';
+import type { ModelSettingsProps } from '@/lib/chat/model-settings';
 
 const findLastAtOutsideTokens = (value: string, tokens: MentionToken[]): number => {
     for (let i = value.length - 1; i >= 0; i -= 1) {
@@ -37,7 +38,7 @@ const findLastAtOutsideTokens = (value: string, tokens: MentionToken[]): number 
     return -1;
 };
 
-interface ChatComposerProps {
+interface ChatComposerProps extends ModelSettingsProps {
     draftKey?: string;
     agentMode?: boolean;
     agentRuntime?: AgentRuntimeInfo;
@@ -95,6 +96,7 @@ export function ChatComposer({
     onModelChange,
     reasoningEnabled = false,
     onReasoningChange,
+    reasoningEffort, onReasoningEffortChange, collaborators, onCollaboratorsChange,
     customProviderActive = false,
     customProviderLabel = null,
     userId,
@@ -558,6 +560,10 @@ export function ChatComposer({
                         onModelChange={onModelChange}
                         reasoningEnabled={reasoningEnabled}
                         onReasoningChange={onReasoningChange}
+                        reasoningEffort={reasoningEffort}
+                        onReasoningEffortChange={onReasoningEffortChange}
+                        collaborators={collaborators}
+                        onCollaboratorsChange={onCollaboratorsChange}
                         membershipType={membershipType}
                         customProviderActive={customProviderActive}
                         customProviderLabel={customProviderLabel}

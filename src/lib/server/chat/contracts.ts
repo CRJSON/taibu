@@ -11,6 +11,7 @@ export interface ChatPreparationInput {
   mangpaiMode?: boolean;
   model?: string;
   reasoning?: boolean;
+  reasoningEffort?: import('@/types').AIReasoningEffort | null;
   difyContext?: DifyContext;
   mentions?: Mention[];
   dreamMode?: boolean;

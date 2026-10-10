@@ -241,6 +241,32 @@ RESET ROLE;`);
     assert.equal(await asOwner("SELECT pg_get_userbyid(proowner) FROM pg_proc WHERE oid = 'public.consume_rate_limit_slot_as_admin(text,text,integer,integer)'::regprocedure;"), 'taibu_contract_owner');
   });
 
+  await t.test('reasoning-level migration preserves existing models and accepts all six levels', async () => {
+    const migration = await readFile(path.join(repoRoot, SQL_SOURCE_MANIFEST.reasoningEffortLevels), 'utf8');
+    const stored = JSON.parse(await sql(`BEGIN; SET LOCAL ROLE taibu_contract_owner;
+      ALTER TABLE public.ai_models DROP CONSTRAINT ai_models_default_reasoning_effort_check;
+      ALTER TABLE public.ai_models ADD CONSTRAINT ai_models_default_reasoning_effort_check
+        CHECK (default_reasoning_effort IS NULL OR default_reasoning_effort IN ('minimal', 'low', 'medium', 'high'));
+      INSERT INTO public.ai_models(model_key, display_name, vendor, default_reasoning_effort)
+        VALUES ('legacy-reasoning', 'Existing model', 'other', 'high');
+      ${migration}
+      INSERT INTO public.ai_models(model_key, display_name, vendor, default_reasoning_effort)
+        SELECT 'reasoning-' || COALESCE(effort, 'unset'), 'Reasoning fixture', 'other', effort
+        FROM unnest(ARRAY['minimal', 'low', 'medium', 'high', 'xhigh', 'max', NULL]::text[]) AS effort;
+      SELECT json_build_object(
+        'legacy', (SELECT json_build_object('name', display_name, 'effort', default_reasoning_effort)
+          FROM public.ai_models WHERE model_key = 'legacy-reasoning'),
+        'levels', (SELECT json_agg(default_reasoning_effort ORDER BY model_key)
+          FROM public.ai_models WHERE model_key LIKE 'reasoning-%'));
+      ROLLBACK;`));
+    assert.deepEqual(stored.legacy, { name: 'Existing model', effort: 'high' });
+    assert.deepEqual(stored.levels, ['high', 'low', 'max', 'medium', 'minimal', null, 'xhigh']);
+    for (const invalid of ['extreme', '', 'MAX']) {
+      await assert.rejects(asOwner(`INSERT INTO public.ai_models(model_key, display_name, vendor, default_reasoning_effort)
+        VALUES ('invalid-reasoning', 'Invalid fixture', 'other', ${quote(invalid)});`), /23514/);
+    }
+  });
+
   await t.test('real vector extension, non-owner roles and administrator predicate', async () => {
     const isolation = JSON.parse(await docker(['inspect', '--format',
       '{"network":{{json .HostConfig.NetworkMode}},"ports":{{json .HostConfig.PortBindings}},"binds":{{json .HostConfig.Binds}},"mounts":{{json .Mounts}},"tmpfs":{{json .HostConfig.Tmpfs}}}',

@@ -1,5 +1,5 @@
 import type { ChatMessage } from '@/types';
-import type { AgentMessageData, AgentPart, AgentRunStatus } from '@/lib/agent/types';
+import type { AgentMessageData, AgentPart, AgentRunStatus, AgentRuntimeInfo } from '@/lib/agent/types';
 
 export type AgentArtifact = Extract<AgentPart, { type: 'artifact' }>;
 export type AgentTool = Extract<AgentPart, { type: 'tool' }>;
@@ -90,9 +90,22 @@ export function getAgentToolState(tool: AgentTool, runStatus: AgentRunStatus) {
 
 /** Tool execution time measured by the durable runtime for the completed attempt. */
 export function formatAgentToolDuration(ms: number): string {
-    if (ms < 1000) return `${Math.max(1, Math.round(ms))} 毫秒`;
+    if (ms < 1) return '不足 1 毫秒';
+    if (ms < 1000) return `${Math.round(ms)} 毫秒`;
     if (ms < 10_000) return `${Math.round(ms / 100) / 10} 秒`;
     return `${Math.round(ms / 1000)} 秒`;
+}
+
+export function getAgentResponseTiming(responses: AgentRuntimeInfo['responses']) {
+    const measured = new Map((responses ?? []).filter(response => typeof response.durationMs === 'number' && Number.isFinite(response.durationMs) && response.durationMs >= 0).map(response => [response.id, response.durationMs!]));
+    return measured.size ? { count: measured.size, durationMs: [...measured.values()].reduce((total, ms) => total + ms, 0) } : null;
+}
+
+/** Wall-clock task spans include human waits and recovery; they are not execute() measurements. */
+export function getAgentTaskSpan(timing: { startedAt?: number; endedAt?: number }) {
+    return typeof timing.startedAt === 'number' && typeof timing.endedAt === 'number' &&
+        Number.isFinite(timing.startedAt) && Number.isFinite(timing.endedAt) && timing.startedAt >= 0 && timing.endedAt >= timing.startedAt
+        ? timing.endedAt - timing.startedAt : null;
 }
 
 export function formatAgentValue(value: unknown): string {

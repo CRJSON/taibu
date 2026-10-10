@@ -9,8 +9,19 @@ function agentReply(body) {
   if(!first)return {content};
   const completed=new Map(messages.filter(message=>message.role==='tool').map(message=>[message.tool_call_id,message.content]));
   const call=(id,name,args)=>({content:null,tool_calls:[{id,type:'function',function:{name,arguments:JSON.stringify(args)}}]});
+  const parallel=body.tools.find(tool=>tool.function?.name==='parallel_analysis');
+  if(String(first.content).includes('多模型协作')&&parallel) {
+    const agents=parallel.function.parameters.properties.tasks.items.properties.agentId.enum;
+    if(!completed.has('fixture-team'))return call('fixture-team','parallel_analysis',{tasks:agents.map(agentId=>({agentId,system:'bazi',question:'Agent验收：协作子分析，男性，1990年1月15日9时，请使用真实工具计算并返回依据。'}))});
+    if(!completed.has('fixture-team-select')) {
+      const artifactIds=[...String(completed.get('fixture-team')).matchAll(/成果 ID: ([a-f0-9-]{36})/giu)].map(match=>match[1]);
+      return call('fixture-team-select','select_final_artifacts',{artifactIds:[...new Set(artifactIds)]});
+    }
+    return {content:'多模型协作离线验收完成。各成员使用独立模型与推理档位，主模型汇总真实计算依据。此回复仅用于测试。'};
+  }
   if(String(first.content).includes('补充信息')&&!completed.has('fixture-ask'))return call('fixture-ask','ask_user',{question:'请补充出生年月日、出生时刻和性别。'});
   if(!completed.has('fixture-bazi'))return call('fixture-bazi','bazi',{gender:'male',birthYear:1990,birthMonth:1,birthDay:15,birthHour:9});
+  if(String(first.content).includes('协作子分析'))return {content:`协作子分析完成；实际模型：${body.model}；实际推理档位：${body.reasoning_effort??body.reasoning?.effort??'off'}。${String(completed.get('fixture-bazi')).match(/成果 ID: [a-f0-9-]{36}/iu)?.[0]??''}。此结论仅用于测试。`};
   if(String(first.content).includes('全体系命盘联动')) {
     const plans = [
       ['bazi', {}], ['ziwei', {gender:'male',birthYear:1990,birthMonth:1,birthDay:15,birthHour:9}],
@@ -79,7 +90,7 @@ http.createServer(async (request, response) => {
     }
     const body = JSON.parse(raw);
     if (body.tools && (body.messages ?? []).some(message => message.role === 'user' && String(message.content).includes('Agent验收：崩溃恢复'))) await delay(3000);
-    const base = { id: 'chatcmpl-local-demo', created: 0, model: 'taibu-demo' };
+    const base = { id: 'chatcmpl-local-demo', created: 0, model: body.model ?? 'taibu-demo' };
     const message=agentReply(body);
     if (body.stream) {
       response.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' });

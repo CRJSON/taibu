@@ -39,6 +39,10 @@ export async function verifyAgentChartWorkspace({ page, newChat, send, waitForRu
   assert.equal(await panel.getByRole('button', { name: '跟随模型', exact: true }).getAttribute('aria-pressed'), 'true');
   await page.reload();
   await selectedTarget(focus).waitFor();
+  const responses = run.message.agent.runtime.responses;
+  assert.ok(responses.length > 0 && responses.every(response => Number.isFinite(response.durationMs) && Number.isFinite(response.startedAt) && Number.isFinite(response.endedAt)), 'the native runtime persists assistant timing through the run API');
+  assert.ok((await page.locator('.agent-message .agent-response-time').innerText()).includes('模型响应'), 'a real history reload displays native assistant time');
+  assert.ok(tools.some(tool => Number.isFinite(tool.durationMs) && Number.isFinite(tool.startedAt) && Number.isFinite(tool.endedAt)), 'completed native tools retain execution and wall-clock measurements');
   assert.ok((await panel.locator('.agent-board-focus').innerText()).includes(focus.caption), 'refresh rebuilds the exact native focus');
   const openChart = async kind => {
     await panel.getByRole('button', { name: /^命盘/ }).click();
@@ -89,6 +93,8 @@ export async function verifyAgentChartWorkspace({ page, newChat, send, waitForRu
   await panel.locator('.agent-board-relations button').first().click();
   assert.ok(await panel.locator('.chart-cell-button[aria-pressed=true]').count() >= 2);
   await page.setViewportSize({ width: 320, height: 740 });
+  const timingBounds = await page.locator('.agent-message .agent-response-time').boundingBox();
+  assert.ok(timingBounds && timingBounds.x >= 0 && timingBounds.x + timingBounds.width <= 320, 'native timing stays within the mobile message width');
   const drawer = page.getByRole('dialog', { name: '任务工作区', exact: true });
   await drawer.waitFor();
   await drawer.locator('[data-chart-target="bazi:cell:2:1"]').click();

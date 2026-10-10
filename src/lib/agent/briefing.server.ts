@@ -77,8 +77,8 @@ export async function generateBriefingAgent(db: SupabaseClient, job: { user_id: 
         const settled = await (await root.submit({ type: 'input', requestId: `briefing:${job.local_date}`, content: `请生成 ${job.local_date} 的早报；当地时区 ${job.timezone}。` }, context)).wait(context);
         if (settled.status !== 'done' || !('answer' in settled)) throw new Error('早报 Agent 未正常完成');
         if (!called.has('almanac') || !called.has('read_saved_chart')) throw new Error('早报缺少实际工具依据');
-        const entry = (await root.entries({ minEntryId: settled.answer, maxEntryId: settled.answer }, 1, undefined, context)).items[0];
-        const answer = entry?.model?.find(message => message.role === 'assistant');
+        const transcript = await root.context(context, { at: settled.answer });
+        const answer = [...transcript.messages].reverse().find(message => message.role === 'assistant');
         if (answer?.stopReason !== 'stop') throw new Error('早报 Agent 回复不完整');
         const text = answer?.content.filter(part => part.type === 'text').map(part => part.text).join('\n') ?? '';
         if (text.trim().length < 20 || text.length > 64000) throw new Error('早报内容为空或无效');

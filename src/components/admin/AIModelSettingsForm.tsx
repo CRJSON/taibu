@@ -399,6 +399,8 @@ export function AIModelSettingsForm({ model, modelDraft, isUpdating, updateModel
                                     <option value="low">Low</option>
                                     <option value="medium">Medium</option>
                                     <option value="high">High</option>
+                                    <option value="xhigh">Extra High</option>
+                                    <option value="max">Max</option>
                                 </select>
                             </div>
                             <div>
@@ -432,7 +434,7 @@ export function AIModelSettingsForm({ model, modelDraft, isUpdating, updateModel
                             className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm font-mono"
                         />
                         <p className="text-[11px] text-foreground-secondary mt-2">
-                            模型专属参数建议放这里，例如 `presence_penalty`、`frequency_penalty`、供应商私有字段。这里会覆盖基础参数，并在“保存模型设置”时统一生效。
+                            模型专属参数在保存后覆盖基础参数；消息、工具、流式模式和输出上限由请求流程管理。
                         </p>
                     </div>
                 </div>

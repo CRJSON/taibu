@@ -25,6 +25,9 @@ export type AgentPart =
       canonicalText?: string;
       /** Tool execution time (durable 1.1.0), shown on completed cards. */
       durationMs?: number;
+      /** Native task wall-clock timestamps, including waits and takeover. */
+      startedAt?: number;
+      endedAt?: number;
     }
   | { type: "source"; id: string; title: string; url: string; content?: string }
   | { type: "question"; id: string; question: string; questions?: AgentQuestion[] }
@@ -51,6 +54,8 @@ export interface AgentMessageData {
 /** Public projection of Pi's active context, never credentials or the full prompt. */
 export interface AgentRuntimeInfo {
   model: { id: string; name: string; contextWindow: number | null; limitSource: "configured" | "unknown" };
+  /** Settled model response measurements; old entries may have no measurements. */
+  responses?: Array<{ id: string; durationMs?: number; startedAt?: number; endedAt?: number }>;
   context?: {
     tokens: number;
     measuredTokens: number;
@@ -68,8 +73,8 @@ export interface AgentRuntimeInfo {
 }
 
 export interface AgentCheckpoint {
-  version: 1 | 2;
-  /** V1 recovery / initial context seed; new runtime history lives in Durable. */
+  version: 2;
+  /** Initial context seed and completed context; execution history lives in Durable. */
   messages: Message[];
   parts: AgentPart[];
   finalArtifacts: string[];
@@ -84,12 +89,10 @@ export interface AgentCheckpoint {
   knowledgeQueries?: Record<string, number>;
   streamingAssistantId?: string;
   runtime?: AgentRuntimeInfo;
-  durable?: {
-    /** Engine generation recorded when the run started; resumed runs keep their marker. */
-    engine: "pi-durable/1.0.4" | "pi-durable/1.1.0";
+  durable: {
+    engine: typeof import('./engine').AGENT_ENGINE;
     seeded?: boolean;
     started?: boolean;
-    legacySettled?: boolean;
     waitingToolId?: string;
     answeredCommands?: number[];
   };
@@ -121,7 +124,7 @@ export interface AgentRunView {
   userMessage?: ChatMessage;
   commandMessageIds?: string[];
   queue?: Array<{ sequence: number; mode: 'steer' | 'follow_up' | 'reply'; message: ChatMessage; revision: number; sortOrder: number; state: 'pending' | 'claimed' | 'admitted' | 'consumed' | 'cancelled' }>;
-  configuration?: { model: string; reasoning: boolean; webEnabled: boolean };
+  configuration?: import('@/lib/chat/model-settings').NextTaskConfiguration;
 }
 
 export interface AgentRunEvent {

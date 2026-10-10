@@ -278,7 +278,8 @@ export type AITransport = 'openai_compatible';
 export type AIRoutingMode = 'auto' | 'newapi' | 'octopus';
 
 /** AI 推理努力等级 */
-export type AIReasoningEffort = 'minimal' | 'low' | 'medium' | 'high';
+export const AI_REASONING_EFFORTS = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const;
+export type AIReasoningEffort = typeof AI_REASONING_EFFORTS[number];
 
 /** AI 推理努力参数序列化方式 */
 export type AIReasoningEffortFormat = 'reasoning_object' | 'reasoning_effort';

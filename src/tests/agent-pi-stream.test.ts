@@ -8,6 +8,9 @@ import {
   type Api,
   type Model,
 } from "@earendil-works/pi-ai";
+import { BACKGROUND_CONTEXT } from '@earendil-works/chord/context';
+import { createGuardedAgentModels } from '../lib/agent/model-registry.server';
+import { generateSummary } from '../lib/agent/summary-usage.server';
 import {
   createPiSDKStream,
   toAgentModelMessages,
@@ -121,6 +124,47 @@ test('source fallback and transient errors share three external attempts; empty 
   stream = createPiSDKStream(config,{reasoning:false})(piModel,context());
   for await(const event of stream) void event;
   assert.equal((await stream.result()).stopReason,'error'); assert.equal(empty.doStreamCalls.length,2);
+});
+
+test('native summary requests retain guarded source fallback and reasoning controls across the SDK bridge', async t => {
+  const sdk = require('../lib/ai/providers/ai-sdk-provider') as typeof import('../lib/ai/providers/ai-sdk-provider');
+  t.mock.method(sdk, 'isModelAvailable', () => true);
+  const primary = new MockLanguageModelV3({ doStream: async () => { throw new Error('server_busy private upstream details'); } });
+  const fallback = mockModel([{ type: 'stream-start', warnings: [] }, { type: 'text-start', id: 'summary' }, { type: 'text-delta', id: 'summary', delta: '保留原盘事实和引用来源' }, { type: 'text-end', id: 'summary' }, { type: 'finish', finishReason: { unified: 'stop', raw: 'stop' }, usage }]);
+  const requested: Array<{ url: string; reasoning: boolean | undefined }> = [];
+  t.mock.method(sdk, 'createModelFromConfig', (source: AIModelConfig, options?: Parameters<typeof sdk.createModelFromConfig>[1]) => { requested.push({ url: source.apiUrl, reasoning: options?.reasoning }); return source.apiUrl.includes('first') ? primary : fallback; });
+  const routed = { ...config, sources: [{ sourceKey: 'first', sourceName: 'first', apiUrl: 'https://first.example/v1', apiKeyEnvVar: 'KEY' }, { sourceKey: 'second', sourceName: 'second', apiUrl: 'https://second.example/v1', apiKeyEnvVar: 'KEY' }] };
+  const nativeModel = { ...piModel, name: 'fixture', reasoning: true, input: ['text', 'image'], maxTokens: 4096, contextWindow: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } } as Model<Api>;
+  let checks = 0;
+  const models = createGuardedAgentModels(nativeModel, createPiSDKStream(routed, { reasoning: true, resolveImages: async () => { throw new Error('summary must remain text-only'); } }), async () => { checks++; });
+  const result = await generateSummary({ models }, nativeModel, [{ role: 'user', content: '目标与已确认资料', timestamp: 1 }], BACKGROUND_CONTEXT);
+  assert.equal(result.summary, '保留原盘事实和引用来源');
+  assert.equal(checks, 1);
+  assert.deepEqual(requested, [{ url: 'https://first.example/v1', reasoning: false }, { url: 'https://second.example/v1', reasoning: false }]);
+  assert.equal(fallback.doStreamCalls[0].maxOutputTokens, 2000);
+  assert.equal(result.usage.totalTokens, 8);
+});
+
+test('SDK bridge uses Pi retry classification before output and passes xhigh/max without retrying quota exhaustion', async t => {
+  const sdk = require('../lib/ai/providers/ai-sdk-provider') as typeof import('../lib/ai/providers/ai-sdk-provider');
+  t.mock.method(sdk, 'isModelAvailable', () => true);
+  const optionsModel = mockModel([{ type: 'stream-start', warnings: [] }, { type: 'text-start', id: 'answer' }, { type: 'text-delta', id: 'answer', delta: '完整回答' }, { type: 'text-end', id: 'answer' }, { type: 'finish', finishReason: { unified: 'stop', raw: 'stop' }, usage }]);
+  t.mock.method(sdk, 'createModelFromConfig', () => optionsModel);
+  for (const effort of ['xhigh', 'max'] as const) {
+    const result = await createPiSDKStream({ ...config, reasoningEffortFormat: 'reasoning_effort' }, { reasoning: true })({ ...piModel, reasoning: true }, context(), { reasoning: effort }).result();
+    assert.equal(result.stopReason, 'stop');
+    assert.equal(optionsModel.doStreamCalls.at(-1)!.providerOptions?.openai?.reasoningEffort, effort === 'max' ? undefined : effort);
+  }
+  for (const [error, expected] of [[new Error('server_busy'), 3], [Object.assign(new Error('connection reset'), { code: 'ECONNRESET' }), 3], [new Error('ECONNRESET'), 3], [Object.assign(new Error('insufficient_quota'), { statusCode: 429 }), 1]] as const) {
+    const failed = new MockLanguageModelV3({ doStream: async () => { throw error; } });
+    t.mock.method(sdk, 'createModelFromConfig', () => failed);
+    assert.equal((await createPiSDKStream(config, { reasoning: false })(piModel, context()).result()).stopReason, 'error');
+    assert.equal(failed.doStreamCalls.length, expected);
+  }
+  const retryableFinish = mockModel([{ type: 'stream-start', warnings: [] }, { type: 'finish', finishReason: { unified: 'error', raw: 'error' }, usage }]);
+  t.mock.method(sdk, 'createModelFromConfig', () => retryableFinish);
+  assert.equal((await createPiSDKStream(config, { reasoning: false })(piModel, context()).result()).stopReason, 'error');
+  assert.equal(retryableFinish.doStreamCalls.length, 3);
 });
 
 test("Pi StreamFn uses one SDK request and preserves text, reasoning signatures and tool arguments", async (t) => {

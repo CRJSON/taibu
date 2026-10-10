@@ -56,6 +56,8 @@ import { AgentQuestionDialog } from '@/components/chat/agent/AgentQuestionDialog
 import { AgentMessage } from '@/components/chat/AgentMessage';
 import { AgentWorkspacePanel } from '@/components/chat/agent/AgentWorkspacePanel';
 import { AgentResultContext } from '@/components/chat/agent/AgentResultContext';
+import { ModelSelector } from '@/components/ui/ModelSelector';
+import { AgentContextDetails } from '@/components/chat/agent/AgentContextUsage';
 import { getAgentChart } from '@/lib/agent/tool-presentation';
 import { getChartTargets } from '@/lib/agent/chart-interaction';
 const initialToolParts = AGENT_TOOL_FIXTURE_PARTS;
@@ -63,8 +65,20 @@ function AgentResultsProbe() {
   const [open, setOpen] = useState(false);
   const [request, setRequest] = useState(undefined);
   const [parts, setParts] = useState(initialToolParts);
+  const [runtime, setRuntime] = useState(undefined);
   const { user } = useSessionSafe();
-  const data = { version: 1, runId: 'ui-results', status: 'completed', parts };
+  const data = { version: 1, runId: 'ui-results', status: 'completed', parts, runtime };
+  window.fixture.agentTiming = () => {
+    setRuntime(JSON.parse(JSON.stringify({ responses: [{ id: 'reply-1', durationMs: 1500 }, { id: 'reply-2', durationMs: 500 }] })));
+    setParts(previous => JSON.parse(JSON.stringify(previous.map(tool => tool.id === initialToolParts.find(part => part.name === 'bazi').id ? { ...tool, durationMs: 1500, startedAt: 1000, endedAt: 6000 } : tool))));
+  };
+  window.fixture.collaborationResults = completed => setParts(previous => [...previous.filter(part => part.id !== 'collaboration'), {
+    ...initialToolParts[0], id: 'collaboration', name: 'parallel_analysis', title: '协作分析', status: completed ? 'completed' : 'running',
+    output: JSON.parse(JSON.stringify({ analyses: [
+      { system: 'bazi', conversationId: 10, name: '八字分析', modelName: '分析模型', status: 'completed', answer: '已核对天干与日支。' },
+      { system: 'bazi', conversationId: 11, name: '独立复核', modelName: '复核模型', status: completed ? 'completed' : 'running', ...(completed ? { answer: '生克关系复核完成。' } : {}) },
+    ] })),
+  }]);
   window.fixture.chartTargets = kind => getChartTargets(getAgentChart(parts.find(tool => tool.name === kind)));
   window.fixture.chartFocus = (kind, ids, caption, savedReference) => {
     const original = parts.find(tool => tool.name === kind);
@@ -131,6 +145,9 @@ function AgentChatProbe() {
     refreshViewerState: async () => {}, markViewerCreditsExhausted() {}, showToast: (...args) => { window.fixture.agentToasts.push(args); }, router, searchParams });
   window.fixture.agentChat = { state, messaging };
   return <section data-testid="agent-chat"><input aria-label="Agent fixture draft" value={state.inputValue} onChange={event => state.setInputValue(event.target.value)} />
+    <ModelSelector selectedModel={state.selectedModel} onModelChange={state.setSelectedModel} reasoningEnabled={state.reasoningEnabled} onReasoningChange={state.setReasoningEnabled}
+      reasoningEffort={state.reasoningEffort} onReasoningEffortChange={state.setReasoningEffort} collaborators={state.collaborators} onCollaboratorsChange={state.setCollaborators}
+      userId={user?.id} membershipType="plus" contextDetails={<AgentContextDetails runtime={messaging.agent.run?.message.agent?.runtime} />} toolbarStyle />
     <output data-testid="agent-status">{messaging.agent.run?.status ?? 'none'}</output>
     <output data-testid="agent-messages">{JSON.stringify(state.messages)}</output></section>;
 }
@@ -473,6 +490,7 @@ export async function run(existingPage, bundlePath) {
   });
   const bundle = await readFile(bundlePath, 'utf8');
   const requests = [];
+  const configurations = new Map();
   const blocked = [];
   const browserErrors = [];
   const queryWarnings = [];
@@ -549,6 +567,15 @@ export async function run(existingPage, bundlePath) {
       return route.fulfill({ status: 200, contentType: 'application/json', body: payload }).catch(() => {});
     };
     const denied = () => route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ data: null, error: { message: 'Controlled fixture failure' } }) });
+    if (url.pathname === '/api/app/bootstrap' && method === 'GET') return ok({ viewerLoaded: true,
+      viewerSummary: { userId: await page.evaluate(() => window.fixtureAuth.cookieUser), isAdmin: false, nickname: 'fixture', membership: 'plus', aiChatCount: 20 },
+      membership: { type: 'plus', isActive: true }, featureToggles: {}, featureTogglesLoaded: true, unreadCount: 0, unreadCountLoaded: true });
+    if (url.pathname === '/api/models' && method === 'GET') return ok({ models: [
+      { id: 'fixture-analysis', name: '分析模型', vendor: 'other', supportsReasoning: true, reasoningEffortFormat: 'reasoning_effort', allowed: true, reasoningAllowed: true },
+      { id: 'fixture-review', name: '复核模型', vendor: 'other', supportsReasoning: true, reasoningEffortFormat: 'reasoning_object', allowed: true, reasoningAllowed: true },
+      { id: 'fixture-denied', name: '受限模型', vendor: 'other', supportsReasoning: true, allowed: false, blockedReason: '会员限制', reasoningAllowed: false },
+      { id: 'fixture-toggle', name: '仅支持推理开关', vendor: 'other', supportsReasoning: true, allowed: true, reasoningAllowed: true },
+    ] });
     if (['/api/user/settings','/api/reminders','/api/user/agent-memory'].includes(url.pathname)) {
       const cookieUser = await page.evaluate(() => window.fixtureAuth.cookieUser);
       if (request.headers()['x-expected-user-id'] && request.headers()['x-expected-user-id'] !== cookieUser) {
@@ -631,7 +658,10 @@ export async function run(existingPage, bundlePath) {
       return ok(payload).catch(() => {}); // An intentionally aborted old-account request may be closed.
     }
     if (/^\/api\/conversations\/[^/]+\/configuration$/.test(url.pathname)) {
-      return ok(method === 'GET' ? { configuration: null } : { saved: true });
+      const user = await page.evaluate(() => window.fixtureAuth.cookieUser);
+      const key = user + ':' + url.pathname;
+      if (method === 'PATCH') configurations.set(key, body);
+      return ok(method === 'GET' ? { configuration: configurations.get(key) ?? null } : { saved: true });
     }
     const conversation = url.pathname.match(/^\/api\/conversations\/([^/]+)$/);
     if (conversation) {
@@ -835,20 +865,27 @@ export async function run(existingPage, bundlePath) {
     check('Create draft survives controlled form hide/reopen', await page.getByPlaceholder('deepseek-v3.2', { exact: true }).inputValue() === '  created-fixture  ');
     await creation.locator('select').nth(2).selectOption('octopus');
     check('Actual create form couples fixed routing to primary gateway', await creation.locator('select').nth(3).inputValue() === 'octopus');
+    await creation.getByRole('checkbox', { name: '支持推理', exact: true }).check();
+    await creation.getByRole('button', { name: '高级设置', exact: true }).click();
+    await creation.locator('select').filter({ has: page.locator('option[value="max"]') }).selectOption('max');
     await page.getByRole('button', { name: '创建模型', exact: true }).click();
     await page.getByText('Created Fixture', { exact: true }).waitFor();
     const created = requests.find(item => item.pathname === '/api/admin/ai-models' && item.method === 'POST');
     check('Actual create handler submits trimmed identity and preserved defaults', created?.body.modelKey === 'created-fixture' && created.body.primaryGatewayKey === 'octopus' && created.body.defaultTemperature === 0.7 && created.body.defaultTopP === null);
+    check('Actual create form submits the native maximum reasoning level', created.body.defaultReasoningEffort === 'max');
     await page.getByText('Fixture Model', { exact: true }).click();
     await page.getByRole('button', { name: '保存模型设置', exact: true }).waitFor();
     const modelInput = page.locator('[data-testid="models"] input[type="text"]').filter({ visible: true });
     await modelInput.nth(1).fill('Edited Fixture Model');
+    const effortSelect = page.locator('[data-testid="models"] select').filter({ has: page.locator('option[value="xhigh"]') }).filter({ visible: true });
+    await effortSelect.selectOption('xhigh');
     await page.getByText('Fixture Model', { exact: true }).click();
     await page.getByText('Fixture Model', { exact: true }).click();
     check('Edit draft survives collapsing the controlled model view', await modelInput.nth(1).inputValue() === 'Edited Fixture Model');
     await page.getByRole('button', { name: '保存模型设置', exact: true }).click();
     await page.getByText('Edited Fixture Model', { exact: true }).waitFor();
     check('Actual edit form persists controlled model draft', requests.some(item => item.pathname === '/api/admin/ai-models/model-1' && item.method === 'PATCH' && item.body.displayName === 'Edited Fixture Model'));
+    check('Actual edit form saves and restores extra-high reasoning', requests.some(item => item.pathname === '/api/admin/ai-models/model-1' && item.method === 'PATCH' && item.body.defaultReasoningEffort === 'xhigh') && await effortSelect.inputValue() === 'xhigh');
     await modelInput.nth(1).fill('Unsaved model while editing source');
     await page.getByRole('button', { name: '添加备用来源', exact: true }).click();
     await page.getByPlaceholder('留空则跟随模型 ID（fixture-model）', { exact: true }).fill(' upstream-fixture ');
@@ -1363,6 +1400,69 @@ export async function run(existingPage, bundlePath) {
       await page.evaluate(async () => { window.fixtureAgentIO.held.shift()(); await window.fixture.agentSend; });
       await renderBarrier();
     };
+    await selectAgentConversation('agent-settings');
+    const settingsTrigger = page.locator('[data-testid="agent-chat"]').getByRole('button', { name: /^选择模型：/ });
+    await settingsTrigger.click();
+    const modelSettings = page.getByRole('dialog', { name: '模型与分析设置', exact: true });
+    await modelSettings.waitFor();
+    check('Model settings retain disabled membership choices', await modelSettings.getByRole('menuitemradio', { name: /受限模型/ }).isDisabled());
+    await modelSettings.getByRole('menuitemradio', { name: '分析模型', exact: true }).focus();
+    await page.keyboard.press('End');
+    check('Model keyboard navigation skips disabled models', await modelSettings.getByRole('menuitemradio', { name: '仅支持推理开关', exact: true }).evaluate(button => button === document.activeElement));
+    await modelSettings.getByRole('menuitemradio', { name: '仅支持推理开关', exact: true }).click();
+    await settingsTrigger.click();
+    check('Models with only a reasoning switch do not offer unsupported effort levels', await modelSettings.getByLabel('推理档位', { exact: true }).locator('option').count() === 2);
+    await modelSettings.getByRole('menuitemradio', { name: '分析模型', exact: true }).click();
+    await settingsTrigger.click();
+    await modelSettings.getByLabel('推理档位', { exact: true }).selectOption('max');
+    await modelSettings.locator('.chat-collaboration-settings > summary').click();
+    await modelSettings.getByLabel('启用多模型协作', { exact: true }).check();
+    await modelSettings.getByLabel('Agent 1 名称', { exact: true }).fill('八字分析');
+    await modelSettings.getByLabel('Agent 1 分工', { exact: true }).fill('核对天干、日支与生克关系');
+    await modelSettings.getByLabel('Agent 1 推理档位', { exact: true }).selectOption('high');
+    await modelSettings.getByLabel('Agent 2 名称', { exact: true }).fill('跨术数复核');
+    await modelSettings.getByLabel('Agent 2 模型', { exact: true }).selectOption('fixture-review');
+    const settingsSaved = page.waitForResponse(response => response.request().method() === 'PATCH' && new URL(response.url()).pathname === '/api/conversations/agent-settings/configuration' && response.request().postDataJSON()?.collaborators?.[1]?.reasoningEffort === 'xhigh');
+    await modelSettings.getByLabel('Agent 2 推理档位', { exact: true }).selectOption('xhigh');
+    await modelSettings.getByLabel('上下文用量', { exact: true }).click();
+    check('Context, reasoning and collaborators share the model dialog', await modelSettings.locator('.agent-context-details[open]').count() === 1 && await modelSettings.getByLabel('推理档位', { exact: true }).inputValue() === 'max');
+    await page.keyboard.press('Escape');
+    check('Closing the combined settings dialog restores model trigger focus', await settingsTrigger.evaluate(button => button === document.activeElement));
+    await until(() => window.fixture.agentChat.state.collaborators[1]?.reasoningEffort === 'xhigh');
+    assert.ok((await settingsSaved).ok());
+    // Switching away and back reloads the saved whole configuration, rather than sharing a mutable running-task config.
+    await selectAgentConversation('agent-settings-other');
+    await page.evaluate(() => { window.fixture.agentChat.state.setReasoningEffort('low'); window.fixture.agentChat.state.setCollaborators([]); });
+    await selectAgentConversation('agent-settings');
+    await until(() => window.fixture.agentChat.state.reasoningEffort === 'max' && window.fixture.agentChat.state.collaborators.length === 2);
+    check('Conversation settings restore each collaborator model, effort and focus', await page.evaluate(() => {
+      const { collaborators } = window.fixture.agentChat.state;
+      return collaborators[0].model === 'fixture-analysis' && collaborators[0].reasoningEffort === 'high' && collaborators[0].focus.includes('日支') && collaborators[1].model === 'fixture-review' && collaborators[1].reasoningEffort === 'xhigh';
+    }));
+    await page.evaluate(async () => window.fixture.agentChat.messaging.agent.start('agent-byok', {
+      id: 'byok-message', role: 'user', content: 'Direct model task', createdAt: '2026-10-10T00:00:00Z',
+    }, { model: 'direct-model', reasoning: true, mentions: [], provider: {
+      apiUrl: 'https://fixture-direct.invalid/v1', apiKey: 'fixture-only', modelId: 'direct-model',
+    } }));
+    check('Direct model tasks omit platform collaborators while retaining saved platform settings', await page.evaluate(() => {
+      const request = window.fixtureAgentIO.requests.find(item => item.method === 'POST' && item.url === '/api/agent/runs' && item.body.conversationId === 'agent-byok');
+      return request.body.customProvider.modelId === 'direct-model' && request.body.collaborators.length === 0 && window.fixture.agentChat.state.collaborators.length === 2;
+    }));
+    await page.getByRole('button', { name: 'Fixture Bob', exact: true }).click();
+    await until(() => window.fixture.agentChat.state.collaborators.length === 0 && window.fixture.agentChat.state.reasoningEffort === null);
+    check('Account changes clear previous-user collaborator names, focus and reasoning choices', await page.evaluate(() => window.fixture.agentChat.state.collaborators.length === 0 && window.fixture.agentChat.state.reasoningEffort === null));
+    await page.getByRole('button', { name: 'Fixture Alice', exact: true }).click();
+    await selectAgentConversation('agent-settings-other');
+    await selectAgentConversation('agent-settings');
+    await until(() => window.fixture.agentChat.state.collaborators.length === 2);
+    await settingsTrigger.click();
+    await modelSettings.locator('.chat-collaboration-settings > summary').click();
+    await modelSettings.getByRole('button', { name: '添加 Agent', exact: true }).click();
+    await modelSettings.getByRole('button', { name: '添加 Agent', exact: true }).click();
+    check('Collaboration supports four independently configurable members and a bounded limit', await modelSettings.locator('fieldset.chat-collaborator').count() === 4 && await modelSettings.getByRole('button', { name: '添加 Agent', exact: true }).isDisabled());
+    await modelSettings.getByLabel('启用多模型协作', { exact: true }).uncheck();
+    await page.keyboard.press('Escape');
+    await page.evaluate(() => window.fixture.agentChat.state.setReasoningEffort(null));
     await selectAgentConversation('agent-a', 'running');
     await page.getByLabel('Agent fixture draft').fill('supplement for A');
     await sendHeldAgent();
@@ -1460,7 +1560,12 @@ export async function run(existingPage, bundlePath) {
     check('Unmount cancels all nonterminal Agent event readers', await page.evaluate(() => window.fixtureAgentIO.streams.every(stream => stream.closed)));
 
 
-    const callsBeforeResults = requests.length;
+    await until(() => window.fixture.client.isFetching() === 0);
+    await renderBarrier();
+    // Provider focus refreshes may read bootstrap/settings while these local chart interactions run.
+    // Count all writes and other reads so chart loading, recalculation and persistence still fail this check.
+    const resultOperations = () => requests.filter(request => !(request.method === 'GET' && ['/api/app/bootstrap', '/api/user/settings'].includes(request.pathname))).length;
+    const callsBeforeResults = resultOperations();
     await page.getByRole('button', { name: 'Fixture Alice', exact: true }).focus();
     await page.evaluate(() => window.fixture.mount.results(true));
     const results = page.locator('[data-testid="agent-results"]');
@@ -1468,6 +1573,15 @@ export async function run(existingPage, bundlePath) {
     await results.locator('[data-chart-kind="almanac"]').waitFor();
     check('All eleven real persisted tool results automatically render with the process folded', await results.locator('[data-chart-kind]').count() === 11 && await results.getByRole('button', { name: /任务过程/ }).getAttribute('aria-expanded') === 'false');
     check('Automatic chart previews do not steal focus', await page.getByRole('button', { name: 'Fixture Alice', exact: true }).evaluate(button => button === document.activeElement));
+    check('Legacy history with no native measurement does not invent response time', await results.locator('.agent-response-time').count() === 0);
+    await page.evaluate(() => window.fixture.agentTiming());
+    await results.locator('.agent-response-time').waitFor();
+    check('Persisted model response measurements survive a JSON history receipt', await results.locator('.agent-response-time').innerText() === '模型响应 2 秒 · 2 次');
+    await results.getByRole('button', { name: /任务过程/ }).click();
+    const timedTool = results.locator('.agent-tool-card').filter({ has: page.locator('.agent-tool-time') });
+    await timedTool.locator('summary').click();
+    check('Tool execution and the wall-clock span remain separately labeled', await timedTool.locator('.agent-tool-time').innerText() === '1.5 秒' && await timedTool.locator('.agent-task-span').innerText() === '执行阶段 5 秒（包含等待和恢复）');
+    await results.getByRole('button', { name: /任务过程/ }).click();
     check('Slim Ziwei results render all twelve returned palaces', await results.locator('[data-chart-kind="ziwei"] [role="button"]').count() === 12);
     const baziResult = results.locator('[data-tool-result="bazi"]');
     await baziResult.getByRole('button', { name: '展开命盘', exact: true }).click();
@@ -1485,7 +1599,7 @@ export async function run(existingPage, bundlePath) {
     await page.getByRole('button', { name: '关闭任务工作区', exact: true }).click();
     await results.getByRole('button', { name: '恢复已有成果标签', exact: true }).click();
     await page.locator('#agent-workspace-panel [data-chart-kind="bazi"]').waitFor();
-    check('A restored saved-artifact tab uses the same persisted reading without chart loading or recalculation', requests.length === callsBeforeResults && await page.getByRole('tab', { name: '已保存八字', exact: true }).count() === 1);
+    check('A restored saved-artifact tab uses the same persisted reading without chart loading or recalculation', resultOperations() === callsBeforeResults && await page.getByRole('tab', { name: '已保存八字', exact: true }).count() === 1);
     await page.getByRole('button', { name: '关闭任务工作区', exact: true }).click();
     await results.locator('[data-tool-result="tarot"]').getByRole('button', { name: '固定到工作区', exact: true }).click();
     check('Workspace supports multiple pinned readings without replacing their data', await page.getByRole('tab', { name: '八字命盘', exact: true }).count() === 1 && await page.locator('#agent-workspace-panel [data-chart-kind="tarot"]').count() === 1);
@@ -1565,7 +1679,14 @@ export async function run(existingPage, bundlePath) {
     await page.evaluate(() => window.fixture.mount.results(true));
     await results.locator('[data-chart-kind="tarot"]').waitFor();
     await results.locator('[data-chart-kind="almanac"]').waitFor();
-    check('History remount restores all eleven UI readings without new API operations', requests.length === callsBeforeResults && await results.locator('[data-chart-kind]').count() === 11);
+    check('History remount restores all eleven UI readings without new API operations', resultOperations() === callsBeforeResults && await results.locator('[data-chart-kind]').count() === 11);
+    await page.evaluate(() => window.fixture.collaborationResults(false));
+    const collaboration = results.getByRole('region', { name: '协作分析', exact: true });
+    await collaboration.waitFor();
+    check('Collaborator models and live progress remain visible when the task process is folded', await results.getByRole('button', { name: /任务过程/ }).getAttribute('aria-expanded') === 'false' && await collaboration.innerText().then(text => text.includes('分析模型') && text.includes('复核模型') && text.includes('分析中')));
+    await page.evaluate(() => window.fixture.collaborationResults(true));
+    await collaboration.locator('details').last().locator('summary').click();
+    check('Completed collaborator analysis survives JSON history and can be expanded', await collaboration.innerText().then(text => !text.includes('分析中') && text.includes('生克关系复核完成。')) && resultOperations() === callsBeforeResults);
     await page.evaluate(() => window.fixture.mount.results(false));
 
     check('No unhandled network requests escaped fixtures', blocked.length === 0);

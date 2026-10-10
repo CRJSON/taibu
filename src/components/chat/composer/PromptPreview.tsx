@@ -13,6 +13,7 @@ import { X } from 'lucide-react';
 import { FloatingPanel } from '@/components/ui/FloatingPanel';
 
 interface PromptPreviewProps {
+    embedded?: boolean;
     promptPreviewLoading: boolean;
     hasPromptDiagnostics: boolean;
     promptDiagnosticsOpen: boolean;
@@ -28,6 +29,7 @@ interface PromptPreviewProps {
 }
 
 export function PromptPreview({
+    embedded = false,
     promptPreviewLoading,
     hasPromptDiagnostics,
     promptDiagnosticsOpen,
@@ -43,6 +45,30 @@ export function PromptPreview({
 }: PromptPreviewProps) {
     const triggerRef = useRef<HTMLButtonElement>(null);
     const id = useId();
+    const statistics = <>
+        <div className="flex items-center justify-between font-medium text-foreground-secondary">
+            <span>提示词使用</span><span className="tabular-nums">{promptPreviewTokens} / {promptPreviewBudget}</span>
+        </div>
+        <div className="w-full bg-border/50 h-1 rounded-full mt-1.5 mb-2 overflow-hidden">
+            <div className="h-full bg-accent transition-all duration-300" style={{ width: `${promptProgressPercent}%` }} />
+        </div>
+        <div className="mt-2 max-h-40 overflow-auto space-y-1">
+            {displayUserMessageTokens > 0 && <div className="flex items-center justify-between gap-2">
+                <span className="truncate text-foreground">P2 · 用户前缀</span><span className="tabular-nums text-foreground-secondary">{displayUserMessageTokens}</span>
+            </div>}
+            {groupPromptLayers(displayLayers).map(layer => <div key={layer.id} className="flex items-center justify-between gap-2">
+                <span className={`truncate ${layer.included ? 'text-foreground' : 'text-muted-foreground line-through'}`}>
+                    {layer.priority ? `${layer.priority} · ` : ''}
+                    {!layer.included && layer.reason && <span className="text-xs no-underline mr-1">({layer.reason === 'budget_exceeded' ? '超出' : layer.reason === 'empty' ? '空' : '重复'})</span>}
+                    {formatLayerLabel(layer.id)}
+                </span><span className="tabular-nums text-foreground-secondary">{layer.tokens}</span>
+            </div>)}
+        </div>
+    </>;
+    if (embedded) return <details className="agent-context-details">
+        <summary aria-label="上下文用量"><span>上下文</span><span>{promptPreviewLoading ? '加载中' : `${contextProgressPercent}%`}</span></summary>
+        <div className="text-xs">{hasPromptDiagnostics ? statistics : <p className="chat-model-note">发送消息后显示上下文统计。</p>}</div>
+    </details>;
     return (
         <div className="relative group">
             <button
@@ -90,47 +116,8 @@ export function PromptPreview({
                     : `上下文 ${contextProgressPercent}% | ${promptUsageLabel}`}
             </div>
             <FloatingPanel open={hasPromptDiagnostics && promptDiagnosticsOpen} anchorRef={triggerRef} onClose={() => setPromptDiagnosticsOpen(false)} id={id} label="提示词使用情况" role="dialog" side="top" align="end" className="w-72 px-3 py-2 text-xs">
-                        <div className="flex items-center justify-between font-medium text-foreground-secondary">
-                            <span>提示词使用</span>
-                            <button type="button" aria-label="关闭提示词统计" onClick={() => setPromptDiagnosticsOpen(false)}><X size={14} /></button>
-                            <span className="tabular-nums">
-                                {promptPreviewTokens} / {promptPreviewBudget}
-                            </span>
-                        </div>
-                        <div className="w-full bg-border/50 h-1 rounded-full mt-1.5 mb-2 overflow-hidden">
-                            <div
-                                className="h-full bg-accent transition-all duration-300"
-                                style={{ width: `${promptProgressPercent}%` }}
-                            />
-                        </div>
-                        <div className="mt-2 max-h-40 overflow-auto space-y-1">
-                            {displayUserMessageTokens > 0 && (
-                                <div className="flex items-center justify-between gap-2">
-                                    <span className="truncate text-foreground">
-                                        P2 · 用户前缀
-                                    </span>
-                                    <span className="tabular-nums text-foreground-secondary">
-                                        {displayUserMessageTokens}
-                                    </span>
-                                </div>
-                            )}
-                            {groupPromptLayers(displayLayers).map((layer) => (
-                                <div key={layer.id} className="flex items-center justify-between gap-2">
-                                    <span className={`truncate ${layer.included ? 'text-foreground' : 'text-muted-foreground line-through'}`}>
-                                        {layer.priority ? `${layer.priority} · ` : ''}
-                                        {!layer.included && layer.reason && (
-                                            <span className="text-xs no-underline mr-1">
-                                                ({layer.reason === 'budget_exceeded' ? '超出' : layer.reason === 'empty' ? '空' : '重复'})
-                                            </span>
-                                        )}
-                                        {formatLayerLabel(layer.id)}
-                                    </span>
-                                    <span className="tabular-nums text-foreground-secondary">
-                                        {layer.tokens}
-                                    </span>
-                                </div>
-                            ))}
-                        </div>
+                        <button type="button" aria-label="关闭提示词统计" onClick={() => setPromptDiagnosticsOpen(false)}><X size={14} /></button>
+                        {statistics}
             </FloatingPanel>
         </div>
     );

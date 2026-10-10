@@ -156,6 +156,10 @@ export default function ChatPage() {
                 onModelChange={state.setSelectedModel}
                 reasoningEnabled={state.reasoningEnabled}
                 onReasoningChange={state.setReasoningEnabled}
+                reasoningEffort={state.reasoningEffort}
+                onReasoningEffortChange={state.setReasoningEffort}
+                collaborators={state.collaborators}
+                onCollaboratorsChange={state.setCollaborators}
                 customProviderActive={state.customProviderActive}
                 customProviderLabel={state.customProviderLabel}
                 userId={userId}

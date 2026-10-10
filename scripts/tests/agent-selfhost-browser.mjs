@@ -8,6 +8,7 @@ import { chromium } from "playwright";
 import { verifyAgentExperience } from './agent-experience-browser.mjs';
 import { verifyAgentDomain } from './agent-domain-browser.mjs';
 import { verifyAgentChartWorkspace } from './agent-chart-browser.mjs';
+import { createCollaborationFixture, verifyAgentCollaboration } from './agent-collaboration-browser.mjs';
 import {
   ROOT,
   validateConfig,
@@ -45,8 +46,11 @@ const outside = [],
   failures = [];
 const created = [];
 const chartOnly = process.argv.includes('--chart-only');
+const collaborationOnly = process.argv.includes('--collaboration-only');
 let page;
+let collaborationFixture;
 try {
+  if (!chartOnly) collaborationFixture = await createCollaborationFixture(config);
   const context = await browser.newContext({
     viewport: { width: 1440, height: 1100 },
     timezoneId: 'America/New_York',
@@ -152,7 +156,7 @@ try {
   );
   assert.ok((await context.cookies()).some((cookie) => cookie.httpOnly));
 
-  if (!chartOnly) {
+  if (!chartOnly && !collaborationOnly) {
   await uiReady();
   const chatBeforeSettings = page.url();
   await page.getByRole('link', { name: '个性化', exact: true }).click();
@@ -259,7 +263,7 @@ try {
   await page.screenshot({ path: path.join(directory, 'agent-empty-acceptance.png'), fullPage: true });
 
   const initial = await credits();
-  assert.ok(initial >= 7, 'browser acceptance requires seven chat uses; supply an isolated account with --account');
+  assert.ok(initial >= 8, 'browser acceptance requires eight chat uses; supply an isolated account with --account');
   const first = await send("Agent验收：跨命盘对比，请排盘并在聊天中分析。");
   await page.goto(`${config.APP_ORIGIN}/chat?id=${first.run.conversationId}`);
   const finished = await waitForRun(first.run.id, "completed");
@@ -282,18 +286,19 @@ try {
   assert.ok(finished.message.content.includes('Agent 离线验收'));
   assert.ok(finished.message.agent.runtime.context.tokens > 0, 'Pi projects the real active transcript');
   assert.equal(finished.message.agent.runtime.model.contextWindow, null, 'unconfigured models have no invented capacity');
-  await page.getByRole('button', { name: '上下文用量', exact: true }).click();
-  const usagePanel = page.getByRole('dialog', { name: 'Pi 上下文统计', exact: true });
+  const modelTrigger = page.getByRole('button', { name: /^选择模型：/ });
+  await modelTrigger.click();
+  const usagePanel = page.getByRole('dialog', { name: '模型与分析设置', exact: true });
   await usagePanel.waitFor();
+  await usagePanel.getByLabel('上下文用量', { exact: true }).click();
   assert.ok((await usagePanel.innerText()).includes('容量未知'));
-  assert.ok(await page.locator('.agent-context-usage').getAttribute('data-context-source') !== 'unavailable');
+  assert.ok(await usagePanel.locator('.agent-context-details').getAttribute('data-context-source') !== 'unavailable');
   await page.screenshot({ path: path.join(directory, 'agent-context-acceptance.png'), fullPage: true });
   await page.keyboard.press('Escape');
-  assert.ok(await page.getByRole('button', { name: '上下文用量', exact: true }).evaluate(element => element === document.activeElement), 'closing context details restores its trigger focus');
-  const contextBounds = await page.getByRole('button', { name: '上下文用量', exact: true }).boundingBox();
+  assert.ok(await modelTrigger.evaluate(element => element === document.activeElement), 'closing model settings restores its trigger focus');
   const modelBounds = await page.getByRole('button', { name: /^选择模型：/ }).boundingBox();
   const sendBounds = await page.getByRole('button', { name: '发送消息', exact: true }).boundingBox();
-  assert.ok(contextBounds && modelBounds && sendBounds && contextBounds.x < modelBounds.x && modelBounds.x < sendBounds.x, 'context and model controls precede Send on the right');
+  assert.ok(modelBounds && sendBounds && modelBounds.x < sendBounds.x, 'model settings precede Send on the right');
   const toolsTrigger = page.getByRole('button', { name: '更多选项', exact: true });
   await toolsTrigger.click();
   await page.getByRole('menu', { name: '更多选项', exact: true }).waitFor();
@@ -559,7 +564,6 @@ try {
   assert.ok(await page.locator('.chat-composer-toolbar').evaluate(element => [...element.querySelectorAll('button')]
     .filter(button => button.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true }))
     .every(button => { const bounds = button.getBoundingClientRect(); return bounds.left >= 0 && bounds.right <= window.innerWidth + 1; })), 'every visible composer control fits at 320px');
-  const modelTrigger = page.getByRole('button', { name: /^选择模型：/ });
   await modelTrigger.click();
   const modelMenu = page.locator('.chat-model-menu');
   await modelMenu.waitFor();
@@ -760,11 +764,12 @@ try {
   console.log('聊天阅读：普通与虚拟列表的阅读位置恢复、回到最新通过。');
   await verifyAgentDomain({ page, context, origin: config.APP_ORIGIN, output: path.join(ROOT,'output','playwright') });
   }
-  await verifyAgentChartWorkspace({ page, newChat, send, waitForRun, credits, output: directory });
+  if (!collaborationOnly) await verifyAgentChartWorkspace({ page, newChat, send, waitForRun, credits, output: directory });
+  if (collaborationFixture) await verifyAgentCollaboration({ page, newChat, send, waitForRun, credits, output: directory, fixture: collaborationFixture });
   assert.deepEqual(outside, []);
   assert.deepEqual(errors, []);
   assert.deepEqual(failures, []);
-  console.log(chartOnly ? '命盘专项通过；浏览器无外部请求、服务端 5xx 或运行时异常。' : "普通对话回归通过；浏览器无外部请求、服务端 5xx 或运行时异常。");
+  console.log(collaborationOnly ? '多模型协作专项通过；浏览器无外部请求、服务端 5xx 或运行时异常。' : chartOnly ? '命盘专项通过；浏览器无外部请求、服务端 5xx 或运行时异常。' : "普通对话回归通过；浏览器无外部请求、服务端 5xx 或运行时异常。");
   console.log(
     `隔离验收截图：.taibu-local/${project}/${chartOnly ? 'agent-chart-*.png' : 'agent-acceptance.png、agent-mobile-acceptance.png'}；任务数=${created.length}`,
   );
@@ -785,5 +790,6 @@ try {
     .catch(() => {});
   throw error;
 } finally {
+  collaborationFixture?.dispose();
   await browser.close();
 }
