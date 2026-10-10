@@ -4,7 +4,8 @@
 
 import type { MutagenSummaryItem, ZiweiInput, ZiweiOutput } from './types.js';
 import type { DecadalInfo, DiZhi, PalaceInfo, ScholarStarEntry, SmallLimitEntry, StarInfo } from '../shared/types.js';
-import { computeDouJun, computeLiuNianAges, createAstrolabeWithTrueSolar, DI_ZHI, hourToTimeIndex, LUCUN_TABLE, mapStar, MUTAGEN_NAMES, normalizePalaceName, STEM_MUTAGEN_TABLE, type MutagenName } from '../ziwei/shared.js';
+import { computeDouJun, computeLiuNianAges, createAstrolabeWithTrueSolar, DI_ZHI, LUCUN_TABLE, mapStar, MUTAGEN_NAMES, normalizePalaceName, type MutagenName } from '../ziwei/shared.js';
+import { getAstrolabeMutagens, getZiweiOptions, snapshotZiweiResult } from './profile.js';
 export { calculateZiweiHoroscopeData, calculateZiweiHoroscopeDataWithAstrolabe } from '../ziwei-horoscope/calculate.js';
 export { createAstrolabeWithTrueSolar } from '../ziwei/shared.js';
 export type { ZiweiInput, ZiweiOutput } from './types.js';
@@ -136,7 +137,7 @@ function parsePillarGanZhi(pillar: string): { gan: string; zhi: string; } {
 export function calculateZiweiDecadalListWithAstrolabe(
   astrolabe: ReturnType<typeof createAstrolabeWithTrueSolar>['astrolabe'],
 ): DecadalInfo[] {
-  return astrolabe.palaces.map((rawPalace) => {
+  return snapshotZiweiResult(astrolabe.palaces.map((rawPalace) => {
     const decadal = rawPalace.decadal;
     return {
       startAge: decadal?.range?.[0] ?? 0,
@@ -147,12 +148,13 @@ export function calculateZiweiDecadalListWithAstrolabe(
         name: normalizePalaceName(rawPalace.name),
       },
     };
-  }).sort((a: DecadalInfo, b: DecadalInfo) => a.startAge - b.startAge);
+  }).sort((a: DecadalInfo, b: DecadalInfo) => a.startAge - b.startAge));
 }
 
 function buildZiweiOutput(
   input: ZiweiInput,
   astrolabe: ReturnType<typeof createAstrolabeWithTrueSolar>['astrolabe'],
+  timeIndex: number,
   trueSolarTimeInfo?: ReturnType<typeof createAstrolabeWithTrueSolar>['trueSolarTimeInfo'],
 ): ZiweiOutput {
   const mutagenSummary: MutagenSummaryItem[] = [];
@@ -194,7 +196,7 @@ function buildZiweiOutput(
     const allStars: StarInfo[] = [...palace.majorStars, ...palace.minorStars, ...(palace.adjStars || [])];
 
     // 离心自化：本宫宫干四化落回本宫
-    const selfMutagenStars = STEM_MUTAGEN_TABLE[palace.heavenlyStem];
+    const selfMutagenStars = getAstrolabeMutagens(astrolabe, palace.heavenlyStem);
     if (selfMutagenStars) {
       for (const star of allStars) {
         const mIdx = selfMutagenStars.indexOf(star.name);
@@ -207,7 +209,7 @@ function buildZiweiOutput(
     const oppositeIdx = (palaceIdx + 6) % 12;
     const oppositePalace = palaces.find(p => (p.index ?? 0) === oppositeIdx);
     if (oppositePalace) {
-      const oppMutagenStars = STEM_MUTAGEN_TABLE[oppositePalace.heavenlyStem];
+      const oppMutagenStars = getAstrolabeMutagens(astrolabe, oppositePalace.heavenlyStem);
       if (oppMutagenStars) {
         for (const star of allStars) {
           const mIdx = oppMutagenStars.indexOf(star.name);
@@ -232,12 +234,11 @@ function buildZiweiOutput(
   // 斗君计算
   let douJun: string | undefined;
   const rawDates = (astrolabe as unknown as Record<string, unknown>).rawDates as
-    { lunarDate?: { lunarMonth: number; }; } | undefined;
+    { lunarDate?: { lunarMonth: number; lunarDay: number; isLeap?: boolean; }; } | undefined;
   if (rawDates?.lunarDate) {
-    const lunarMonth = rawDates.lunarDate.lunarMonth;
-    const hourValue = input.birthHour + (input.birthMinute || 0) / 60;
-    const timeIdx = hourToTimeIndex(hourValue);
-    douJun = computeDouJun(lunarMonth, timeIdx);
+    const { lunarMonth, lunarDay, isLeap } = rawDates.lunarDate;
+    const adjustedMonth = lunarMonth + (isLeap && getZiweiOptions(astrolabe).fixLeap && lunarDay > 15 ? 1 : 0);
+    douJun = computeDouJun(adjustedMonth, timeIndex);
   }
 
   // 三方四正
@@ -264,7 +265,7 @@ function buildZiweiOutput(
   // 提取大限数据
   const decadalList = calculateZiweiDecadalListWithAstrolabe(astrolabe);
 
-  return {
+  return snapshotZiweiResult({
     solarDate: astrolabe.solarDate || '',
     lunarDate: astrolabe.lunarDate || '',
     fourPillars: {
@@ -292,16 +293,17 @@ function buildZiweiOutput(
     bodyMasterStar,
     smallLimit,
     scholarStars,
-  };
+    calculationOptions: getZiweiOptions(astrolabe),
+  });
 }
 
 export function calculateZiweiDataWithAstrolabe(input: ZiweiInput): {
   output: ZiweiOutput;
   astrolabe: ReturnType<typeof createAstrolabeWithTrueSolar>['astrolabe'];
 } {
-  const { astrolabe, trueSolarTimeInfo } = createAstrolabeWithTrueSolar(input);
+  const { astrolabe, timeIndex, trueSolarTimeInfo } = createAstrolabeWithTrueSolar(input);
   return {
-    output: buildZiweiOutput(input, astrolabe, trueSolarTimeInfo),
+    output: buildZiweiOutput(input, astrolabe, timeIndex, trueSolarTimeInfo),
     astrolabe,
   };
 }

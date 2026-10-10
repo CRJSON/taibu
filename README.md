@@ -24,10 +24,12 @@ Language: **中文** | [English](README.en.md)
 
 - **多命理体系** - 八字、六爻、紫微斗数、奇门遁甲、大六壬、梅花易数、塔罗、MBTI、面相、手相、合盘、周公解梦
 - **AI智能分析** - 支持导出命理体系文本进行AI分析，多模型支持，深度推理，视觉识别
+- **Agent 对话** - 编排命理工具、后台执行和成果自动保存；八类排盘结果自动展示命盘，可展开并固定到工作区，配置见 [Agent 说明](docs/manual/Agent.md)
 - **MCP Server** - 支持 Model Context Protocol（MCP），可在支持MCP的agent中直接调用命理工具
 - **历史记录、知识库与@提及** - 支持存储所有命理体系的记录，可将命理体系纳入个人知识库，显式引用命理体系数据源
 - **AI个性化** - 表达风格/用户画像/自定义指令 + 上下文、提示词预算可视化
 - **多端体验** - Web + iOS/Android 客户端
+- **统一界面与设置** - 暖色浅深主题，独立 `/settings` 页面，分类切换保留草稿，见 [界面与设置说明](docs/ui-settings-agent.md)
 - **社区与激励** - 命理记录、匿名讨论、签到激励
 
 ---
@@ -106,9 +108,24 @@ npm install taibu-core
 
 ## 快速开始
 
-### Docker 部署
+### 本地自托管原型（PostgreSQL＋Redis）
 
-支持三种方式：
+不读取真实 `.env`，不连接 Vercel 或托管 Supabase。需要本机 Docker、Node.js 和 pnpm：
+
+```bash
+pnpm selfhost init --demo
+pnpm selfhost up
+# 打开 http://127.0.0.1:3080
+# 随机账号和密码：.taibu-local/taibu-local/credentials.json（不要公开）
+pnpm selfhost status
+pnpm selfhost down # 保留数据库与头像文件卷
+```
+
+`--demo` 使用明确标注的本地确定性模型，不产生真实 AI 费用。第一阶段保留自托管 Auth/PostgREST/Storage 兼容层；不是已完成生产迁移，也不是已删除全部 Supabase SDK。社区暂不开放，其余可用范围、备份恢复和生产切换门槛见 [自托管说明](docs/manual/Self-Hosting.md)。
+
+### Docker 部署（沿用外部后端）
+
+以下三种方式保留现有外部 Supabase 配置，不包含 PostgreSQL/Redis 初始化：
 
 ```bash
 # 准备环境变量（首次）
@@ -151,6 +168,23 @@ pnpm dev
 ```
 
 访问 [http://localhost:3000](http://localhost:3000) 查看应用。
+
+---
+
+## 开发文档
+
+- [架构与迁移边界](docs/manual/Architecture.md)：模块职责、AI 生命周期与计费、数据回放、兼容例外及回滚条件。
+- [Core 公开 API](packages/core/README.md) · [MCP 使用手册](docs/manual/MCP-Server-Manual.md)
+- [重构与测试验收记录](docs/manual/Refactor-Acceptance.md)
+
+```bash
+pnpm test -- src/tests/chat-route.test.ts # 按文件运行，自动构建所需包
+pnpm test                                # 默认单元、路由、协议与守卫
+pnpm exec playwright install --only-shell chromium # 首次配置浏览器
+pnpm verify                              # 一次包构建，完整验收（需本地 Docker）
+```
+
+`pnpm test:db`、`pnpm test:auth`、`pnpm test:browser` 可独立运行。`test:auth` 使用独立临时 Auth/PostgREST/PostgreSQL 栈，不读取生产配置或现有数据。无法下载 Chromium 且本机已有 Chrome 时，显式使用 `pnpm verify -- --chrome`；不跳过浏览器断言。CI 默认使用固定 Chromium，并强制执行 SQL、真实 Auth/REST 与浏览器层。
 
 ---
 

@@ -194,7 +194,7 @@ export function YongShenTargetPicker({
                                     <button
                                         type="button"
                                         onClick={() => setIsOpen(false)}
-                                        className="rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent/90"
+                                        className="rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-on-accent hover:bg-accent/90"
                                     >
                                         确认
                                     </button>

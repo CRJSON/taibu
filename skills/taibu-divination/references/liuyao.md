@@ -8,8 +8,10 @@
 | --- | --- | --- | --- | --- |
 | `question` | string | 是 | — | 占卜问题 |
 | `yongShenTargets` | string[] | 是 | — | 用神目标列表，由调用方按占问主题选择 |
-| `method` | enum | 否 | `"auto"` | 起卦方式（auto=自动，select=指定卦，time=时间，number=数字）；可选值: `auto` / `select` / `time` / `number` |
+| `method` | enum | 否 | `"auto"` | 起卦方式（auto=三钱，select=指定卦，time=时间，number=数字，coins=手工六个爻值，yarrow=蓍草概率模型）；可选值: `auto` / `select` / `time` / `number` / `coins` / `yarrow` |
 | `numbers` | number[] | 否 | — | 数字起卦使用的数字序列 |
+| `yaoValues` | integer[] | 否 | — | 初爻至上爻的六个爻值：6老阴、7少阳、8少阴、9老阳 |
+| `timezone` | string | 否 | `"Asia/Shanghai"` | 不带偏移日期的壁钟时区，以及干支排盘的民用时区 |
 | `hexagramName` | string | 否 | — | 选卦模式下的本卦卦名或卦码 |
 | `changedHexagramName` | string | 否 | — | 选卦模式下的变卦卦名或卦码 |
 | `date` | string | 是 | — | 占卜日期时间（YYYY-MM-DDTHH:MM[:SS] 或 YYYY-MM-DD HH:MM[:SS]） |
@@ -31,4 +33,5 @@ echo '{"question":"财运怎么样？","yongShenTargets":["妻财"],"hexagramNam
 - `六爻全盘`
 - `全局互动`
 - `元信息`
+- `计算规则`
 

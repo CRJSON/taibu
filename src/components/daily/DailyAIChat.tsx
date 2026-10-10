@@ -11,6 +11,8 @@ import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { getCalendarAlmanac } from '@/lib/divination/calendar';
 import { useSessionMembership } from '@/lib/hooks/useSessionMembership';
 import { MarkdownContent } from '@/components/ui/MarkdownContent';
+import { requestDailyChat } from '@/lib/chat/daily-chat';
+import { BrowserDirectProviderError } from '@/lib/ai/browser-direct-provider';
 
 interface DailyAIChatProps {
     date: Date;
@@ -103,20 +105,7 @@ export function DailyAIChat({ date, userId }: DailyAIChatProps) {
 请基于以上黄历信息，用专业但易懂的方式回答用户的问题。`;
 
             // 调用AI API
-            const response = await fetch('/api/chat', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    messages: [
-                        { role: 'user', content: contextMessage }
-                    ],
-                    personality: 'general',
-                    model: 'deepseek',
-                    stream: false,
-                }),
-            });
+            const response = await requestDailyChat(contextMessage);
 
             if (!response.ok) {
                 const errorData = await response.json();
@@ -138,7 +127,7 @@ export function DailyAIChat({ date, userId }: DailyAIChatProps) {
             void refreshMembership();
         } catch (err) {
             console.error('AI问答错误:', err);
-            setError('网络错误，请重试');
+            setError(err instanceof BrowserDirectProviderError ? err.message : '网络错误，请重试');
             // 移除用户消息
             setMessages(prev => prev.slice(0, -1));
         } finally {
@@ -261,7 +250,7 @@ export function DailyAIChat({ date, userId }: DailyAIChatProps) {
                     <button
                         onClick={handleSubmit}
                         disabled={!inputValue.trim() || isLoading || !userId}
-                        className="px-4 py-2.5 rounded-xl bg-accent text-white font-medium flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 transition-opacity"
+                        className="px-4 py-2.5 rounded-xl bg-accent text-on-accent font-medium flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 transition-opacity"
                     >
                         <Send className="w-4 h-4" />
                         提问

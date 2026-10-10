@@ -265,10 +265,10 @@ export default function QimenResultPage() {
             <div className="max-w-4xl mx-auto px-4 py-8 animate-fade-in space-y-8">
                 {/* 头部操作 */}
                 <div className="hidden md:flex items-center justify-between border-b border-border/60 pb-6">
-                    <Link href="/qimen" className="text-sm font-medium text-foreground/40 hover:text-foreground hover:bg-background-secondary px-2 py-1 rounded-md transition-colors">返回</Link>
+                    <Link href="/qimen" className="text-sm font-medium text-foreground-secondary hover:text-foreground hover:bg-background-secondary px-2 py-1 rounded-md transition-colors">返回</Link>
                     <div className="flex items-center gap-2">
                         <button onClick={() => router.push('/qimen')} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium border border-border hover:bg-background-secondary transition-colors"><RotateCw className="w-3.5 h-3.5" />重新起课</button>
-                        <button onClick={handleCopy} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium border border-border hover:bg-background-secondary transition-colors">{copied ? <Check className="w-3.5 h-3.5 text-[#0f7b6c]" /> : <Copy className="w-3.5 h-3.5" />}复制排盘</button>
+                        <button onClick={handleCopy} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium border border-border hover:bg-background-secondary transition-colors">{copied ? <Check className="w-3.5 h-3.5 text-success" /> : <Copy className="w-3.5 h-3.5" />}复制排盘</button>
                     </div>
                 </div>
 
@@ -276,7 +276,7 @@ export default function QimenResultPage() {
                 {(canonicalResult?.基本信息.占问 || result.question) && (
                     <div className="bg-background border border-border rounded-md p-4 flex items-center gap-3">
                         <Sparkles className="w-4 h-4 text-[#a083ff]" />
-                        <span className="text-xs font-bold text-foreground/30 uppercase tracking-widest shrink-0">占事</span>
+                        <span className="text-xs font-bold text-foreground-secondary uppercase tracking-widest shrink-0">占事</span>
                         <span className="text-sm font-medium text-foreground">{canonicalResult?.基本信息.占问 || result.question}</span>
                     </div>
                 )}
@@ -284,8 +284,8 @@ export default function QimenResultPage() {
                 {/* 排盘参数 */}
                 <div className="bg-background-secondary/30 border border-border rounded-md p-6 space-y-4 relative group">
                     <div className="flex items-center gap-3">
-                        <Info className="w-4 h-4 text-foreground/30" />
-                        <h2 className="text-sm font-bold uppercase tracking-widest text-foreground/60">排盘参数</h2>
+                        <Info className="w-4 h-4 text-foreground-secondary" />
+                        <h2 className="text-sm font-bold uppercase tracking-widest text-foreground-secondary">排盘参数</h2>
                     </div>
                     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                         {[
@@ -295,7 +295,7 @@ export default function QimenResultPage() {
                             { label: '起局信息', value: canonicalResult ? `${canonicalResult.基本信息.局式} ${canonicalResult.基本信息.旬首}` : '' }
                         ].map(item => (
                             <div key={item.label} className="bg-background border border-border/60 rounded-md p-3">
-                                <div className="text-[10px] font-bold text-foreground/30 uppercase mb-1">{item.label}</div>
+                                <div className="text-[10px] font-bold text-foreground-secondary uppercase mb-1">{item.label}</div>
                                 <div className="text-xs font-medium text-foreground/80">{item.value}</div>
                             </div>
                         ))}
@@ -307,7 +307,7 @@ export default function QimenResultPage() {
                     {PHASE_LEGEND.map(({ label, color }) => (
                         <div key={label} className="flex items-center gap-1.5">
                             <span className={`w-2 h-2 rounded-full ${color}`} />
-                            <span className="text-[10px] font-bold text-foreground/30 uppercase tracking-tighter">{label}</span>
+                            <span className="text-[10px] font-bold text-foreground-secondary uppercase tracking-tighter">{label}</span>
                         </div>
                     ))}
                 </div>
@@ -320,14 +320,14 @@ export default function QimenResultPage() {
                 {/* AI 解读 */}
                 <AIFeatureGate><div className="bg-background border border-border rounded-md p-6 space-y-6">
                     <div className="flex items-center justify-between border-b border-border/60 pb-4">
-                        <h2 className="text-sm font-bold flex items-center gap-2 uppercase tracking-wider text-foreground/60"><Sparkles className="w-4 h-4 text-[#a083ff]" />AI 深度解读</h2>
+                        <h2 className="text-sm font-bold flex items-center gap-2 uppercase tracking-wider text-foreground-secondary"><Sparkles className="w-4 h-4 text-[#a083ff]" />AI 深度解读</h2>
                         <div className="flex items-center gap-2">
                             <ModelSelector compact selectedModel={selectedModel} onModelChange={setSelectedModel} reasoningEnabled={reasoningEnabled} onReasoningChange={setReasoningEnabled} userId={currentUser?.id} membershipType={membershipType} disabled={membershipPending} />
                             {(interpretation || streaming.isStreaming) && <button onClick={handleGetInterpretation} disabled={isLoading} className="p-1.5 rounded-md hover:bg-background-secondary transition-colors"><RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} /></button>}
                         </div>
                     </div>
                     {error && (
-                        <div className="p-3 bg-red-50 text-[#eb5757] text-xs rounded-md border border-red-100">
+                        <div className="p-3 bg-red-50 text-danger text-xs rounded-md border border-red-100">
                             {error}
                         </div>
                     )}
@@ -342,9 +342,9 @@ export default function QimenResultPage() {
                             {sessionLoading || membershipPending ? (
                                 <SoundWaveLoader variant="inline" />
                             ) : !currentUser ? (
-                                <button onClick={() => setShowAuthModal(true)} className="px-8 py-2.5 bg-[#2383e2] text-white text-sm font-bold rounded-md hover:bg-[#2383e2]/90 transition-colors">登录解锁 AI 深度解读</button>
+                                <button onClick={() => setShowAuthModal(true)} className="px-8 py-2.5 bg-accent text-on-accent text-sm font-bold rounded-md hover:bg-accent/90 transition-colors">登录解锁 AI 深度解读</button>
                             ) : (
-                                <button onClick={handleGetInterpretation} disabled={isLoading || membershipPending} className="inline-flex items-center gap-2 px-8 py-2.5 bg-[#2383e2] text-white text-sm font-bold rounded-md hover:bg-[#2383e2]/90 transition-all active:scale-95 disabled:opacity-50"><Sparkles className="w-4 h-4" />获取 AI 解读</button>
+                                <button onClick={handleGetInterpretation} disabled={isLoading || membershipPending} className="inline-flex items-center gap-2 px-8 py-2.5 bg-accent text-on-accent text-sm font-bold rounded-md hover:bg-accent/90 transition-all active:scale-95 disabled:opacity-50"><Sparkles className="w-4 h-4" />获取 AI 解读</button>
                             )}
                         </div>
                     )}

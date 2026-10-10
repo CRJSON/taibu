@@ -1,3 +1,4 @@
+import { withRulesText } from '../../shared/calculation-rules.js';
 import {
   normalizeDetailLevelBinary
 } from '../../shared/render-utils.js';
@@ -8,7 +9,9 @@ import type {
   DayunCanonicalTextOptions
 } from '../shared/text-options.js';
 
-export function renderDayunCanonicalText(result: DayunOutput, options: DayunCanonicalTextOptions = {}): string {
+export const renderDayunCanonicalText = withRulesText(renderDayunCanonicalTextBase);
+
+function renderDayunCanonicalTextBase(result: DayunOutput, options: DayunCanonicalTextOptions = {}): string {
   const detailLevel = normalizeDetailLevelBinary(options.detailLevel);
   if (detailLevel === 'full') {
     return renderDayunCanonicalFullText(result);
@@ -25,6 +28,8 @@ function renderDayunCanonicalDefaultText(result: DayunOutput): string {
     '',
     `- 起运年龄：${result.startAge}岁`,
     `- 起运详情：${result.startAgeDetail}`,
+    ...(result.startSolar ? [`- 起运时刻：${result.startSolar}（${result.calculationOptions?.startSolarTimezone ?? 'Asia/Shanghai'}）`] : []),
+    ...(result.direction ? [`- 顺逆：${result.direction === 'forward' ? '顺行' : '逆行'}`] : []),
     '',
     '## 大运列表',
     '',
@@ -50,6 +55,8 @@ function renderDayunCanonicalFullText(result: DayunOutput): string {
     '',
     `- 起运年龄：${result.startAge}岁`,
     `- 起运详情：${result.startAgeDetail}`,
+    ...(result.startSolar ? [`- 起运时刻：${result.startSolar}（${result.calculationOptions?.startSolarTimezone ?? 'Asia/Shanghai'}）`] : []),
+    ...(result.direction ? [`- 顺逆：${result.direction === 'forward' ? '顺行' : '逆行'}`] : []),
   ];
 
   if (result.xiaoYun.length > 0) {

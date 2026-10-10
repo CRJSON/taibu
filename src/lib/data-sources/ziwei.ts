@@ -1,8 +1,10 @@
 import { getSystemAdminClient } from '@/lib/api-utils';
 import { formatZiweiPromptText } from '@/lib/ziwei-chart-prompt';
-import type { DataSourceProvider, DataSourceQueryContext, DataSourceSummary } from '@/lib/data-sources/types';
+import type { DataSourceSummary } from '@/lib/data-sources/types';
+import type { DataSourceProvider, DataSourceQueryContext } from '@/lib/data-sources/provider.server';
+import type { BirthTimeResolution } from '@/lib/divination/birth-time';
 
-type ZiweiRow = {
+type ZiweiRow = BirthTimeResolution & {
     id: string;
     user_id: string | null;
     name: string;
@@ -64,6 +66,8 @@ export const ziweiProvider: DataSourceProvider<ZiweiRow> = {
             longitude: chart.longitude ?? undefined,
             calendarType: (chart.calendar_type as 'solar' | 'lunar' | undefined) || 'solar',
             isLeapMonth: chart.is_leap_month ?? false,
+            timezone: chart.timezone,
+            disambiguation: chart.disambiguation,
         }, ctx?.chartPromptDetailLevel);
         if (canonicalText) return canonicalText;
         return `紫微命盘：${name}\n出生时间：${birth}\n命盘数据不完整，无法重建标准命盘文本。`;

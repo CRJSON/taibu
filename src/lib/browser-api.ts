@@ -1,5 +1,9 @@
 import { invalidateLocalCaches, type LocalCacheScope } from '@/lib/cache/local-storage';
-import { invalidateQueriesForPath } from '@/lib/query/invalidation';
+import { applyMutationEffects, invalidateQueriesForPath, type MutationEffects } from '@/lib/query/invalidation';
+
+export type BrowserRequestInit = RequestInit & {
+  mutationEffects?: MutationEffects;
+};
 
 export const DATA_INDEX_INVALIDATED_EVENT = 'taibu:data-index:invalidate';
 export const HISTORY_SUMMARY_DELETED_EVENT = 'taibu:history-summary:deleted';
@@ -77,6 +81,7 @@ function resolveCacheScopesByPath(pathname: string): LocalCacheScope[] {
   ) {
     return ['data_sources'];
   }
+  if (pathname.startsWith('/api/user/charts')) return ['data_sources', 'default_bazi_chart'];
   if (pathname.startsWith('/api/user/settings')) return ['default_bazi_chart'];
   return [];
 }
@@ -104,6 +109,7 @@ export function dispatchApiWriteEvents(
   pathname: string,
   method: string,
   options: {
+    mutationEffects?: MutationEffects;
     requestBody?: Record<string, unknown> | null;
     responseData?: Record<string, unknown> | null;
   } = {},
@@ -112,14 +118,18 @@ export function dispatchApiWriteEvents(
     return;
   }
 
-  invalidateQueriesForPath(pathname);
-
-  const cacheScopes = resolveCacheScopesByPath(pathname);
-  if (cacheScopes.length > 0) {
-    try {
-      invalidateLocalCaches(cacheScopes);
-    } catch {
-      // ignore local cache invalidation failures so global sync events still fire
+  let cacheScopes: LocalCacheScope[];
+  if (options.mutationEffects) {
+    cacheScopes = applyMutationEffects(options.mutationEffects);
+  } else {
+    invalidateQueriesForPath(pathname);
+    cacheScopes = resolveCacheScopesByPath(pathname);
+    if (cacheScopes.length > 0) {
+      try {
+        invalidateLocalCaches(cacheScopes);
+      } catch {
+        // ignore local cache invalidation failures so global sync events still fire
+      }
     }
   }
 
@@ -135,6 +145,7 @@ export function dispatchApiWriteEvents(
     pathname.startsWith('/api/knowledge-base')
     || pathname.startsWith('/api/data-sources')
     || pathname.startsWith('/api/records')
+    || pathname.startsWith('/api/user/charts')
     || pathname.startsWith('/api/community')
     || pathname.startsWith('/api/bazi')
     || pathname.startsWith('/api/hepan')
@@ -169,28 +180,31 @@ export function dispatchApiWriteEvents(
   }
 }
 
-export async function fetchBrowserJson<T>(input: RequestInfo, init?: RequestInit): Promise<{
+export async function fetchBrowserJson<T>(input: RequestInfo, init?: BrowserRequestInit): Promise<{
   ok: boolean;
   status: number;
   result: BrowserApiPayload<T>;
 }> {
-  const requestBody = parseRequestBody(init?.body);
+  const { mutationEffects, ...requestInit } = init ?? {};
+  const requestBody = parseRequestBody(requestInit.body);
 
   try {
     const response = await fetch(input, {
       credentials: 'include',
       headers: {
-        ...(init?.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
-        ...(init?.headers || {}),
+        ...(requestInit.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
+        ...(requestInit.headers || {}),
       },
-      ...init,
+      ...requestInit,
     });
 
+    requestInit.signal?.throwIfAborted();
     const payload = await response.json().catch(() => null) as
       | { data?: T | null; error?: unknown; count?: number | null; status?: number; statusText?: string }
       | T
       | null;
 
+    requestInit.signal?.throwIfAborted();
     const hasEnvelope = !!payload
       && typeof payload === 'object'
       && (
@@ -213,14 +227,15 @@ export async function fetchBrowserJson<T>(input: RequestInfo, init?: RequestInit
 
     try {
       const method = (
-        init?.method
+        requestInit.method
         || (input instanceof Request ? input.method : 'GET')
         || 'GET'
       ).toUpperCase();
       const rawUrl = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
       const url = new URL(rawUrl, window.location.origin);
-      if (response.ok) {
+      if (response.ok && !resolvedError) {
         dispatchApiWriteEvents(url.pathname, method, {
+          mutationEffects,
           requestBody,
           responseData,
         });
@@ -260,14 +275,14 @@ export async function fetchBrowserJson<T>(input: RequestInfo, init?: RequestInit
   }
 }
 
-export async function requestBrowserJson<T>(url: string, init?: RequestInit): Promise<BrowserApiPayload<T>> {
+export async function requestBrowserJson<T>(url: string, init?: BrowserRequestInit): Promise<BrowserApiPayload<T>> {
   const { result } = await fetchBrowserJson<T>(url, init);
   return result;
 }
 
 export async function requestBrowserPayloadOrThrow<T>(
   url: string,
-  init?: RequestInit,
+  init?: BrowserRequestInit,
   fallbackMessage = '请求失败',
 ): Promise<BrowserApiPayload<T>> {
   const result = await requestBrowserJson<T>(url, init);
@@ -279,7 +294,7 @@ export async function requestBrowserPayloadOrThrow<T>(
 
 export async function requestBrowserData<T>(
   url: string,
-  init: RequestInit | undefined,
+  init: BrowserRequestInit | undefined,
   options: {
     fallbackMessage?: string;
     allowNotFound: true;
@@ -287,7 +302,7 @@ export async function requestBrowserData<T>(
 ): Promise<T | null>;
 export async function requestBrowserData<T>(
   url: string,
-  init?: RequestInit,
+  init?: BrowserRequestInit,
   options?: {
     fallbackMessage?: string;
     allowNotFound?: false | undefined;
@@ -295,7 +310,7 @@ export async function requestBrowserData<T>(
 ): Promise<T>;
 export async function requestBrowserData<T>(
   url: string,
-  init?: RequestInit,
+  init?: BrowserRequestInit,
   options: {
     fallbackMessage?: string;
     allowNotFound?: boolean;

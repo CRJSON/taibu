@@ -7,7 +7,7 @@ const buildMinimalBaziChart = () => ({
     birthDate: '1990-01-01',
     birthTime: '08:00',
     birthPlace: '北京',
-    timezone: 8,
+    timezone: 'Asia/Shanghai',
     calendarType: 'solar',
     fourPillars: {
         year: { stem: '甲', branch: '子', stemElement: '木', branchElement: '水', hiddenStems: ['癸'] },
@@ -46,6 +46,47 @@ const buildOversizedCaseProfile = () => ({
         title: `事件${index + 1}`,
         detail: '丙'.repeat(500),
     })),
+});
+
+test('prompt reconstruction preserves IANA timezones and DST disambiguation for both chart types', async () => {
+    const { resolveBaziPromptData } = await import('../lib/bazi-prompt');
+    const { resolveZiweiPromptData } = await import('../lib/ziwei-chart-prompt');
+    const { calculateBaziChartBundle } = await import('../lib/divination/bazi');
+    const { calculateZiweiChartBundle } = await import('../lib/divination/ziwei');
+    for (const disambiguation of ['earlier', 'later'] as const) {
+        const form = {
+            name: '纽约命主', gender: 'female' as const,
+            birthYear: 2024, birthMonth: 11, birthDay: 3, birthHour: 1, birthMinute: 30,
+            birthPlace: '纽约', longitude: -74.006, calendarType: 'solar' as const,
+            isLeapMonth: false, timezone: 'America/New_York', disambiguation,
+        };
+        const input = {
+            name: form.name, gender: form.gender, birthDate: '2024-11-03', birthTime: '01:30',
+            birthPlace: form.birthPlace, longitude: form.longitude, calendarType: form.calendarType,
+            isLeapMonth: false, timezone: form.timezone, disambiguation,
+        };
+        const bazi = resolveBaziPromptData(input);
+        const ziwei = resolveZiweiPromptData(input);
+        assert.ok(bazi);
+        assert.ok(ziwei);
+        const expectedBazi = calculateBaziChartBundle(form);
+        assert.deepEqual(bazi.output, expectedBazi.output);
+        assert.deepEqual(bazi.meta, expectedBazi.meta);
+        assert.deepEqual(ziwei.output, calculateZiweiChartBundle(form).output);
+    }
+});
+
+test('prompt reconstruction defaults legacy time fields and rejects invalid saved time options', async () => {
+    const { resolveBaziPromptData } = await import('../lib/bazi-prompt');
+    const { resolveZiweiPromptData } = await import('../lib/ziwei-chart-prompt');
+    const legacy = { name: '旧命盘', gender: 'male' as const, birthDate: '1990-01-01', birthTime: '08:00' };
+    for (const resolve of [resolveBaziPromptData, resolveZiweiPromptData]) {
+        const resolvedLegacy = resolve(legacy);
+        assert.ok(resolvedLegacy);
+        assert.deepEqual(resolvedLegacy.output, resolve({ ...legacy, timezone: 'Asia/Shanghai', disambiguation: 'reject' })?.output);
+        assert.equal(resolve({ ...legacy, timezone: 'Invalid/Timezone' }), null);
+        assert.equal(resolve({ ...legacy, disambiguation: 'invalid' as never }), null);
+    }
 });
 
 test('buildPromptWithSources includes base rules and dify prefix', async () => {
@@ -197,7 +238,7 @@ test('buildPromptWithSources should enrich minimal bazi chart data before render
                 birthDate: '2002-09-09',
                 birthTime: '11:00',
                 birthPlace: '广东省广州市',
-                timezone: 8,
+                timezone: 'Asia/Shanghai',
                 calendarType: 'solar',
                 fourPillars: {
                     year: { stem: '癸', branch: '未', stemElement: '水', branchElement: '土', hiddenStems: ['己', '丁', '乙'] },
@@ -514,4 +555,19 @@ test('SourceTracker de-duplicates sources by type and id', () => {
     const sources = tracker.getSources();
     assert.equal(sources.length, 1);
     assert.ok(sources[0].preview.includes('第二次更新'));
+});
+
+test('prepared budget and personality preserve standalone output with one model budget lookup', async t => {
+    const models = require('../lib/server/ai-config') as typeof import('../lib/server/ai-config');
+    const lookup = t.mock.method(models, 'getModelConfigAsync', async () => undefined);
+    const pb = require('../lib/ai/prompt-builder') as typeof import('../lib/ai/prompt-builder');
+    const context: import('../lib/ai/prompt-builder').PromptContext = {
+        modelId: 'offline-model', userMessage: 'question', mentions: [], knowledgeHits: [], userSettings: {},
+    };
+    const standalone = await pb.buildPromptWithSources(context);
+    assert.equal(lookup.mock.callCount(), 1);
+    const budget = await pb.calculatePromptBudget(context.modelId);
+    const prepared = await pb.buildPromptWithSources(context, { budget, personalityResolution: pb.resolvePersonalities(context) });
+    assert.equal(lookup.mock.callCount(), 2);
+    assert.deepEqual(prepared, standalone);
 });

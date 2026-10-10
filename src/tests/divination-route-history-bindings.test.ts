@@ -1,8 +1,10 @@
 import { test, type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { NextRequest } from 'next/server';
-import { ensureRouteTestEnv, mockAIFeatureState } from './helpers/route-mock';
+import { ensureRouteTestEnv, mockAIFeatureState, mockAIRateLimit } from './helpers/route-mock';
 import { createMockUIMessageResult } from './helpers/ui-message-result';
+import { createMockAuthContext } from './helpers/supabase-mock';
+import type { CreateAIAnalysisParams } from '../lib/ai/ai-analysis';
 
 ensureRouteTestEnv();
 
@@ -11,11 +13,12 @@ type RouteBindingSpec = {
     routeModulePath: string;
     url: string;
     buildBody: () => Record<string, unknown>;
-    assertCreateArgs: (createArgs: Record<string, unknown>) => void;
+    assertCreateArgs: (createArgs: CreateAIAnalysisParams) => void;
 };
 
 async function runRouteHistoryBindingTest(t: TestContext, spec: RouteBindingSpec) {
   mockAIFeatureState(t);
+    mockAIRateLimit(t);
     const apiUtilsModule = require('../lib/api-utils') as typeof import('../lib/api-utils');
     const credits = require('../lib/user/credits') as any;
     const aiAccessModule = require('../lib/ai/ai-access') as any;
@@ -32,7 +35,7 @@ async function runRouteHistoryBindingTest(t: TestContext, spec: RouteBindingSpec
     const originalLoadResolvedChartPromptDetailLevel = chartPromptDetailModule.loadResolvedChartPromptDetailLevel;
     const routePath = require.resolve(spec.routeModulePath);
 
-    let createArgs: Record<string, unknown> | null = null;
+    const createCalls: CreateAIAnalysisParams[] = [];
     const mockDb = {
         from() {
             throw new Error('db.from should not be called in history binding route tests');
@@ -42,12 +45,7 @@ async function runRouteHistoryBindingTest(t: TestContext, spec: RouteBindingSpec
         },
     };
 
-    apiUtilsModule.requireUserContext = async () => ({
-        user: { id: 'user-1' },
-        db: mockDb,
-        supabase: mockDb,
-        accessToken: 'test-token',
-    }) as Awaited<ReturnType<typeof import('../lib/api-utils').requireUserContext>>;
+    apiUtilsModule.requireUserContext = async () => createMockAuthContext(mockDb);
     credits.getUserAuthInfo = async () => ({ credits: 10, effectiveMembership: 'pro', hasCredits: true });
     credits.attemptCreditUse = async () => ({ ok: true, remaining: 9 });
     aiAccessModule.resolveModelAccessAsync = async () => ({
@@ -64,8 +62,8 @@ async function runRouteHistoryBindingTest(t: TestContext, spec: RouteBindingSpec
         reasoningEnabled: false,
     });
     aiModule.callAIUIMessageResult = async () => createMockUIMessageResult();
-    aiAnalysisModule.createAIAnalysisConversation = async (params: Record<string, unknown>) => {
-        createArgs = params;
+    aiAnalysisModule.createAIAnalysisConversation = async (params: CreateAIAnalysisParams) => {
+        createCalls.push(params);
         return 'conv-1';
     };
     chartPromptDetailModule.loadResolvedChartPromptDetailLevel = async () => 'default';
@@ -96,8 +94,9 @@ async function runRouteHistoryBindingTest(t: TestContext, spec: RouteBindingSpec
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     assert.equal(response.headers.get('x-vercel-ai-ui-message-stream'), 'v1');
+    const createArgs = createCalls.at(-1);
     assert.ok(createArgs, `${spec.name} route should create a conversation`);
-    spec.assertCreateArgs(createArgs as Record<string, unknown>);
+    spec.assertCreateArgs(createArgs);
 }
 
 const routeSpecs: RouteBindingSpec[] = [
@@ -119,7 +118,7 @@ const routeSpecs: RouteBindingSpec[] = [
             },
         }),
         assertCreateArgs: (createArgs) => {
-            const historyBinding = createArgs.historyBinding as { type?: string; payload?: Record<string, unknown> } | undefined;
+            const historyBinding = createArgs.historyBinding;
             assert.equal(createArgs.sourceType, 'mbti');
             assert.equal(historyBinding?.type, 'mbti');
             assert.equal(historyBinding?.payload?.reading_id, 'reading-1');
@@ -144,10 +143,34 @@ const routeSpecs: RouteBindingSpec[] = [
             },
         }),
         assertCreateArgs: (createArgs) => {
-            const historyBinding = createArgs.historyBinding as { type?: string; payload?: Record<string, unknown> } | undefined;
+            const historyBinding = createArgs.historyBinding;
             assert.equal(createArgs.sourceType, 'hepan');
             assert.equal(historyBinding?.type, 'hepan');
             assert.equal(historyBinding?.payload?.chart_id, 'chart-1');
+        },
+    },
+    {
+        name: 'hepan-time-rules',
+        routeModulePath: '../app/api/hepan/route',
+        url: 'http://localhost/api/hepan',
+        buildBody: () => ({
+            action: 'analyze', stream: true,
+            result: {
+                type: 'love',
+                person1: { name: 'A', year: 1990, month: 1, day: 1, hour: 1, minute: 47, timezone: 'America/New_York', disambiguation: 'later' },
+                person2: { name: 'B', year: 1991, month: 2, day: 2, hour: 2, minute: 30, calendarType: 'lunar', isLeapMonth: false, longitude: 73 },
+                overallScore: 80, dimensions: [{ name: '测试', score: 80, description: 'ok' }], conflicts: [], createdAt: new Date(),
+            },
+        }),
+        assertCreateArgs: (createArgs) => {
+            const payload = createArgs.historyBinding?.payload;
+            const first = payload?.person1_birth as Record<string, unknown>;
+            const second = payload?.person2_birth as Record<string, unknown>;
+            assert.equal(first.timezone, 'America/New_York');
+            assert.equal(first.disambiguation, 'later');
+            assert.equal(first.minute, 47);
+            assert.equal(second.calendarType, 'lunar');
+            assert.equal(second.longitude, 73);
         },
     },
     {
@@ -171,7 +194,7 @@ const routeSpecs: RouteBindingSpec[] = [
             };
         },
         assertCreateArgs: (createArgs) => {
-            const historyBinding = createArgs.historyBinding as { type?: string; payload?: Record<string, unknown> } | undefined;
+            const historyBinding = createArgs.historyBinding;
             assert.equal(createArgs.sourceType, 'daliuren');
             assert.equal(historyBinding?.type, 'daliuren');
             assert.equal(historyBinding?.payload?.divination_id, 'divination-1');
@@ -199,7 +222,7 @@ const routeSpecs: RouteBindingSpec[] = [
         },
         assertCreateArgs: (createArgs) => {
             const sourceData = createArgs.sourceData as Record<string, unknown> | undefined;
-            const historyBinding = createArgs.historyBinding as { type?: string; payload?: Record<string, unknown> } | undefined;
+            const historyBinding = createArgs.historyBinding;
             assert.equal(createArgs.sourceType, 'meihua');
             assert.notEqual(sourceData?.main_hexagram, '客户端伪造卦名');
             assert.equal(historyBinding?.type, 'meihua');
@@ -226,7 +249,7 @@ const routeSpecs: RouteBindingSpec[] = [
         },
         assertCreateArgs: (createArgs) => {
             const sourceData = createArgs.sourceData as Record<string, unknown> | undefined;
-            const historyBinding = createArgs.historyBinding as { type?: string; payload?: Record<string, unknown> } | undefined;
+            const historyBinding = createArgs.historyBinding;
             assert.equal(createArgs.sourceType, 'xiaoliuren');
             assert.notEqual(sourceData?.final_status, '客户端伪造落宫');
             assert.equal(sourceData?.shichen, '丑时');

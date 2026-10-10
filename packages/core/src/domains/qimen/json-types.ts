@@ -1,5 +1,6 @@
 
 export interface QimenCanonicalJSON {
+  计算规则?: Record<string, unknown>;
   基本信息: {
     占问?: string;
     四柱: string;
@@ -48,6 +49,9 @@ export interface QimenPalaceJSON {
   八门五行?: string;
   天盘天干: string;
   地盘天干: string;
+  寄星?: string[];
+  寄天盘干?: string[];
+  寄地盘干?: string[];
   宫位状态: string[];
   方位?: string;
   格局?: string[];

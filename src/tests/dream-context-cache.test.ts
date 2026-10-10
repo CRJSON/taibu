@@ -4,313 +4,156 @@ import assert from 'node:assert/strict';
 process.env.NEXT_PUBLIC_SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://localhost';
 process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'test-anon';
 
-test('buildDreamContextPayload should reuse cached payload within TTL', async (t) => {
+type BaziRow = Parameters<typeof import('../lib/data-sources/bazi').baziProvider.formatForAI>[0];
+
+function setupDreamContext(t: import('node:test').TestContext) {
   const apiUtilsModule = require('../lib/api-utils') as typeof import('../lib/api-utils');
   const baziModule = require('../lib/data-sources/bazi') as typeof import('../lib/data-sources/bazi');
   const fortuneModule = require('../lib/data-sources/fortune') as typeof import('../lib/data-sources/fortune');
   const caseProfileModule = require('../lib/server/bazi-case-profile') as typeof import('../lib/server/bazi-case-profile');
   const modulePath = require.resolve('../lib/chat/chat-context');
-
-  const originalGetSystemAdminClient = apiUtilsModule.getSystemAdminClient;
-  const originalFormatForAI = baziModule.baziProvider.formatForAI;
-  const originalDailyFortuneGet = fortuneModule.dailyFortuneProvider.get;
-  const originalGetBaziCaseProfileByChartId = caseProfileModule.getBaziCaseProfileByChartId;
-
-  let userSettingsReads = 0;
-  let baziChartMetaReads = 0;
-  let baziChartReads = 0;
-  let fortuneReads = 0;
-
-  apiUtilsModule.getSystemAdminClient = (() => ({
+  const state = {
+    defaultChartId: 'chart-1' as string | null,
+    caseProfileUpdatedAt: null as string | null,
+    chart: {
+      id: 'chart-1', user_id: 'user-1', name: '测试命盘', gender: 'male',
+      birth_date: '1990-01-01', birth_time: '08:00', birth_place: '上海', longitude: 121.47,
+      calendar_type: 'solar', is_leap_month: false, timezone: 'Asia/Shanghai', disambiguation: 'reject',
+      created_at: '2026-03-27T00:00:00.000Z',
+    } as BaziRow,
+    chartReads: 0,
+    settingsReads: 0,
+    fortuneReads: 0,
+    formattedRows: [] as BaziRow[],
+  };
+  const client = {
     from(table: string) {
-      if (table === 'user_settings') {
-        return {
-          select() {
-            return {
-              eq() {
-                return {
-                  maybeSingle: async () => {
-                    userSettingsReads += 1;
-                    return {
-                      data: { default_bazi_chart_id: 'chart-1' },
-                      error: null,
-                    };
-                  },
-                };
-              },
-            };
-          },
-        };
-      }
-
-      if (table === 'bazi_charts') {
-        return {
-          select(columns: string) {
-            assert.doesNotMatch(columns, /^\*$/u);
-            if (columns === 'id, updated_at') {
-              return {
-                eq() {
-                  return {
-                    eq() {
-                      return {
-                        maybeSingle: async () => {
-                          baziChartMetaReads += 1;
-                          return {
-                            data: {
-                              id: 'chart-1',
-                              updated_at: '2026-03-27T00:00:00.000Z',
-                            },
-                            error: null,
-                          };
-                        },
-                      };
-                    },
-                  };
-                },
-              };
+      return {
+        select(columns: string) {
+          const filters = new Map<string, string>();
+          if (table === 'bazi_charts') {
+            assert.doesNotMatch(columns, /\*|updated_at/u);
+            for (const field of ['id', 'name', 'gender', 'birth_date', 'birth_time', 'birth_place', 'longitude', 'calendar_type', 'is_leap_month', 'timezone', 'disambiguation']) {
+              assert.ok(columns.split(', ').includes(field), `chart SELECT must include ${field}`);
             }
-            return {
-              eq() {
-                return {
-                  eq() {
-                    return {
-                      maybeSingle: async () => {
-                        baziChartReads += 1;
-                        return {
-	                          data: {
-	                            id: 'chart-1',
-	                            name: '测试命盘',
-	                            gender: 'male',
-	                            birth_date: '1990-01-01',
-	                            birth_time: '08:00',
-	                            birth_place: '上海',
-	                            calendar_type: 'solar',
-	                            is_leap_month: false,
-	                          },
-                          error: null,
-                        };
-                      },
-                    };
-                  },
-                };
-              },
-              order() {
-                return {
-                  limit() {
-                    return {
-                      maybeSingle: async () => {
-                        throw new Error('latest fallback should not be used');
-                      },
-                    };
-                  },
-                };
-              },
-            };
-          },
-        };
-      }
-
-      if (table === 'bazi_case_profiles') {
-        return {
-          select() {
-            return {
-              eq() {
-                return {
-                  eq() {
-                    return {
-                      maybeSingle: async () => ({ data: null, error: null }),
-                    };
-                  },
-                };
-              },
-            };
-          },
-        };
-      }
-
-      throw new Error(`Unexpected table: ${table}`);
+          }
+          const query = {
+            eq(column: string, value: string) { filters.set(column, value); return query; },
+            order() { return query; },
+            limit() { return query; },
+            async maybeSingle() {
+              assert.ok(filters.get('user_id'), `${table} must be account-scoped`);
+              if (table === 'user_settings') {
+                state.settingsReads += 1;
+                return { data: { default_bazi_chart_id: state.defaultChartId }, error: null };
+              }
+              if (table === 'bazi_charts') {
+                state.chartReads += 1;
+                const matches = !filters.has('id') || filters.get('id') === state.chart.id;
+                return { data: matches ? { ...state.chart } : null, error: null };
+              }
+              if (table === 'bazi_case_profiles') {
+                assert.equal(filters.get('bazi_chart_id'), state.chart.id);
+                return { data: { updated_at: state.caseProfileUpdatedAt }, error: null };
+              }
+              throw new Error(`Unexpected table: ${table}`);
+            },
+          };
+          return query;
+        },
+      };
     },
-  })) as unknown as typeof apiUtilsModule.getSystemAdminClient;
-
-  baziModule.baziProvider.formatForAI = (() => '命盘文本') as typeof baziModule.baziProvider.formatForAI;
-  fortuneModule.dailyFortuneProvider.get = (async () => {
-    fortuneReads += 1;
-    return {
-      id: 'today',
-      name: '今日运势',
-      content: '今日运势文本',
-      createdAt: new Date().toISOString(),
-    };
-  }) as typeof fortuneModule.dailyFortuneProvider.get;
-  caseProfileModule.getBaziCaseProfileByChartId = (async () => null) as typeof caseProfileModule.getBaziCaseProfileByChartId;
-
-  t.after(() => {
-    apiUtilsModule.getSystemAdminClient = originalGetSystemAdminClient;
-    baziModule.baziProvider.formatForAI = originalFormatForAI;
-    fortuneModule.dailyFortuneProvider.get = originalDailyFortuneGet;
-    caseProfileModule.getBaziCaseProfileByChartId = originalGetBaziCaseProfileByChartId;
-    delete require.cache[modulePath];
+  };
+  t.mock.method(apiUtilsModule, 'getSystemAdminClient', () => client);
+  t.mock.method(baziModule.baziProvider, 'formatForAI', (chart: BaziRow) => {
+    state.formattedRows.push(chart);
+    return `命盘:${chart.id}:${chart.timezone}:${chart.disambiguation}:${chart.birth_time}`;
   });
-
+  t.mock.method(fortuneModule.dailyFortuneProvider, 'get', async () => {
+    state.fortuneReads += 1;
+    return { id: 'today', name: '今日运势', content: '今日运势文本', createdAt: new Date().toISOString() };
+  });
+  t.mock.method(caseProfileModule, 'getBaziCaseProfileByChartId', async () => null);
+  t.after(() => { delete require.cache[modulePath]; });
   delete require.cache[modulePath];
-  const chatContextModule = require('../lib/chat/chat-context') as typeof import('../lib/chat/chat-context');
+  const { buildDreamContextPayload } = require('../lib/chat/chat-context') as typeof import('../lib/chat/chat-context');
+  return { state, build: buildDreamContextPayload };
+}
 
-  const first = await chatContextModule.buildDreamContextPayload('user-1');
-  const second = await chatContextModule.buildDreamContextPayload('user-1');
+test('buildDreamContextPayload should reuse cached payload within TTL and render the already-loaded row', async (t) => {
+  const { state, build } = setupDreamContext(t);
+  const first = await build('user-1');
+  const second = await build('user-1');
 
-  assert.equal(first.payload.baziText, '命盘文本');
+  assert.strictEqual(first, second);
+  assert.equal(first.payload.baziText, '命盘:chart-1:Asia/Shanghai:reject:08:00');
   assert.equal(second.payload.fortuneText, '今日运势文本');
-  assert.equal(userSettingsReads, 2);
-  assert.equal(baziChartMetaReads, 2);
-  assert.equal(baziChartReads, 1);
-  assert.equal(fortuneReads, 1);
+  assert.equal(state.settingsReads, 2);
+  assert.equal(state.chartReads, 2, 'one chart read per request, with no separate metadata/detail read');
+  assert.equal(state.fortuneReads, 1);
+  assert.equal(state.formattedRows.length, 1);
+  assert.equal(state.formattedRows[0].timezone, 'Asia/Shanghai');
+  assert.equal(state.formattedRows[0].disambiguation, 'reject');
+});
+
+test('buildDreamContextPayload should invalidate cached text for every birth field and time option without updated_at', async (t) => {
+  const { state, build } = setupDreamContext(t);
+  let previous = await build('user-1');
+  const changes: Partial<BaziRow>[] = [
+    { name: '新命盘' }, { gender: 'female' }, { birth_date: '1990-01-02' },
+    { birth_time: '09:00' }, { birth_place: '北京' }, { longitude: 116.4074 },
+    { calendar_type: 'lunar' }, { is_leap_month: true },
+    { timezone: 'America/New_York' }, { disambiguation: 'later' },
+  ];
+  for (const change of changes) {
+    Object.assign(state.chart, change);
+    const next = await build('user-1');
+    assert.notStrictEqual(next, previous, `${Object.keys(change)[0]} must invalidate the cache`);
+    assert.strictEqual(await build('user-1'), next, 'unchanged values must reuse the cache');
+    previous = next;
+  }
+  assert.equal(state.formattedRows.length, changes.length + 1);
+  assert.equal(state.fortuneReads, changes.length + 1);
+  assert.equal(state.chartReads, changes.length * 2 + 1);
+  assert.equal(previous.payload.baziText, '命盘:chart-1:America/New_York:later:09:00');
+});
+
+test('buildDreamContextPayload should preserve account, case-profile, TTL and day cache boundaries', async (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date(2026, 2, 27, 23, 50) });
+  const { state, build } = setupDreamContext(t);
+  const first = await build('user-1');
+  assert.strictEqual(await build('user-1'), first);
+  assert.notStrictEqual(await build('user-2'), first, 'same row values cannot cross accounts');
+  state.caseProfileUpdatedAt = '2026-03-27T12:00:00.000Z';
+  const changedProfile = await build('user-1');
+  assert.notStrictEqual(changedProfile, first);
+  t.mock.timers.tick(11 * 60 * 1000);
+  const nextDay = await build('user-1');
+  assert.notStrictEqual(nextDay, changedProfile, 'local day change invalidates an unexpired cache entry');
+  assert.strictEqual(await build('user-1'), nextDay);
+  t.mock.timers.tick(31 * 60 * 1000);
+  assert.notStrictEqual(await build('user-1'), nextDay, 'TTL expiry invalidates within the same day');
+  assert.equal(state.fortuneReads, 5);
 });
 
 test('buildDreamContextPayload should key latest-chart cache by resolved chart id', async (t) => {
-  const apiUtilsModule = require('../lib/api-utils') as typeof import('../lib/api-utils');
-  const baziModule = require('../lib/data-sources/bazi') as typeof import('../lib/data-sources/bazi');
-  const fortuneModule = require('../lib/data-sources/fortune') as typeof import('../lib/data-sources/fortune');
-  const caseProfileModule = require('../lib/server/bazi-case-profile') as typeof import('../lib/server/bazi-case-profile');
-  const modulePath = require.resolve('../lib/chat/chat-context');
+  const { state, build } = setupDreamContext(t);
+  state.defaultChartId = null;
+  const first = await build('user-1');
+  assert.strictEqual(await build('user-1'), first);
+  state.chart.id = 'chart-2';
+  const next = await build('user-1');
+  assert.notStrictEqual(next, first);
+  assert.match(next.payload.baziText || '', /^命盘:chart-2:/u);
+  assert.equal(state.chartReads, 3);
+  assert.equal(state.formattedRows.length, 2);
+});
 
-  const originalGetSystemAdminClient = apiUtilsModule.getSystemAdminClient;
-  const originalFormatForAI = baziModule.baziProvider.formatForAI;
-  const originalDailyFortuneGet = fortuneModule.dailyFortuneProvider.get;
-  const originalGetBaziCaseProfileByChartId = caseProfileModule.getBaziCaseProfileByChartId;
-
-  let latestChartId = 'chart-1';
-  let latestMetaReads = 0;
-  let baziChartReads = 0;
-
-  apiUtilsModule.getSystemAdminClient = (() => ({
-    from(table: string) {
-      if (table === 'user_settings') {
-        return {
-          select() {
-            return {
-              eq() {
-                return {
-                  maybeSingle: async () => ({
-                    data: { default_bazi_chart_id: null },
-                    error: null,
-                  }),
-                };
-              },
-            };
-          },
-        };
-      }
-
-      if (table === 'bazi_charts') {
-        return {
-          select(columns: string) {
-            if (columns === 'id, updated_at') {
-              return {
-                eq() {
-                  return {
-                    order() {
-                      return {
-                        limit() {
-                          return {
-                            maybeSingle: async () => {
-                              latestMetaReads += 1;
-                              return {
-                                data: latestChartId ? {
-                                  id: latestChartId,
-                                  updated_at: `${latestChartId}-updated`,
-                                } : null,
-                                error: null,
-                              };
-                            },
-                          };
-                        },
-                      };
-                    },
-                  };
-                },
-              };
-            }
-
-            return {
-              eq() {
-                return {
-                  eq() {
-                    return {
-                      maybeSingle: async () => {
-                        baziChartReads += 1;
-                        return {
-	                          data: latestChartId ? {
-	                            id: latestChartId,
-	                            name: latestChartId,
-	                            gender: 'male',
-	                            birth_date: '1990-01-01',
-	                            birth_time: '08:00',
-	                            birth_place: '上海',
-	                            calendar_type: 'solar',
-	                            is_leap_month: false,
-	                          } : null,
-                          error: null,
-                        };
-                      },
-                    };
-                  },
-                };
-              },
-            };
-          },
-        };
-      }
-
-      if (table === 'bazi_case_profiles') {
-        return {
-          select() {
-            return {
-              eq() {
-                return {
-                  eq() {
-                    return {
-                      maybeSingle: async () => ({ data: null, error: null }),
-                    };
-                  },
-                };
-              },
-            };
-          },
-        };
-      }
-
-      throw new Error(`Unexpected table: ${table}`);
-    },
-  })) as unknown as typeof apiUtilsModule.getSystemAdminClient;
-
-  baziModule.baziProvider.formatForAI = ((chart: { id?: string }) => `命盘:${chart.id}`) as typeof baziModule.baziProvider.formatForAI;
-  fortuneModule.dailyFortuneProvider.get = (async () => ({
-    id: 'today',
-    name: '今日运势',
-    content: '今日运势文本',
-    createdAt: new Date().toISOString(),
-  })) as typeof fortuneModule.dailyFortuneProvider.get;
-  caseProfileModule.getBaziCaseProfileByChartId = (async () => null) as typeof caseProfileModule.getBaziCaseProfileByChartId;
-
-  t.after(() => {
-    apiUtilsModule.getSystemAdminClient = originalGetSystemAdminClient;
-    baziModule.baziProvider.formatForAI = originalFormatForAI;
-    fortuneModule.dailyFortuneProvider.get = originalDailyFortuneGet;
-    caseProfileModule.getBaziCaseProfileByChartId = originalGetBaziCaseProfileByChartId;
-    delete require.cache[modulePath];
-  });
-
-  delete require.cache[modulePath];
-  const chatContextModule = require('../lib/chat/chat-context') as typeof import('../lib/chat/chat-context');
-
-  const first = await chatContextModule.buildDreamContextPayload('user-1');
-  const second = await chatContextModule.buildDreamContextPayload('user-1');
-  latestChartId = 'chart-2';
-  const third = await chatContextModule.buildDreamContextPayload('user-1');
-
-  assert.equal(first.payload.baziText, '命盘:chart-1');
-  assert.equal(second.payload.baziText, '命盘:chart-1');
-  assert.equal(third.payload.baziText, '命盘:chart-2');
-  assert.equal(latestMetaReads, 3);
-  assert.equal(baziChartReads, 2);
+test('buildDreamContextPayload should remove a missing preferred id before selecting the latest chart', async (t) => {
+  const { state, build } = setupDreamContext(t);
+  state.defaultChartId = 'deleted-chart';
+  const result = await build('user-1');
+  assert.match(result.payload.baziText || '', /^命盘:chart-1:/u);
+  assert.equal(state.chartReads, 2);
+  assert.equal(state.formattedRows.length, 1);
 });

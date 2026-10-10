@@ -156,6 +156,7 @@ export interface MeihuaJudgement {
 }
 
 export interface MeihuaOutput {
+  calculationOptions?: { method: MeihuaMethod; timezone: string; dayBoundary: string; ruleVersion: string; };
   question: string;
   castMeta: MeihuaCastMeta;
   ganZhiTime: GanZhiTime;

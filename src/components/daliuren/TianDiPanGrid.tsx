@@ -3,6 +3,7 @@
  * 4x4 布局，中心显示课名
  */
 import type { DaliurenCanonicalJSON } from 'taibu-core/daliuren';
+import { ChartTarget, isChartTargetSelected, type ChartInteraction } from '@/components/visualization/ChartTarget';
 
 const WANGSUAI_COLORS: Record<string, string> = {
     旺: 'text-red-500 font-bold',
@@ -15,8 +16,8 @@ const WANGSUAI_COLORS: Record<string, string> = {
 const TIANJIANG_COLORS: Record<string, string> = {
     贵人: 'text-yellow-500', 腾蛇: 'text-red-400', 朱雀: 'text-red-500',
     六合: 'text-green-500', 勾陈: 'text-amber-500', 青龙: 'text-blue-500',
-    天空: 'text-gray-400', 白虎: 'text-white', 太常: 'text-yellow-400',
-    玄武: 'text-black dark:text-foreground/20', 太阴: 'text-purple-400', 天后: 'text-pink-400',
+    天空: 'text-gray-400', 白虎: 'text-slate-600 dark:text-slate-200', 太常: 'text-yellow-400',
+    玄武: 'text-foreground', 太阴: 'text-purple-400', 天后: 'text-pink-400',
 };
 
 // 天地盘 12 宫的布局位置（4x4，中心2x2为课名区域）
@@ -45,9 +46,12 @@ interface PalaceCellProps {
     gong: DaliurenCanonicalJSON['天地盘'][number];
     isKong: boolean;
     isSanChuan?: 'chu' | 'zhong' | 'mo';
+    index: number;
+    interaction?: ChartInteraction;
 }
 
-function PalaceCell({ gong, isKong, isSanChuan }: PalaceCellProps) {
+function PalaceCell({ gong, isKong, isSanChuan, index, interaction }: PalaceCellProps) {
+    const id = 'daliuren:palace:' + index;
     const wangColor = gong.旺衰 ? WANGSUAI_COLORS[gong.旺衰] || 'text-foreground' : 'text-foreground';
     const jiangColor = gong.天将 ? TIANJIANG_COLORS[gong.天将] || 'text-foreground' : 'text-foreground';
     const kongStyle = isKong ? 'opacity-50' : '';
@@ -59,15 +63,16 @@ function PalaceCell({ gong, isKong, isSanChuan }: PalaceCellProps) {
         : '';
 
     return (
-        <div className={`flex flex-col items-center justify-center p-1 min-h-[64px] bg-background-secondary/50 rounded-lg border border-border/30 ${sanChuanBorder} ${kongStyle}`}>
+        <div data-chart-selected={isChartTargetSelected(interaction, id) || undefined} className={`flex flex-col items-center justify-center p-1 min-h-[64px] bg-background-secondary/50 rounded-lg border border-border/30 ${sanChuanBorder} ${kongStyle}`}>
+            {interaction && <ChartTarget interaction={interaction} id={id} className="text-[10px]">{gong.地盘}宫</ChartTarget>}
             {/* 天将 */}
-            <span className={`text-xs leading-tight ${jiangColor}`}>{gong.天将}</span>
+            <span className={`text-xs leading-tight ${jiangColor}`}><ChartTarget interaction={interaction} id={id + ':天将'}>{gong.天将}</ChartTarget></span>
             {/* 天盘地支 */}
             <span className={`text-sm font-bold leading-tight ${wangColor}`}>
-                {gong.天盘}{isKong ? '⊙' : ''}
+                <ChartTarget interaction={interaction} id={id + ':天盘'}>{gong.天盘}</ChartTarget>{isKong ? '⊙' : ''}
             </span>
             {/* 地盘地支 */}
-            <span className="text-xs text-foreground-secondary leading-tight">{gong.地盘}</span>
+            <span className="text-xs text-foreground-secondary leading-tight"><ChartTarget interaction={interaction} id={id + ':地盘'}>{gong.地盘}</ChartTarget></span>
             {/* 十二长生 */}
             <span className="text-[10px] text-foreground-tertiary leading-tight">{gong.长生十二神}</span>
         </div>
@@ -76,9 +81,10 @@ function PalaceCell({ gong, isKong, isSanChuan }: PalaceCellProps) {
 
 interface TianDiPanGridProps {
     result: DaliurenCanonicalJSON;
+    interaction?: ChartInteraction;
 }
 
-export function TianDiPanGrid({ result }: TianDiPanGridProps) {
+export function TianDiPanGrid({ result, interaction }: TianDiPanGridProps) {
     const kongSet = new Set(result.基本信息.关键状态.空亡);
     const chuZhi = result.三传[0]?.地支;
     const zhongZhi = result.三传[1]?.地支;
@@ -135,6 +141,8 @@ export function TianDiPanGrid({ result }: TianDiPanGridProps) {
                         <PalaceCell
                             key={idx}
                             gong={gong}
+                            index={parseInt(zhiIdx)}
+                            interaction={interaction}
                             isKong={kongSet.has(gong.天盘)}
                             isSanChuan={getSanChuanMark(gong)}
                         />

@@ -120,7 +120,7 @@ export function CheckinModal({
               ) : null}
 
               {status ? (
-                <div className="rounded-lg border border-[#ebe8e2] bg-[#fbfaf7] px-4 py-3 text-sm text-[#37352f]/65">
+                <div className="rounded-lg border border-border bg-surface px-4 py-3 text-sm text-foreground-secondary">
                   {statusText}
                 </div>
               ) : null}

@@ -97,6 +97,9 @@ declare module 'iztro' {
   }
 
   export const astro: {
+    config(config: Config): void;
+    getConfig(): Required<Config>;
+    getPalaceNames(fromIndex: number): string[];
     bySolar(
       dateStr: string,
       timeIndex: number,
@@ -112,5 +115,20 @@ declare module 'iztro' {
       fixLeap?: boolean,
       language?: string
     ): Astrolabe;
+  };
+  export interface Config {
+    mutagens?: Record<string, string[]>;
+    brightness?: Record<string, string[]>;
+    yearDivide?: 'normal' | 'exact';
+    horoscopeDivide?: 'normal' | 'exact';
+    ageDivide?: 'normal' | 'birthday';
+    dayDivide?: 'current' | 'forward';
+    algorithm?: 'default' | 'zhongzhou';
+  }
+  export const star: {
+    getHoroscopeStar(stem: string, branch: string, scope: 'decadal' | 'yearly' | 'monthly' | 'daily' | 'hourly'): Star[][];
+  };
+  export const util: {
+    getMutagensByHeavenlyStem(stem: string): string[];
   };
 }

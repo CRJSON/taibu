@@ -18,6 +18,8 @@ interface PalaceCardProps {
     showAdjStars?: boolean;
     flowInfo?: FlowInfo;
     onClick?: () => void;
+    onStarSelect?: (group: '主星及四化' | '辅星' | '杂曜', index: number) => void;
+    highlightedStars?: Array<{ group: '主星及四化' | '辅星' | '杂曜'; starIndex: number }>;
 }
 
 // 高亮类型对应的颜色
@@ -45,7 +47,9 @@ export function PalaceCard({
     isSanFangSiZheng = false,
     showAdjStars = false,
     flowInfo,
-    onClick
+    onClick,
+    onStarSelect,
+    highlightedStars = [],
 }: PalaceCardProps) {
     const shenSha = palace.神煞?.join('、') || '';
     const toStarInfo = (
@@ -75,14 +79,26 @@ export function PalaceCard({
 
     // 是否有流限信息
     const hasFlowInfo = flowInfo && (flowInfo.decadal || flowInfo.yearly || flowInfo.monthly || flowInfo.daily);
+    const starBadge = (star: ZiweiPalaceJSON['主星及四化'][number], group: '主星及四化' | '辅星' | '杂曜', index: number, type: 'major' | 'minor' | 'auxiliary') => {
+        const badge = <StarBadge star={toStarInfo(star, type)} size="sm" />;
+        if (!onStarSelect) return <span key={group + index}>{badge}</span>;
+        const selected = highlightedStars.some(item => item.group === group && item.starIndex === index);
+        const groupIndex = ['主星及四化', '辅星', '杂曜'].indexOf(group);
+        return <button key={group + index} type="button" className="chart-star-button" aria-label={palace.宫位 + star.星名}
+            aria-pressed={selected} data-chart-target={'ziwei:star:' + palace.宫位索引 + ':' + groupIndex + ':' + index}
+            onClick={event => { event.stopPropagation(); onStarSelect(group, index); }}>{badge}</button>;
+    };
 
     return (
         <div
-            role="button"
-            tabIndex={0}
+            role={onStarSelect ? 'group' : 'button'}
+            aria-label={palace.宫位}
+            tabIndex={onStarSelect ? -1 : 0}
+            data-chart-palace={palace.宫位索引}
+            data-chart-selected={isSelected || undefined}
             onClick={onClick}
             onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
+                if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
                     e.preventDefault();
                     onClick?.();
                 }
@@ -106,7 +122,8 @@ export function PalaceCard({
             {/* 宫名和干支 */}
             <div className="flex items-center justify-between mb-1">
                 <span className={`text-xs font-semibold ${isLifePalace ? 'text-accent' : 'text-foreground'}`}>
-                    {palace.宫位}
+                    {onStarSelect ? <button type="button" data-chart-target={'ziwei:palace:' + palace.宫位索引} aria-label={'查看' + palace.宫位}
+                        aria-pressed={isSelected} className="chart-palace-button" onClick={event => { event.stopPropagation(); onClick?.(); }}>{palace.宫位}</button> : palace.宫位}
                     {palace.是否身宫 === '是' && (
                         <span className="md:ml-1 ml-0 px-1 py-0.5 text-[9px] bg-amber-500/20 text-amber-500 rounded font-medium">
                             身宫
@@ -126,15 +143,15 @@ export function PalaceCard({
             <div className="flex-1 flex flex-wrap gap-0.5 content-start">
                 {/* 主星全部显示 */}
                 {palace.主星及四化.map((star, idx) => (
-                    <StarBadge key={`major-${idx}`} star={toStarInfo(star, 'major')} size="sm" />
+                    starBadge(star, '主星及四化', idx, 'major')
                 ))}
                 {/* 辅星全部显示 */}
                 {palace.辅星.map((star, idx) => (
-                    <StarBadge key={`minor-${idx}`} star={toStarInfo(star, 'minor')} size="sm" />
+                    starBadge(star, '辅星', idx, 'minor')
                 ))}
                 {/* 杂曜全部显示（受showAdjStars控制） */}
                 {showAdjStars && palace.杂曜?.map((star, idx) => (
-                    <StarBadge key={`adj-${idx}`} star={toStarInfo(star, 'auxiliary')} size="sm" />
+                    starBadge(star, '杂曜', idx, 'auxiliary')
                 ))}
             </div>
 

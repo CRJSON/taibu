@@ -6,6 +6,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { useUnsavedSettingsGuard } from '@/lib/hooks/useUnsavedSettingsGuard';
 import { RefreshCw, Save } from 'lucide-react';
 import { requestBrowserData } from '@/lib/browser-api';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
@@ -30,10 +31,12 @@ const GATEWAY_DESCRIPTIONS: Record<AIGateway['gatewayKey'], string> = {
 
 export function AIGatewayPanel() {
     const [gateways, setGateways] = useState<AIGateway[]>([]);
+    const [savedGateways, setSavedGateways] = useState<AIGateway[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [updatingId, setUpdatingId] = useState<string | null>(null);
     const { showToast } = useToast();
+    useUnsavedSettingsGuard(!loading && JSON.stringify(gateways) !== JSON.stringify(savedGateways));
 
     const loadGateways = useCallback(async () => {
         setLoading(true);
@@ -46,6 +49,7 @@ export function AIGatewayPanel() {
                 { fallbackMessage: '获取网关列表失败' },
             );
             setGateways(data.gateways || []);
+            setSavedGateways(data.gateways || []);
         } catch (e) {
             setError(e instanceof Error ? e.message : '获取网关列表失败');
         } finally {
@@ -106,7 +110,7 @@ export function AIGatewayPanel() {
                 <p className="text-red-500 mb-4">{error}</p>
                 <button
                     onClick={loadGateways}
-                    className="px-4 py-2 rounded-lg bg-accent text-white hover:bg-accent/90"
+                    className="px-4 py-2 rounded-lg bg-accent text-on-accent hover:bg-accent/90"
                 >
                     重试
                 </button>
@@ -217,7 +221,7 @@ export function AIGatewayPanel() {
                                 <button
                                     onClick={() => saveGateway(gateway)}
                                     disabled={isUpdating}
-                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm bg-accent text-white hover:bg-accent/90 disabled:opacity-50"
+                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm bg-accent text-on-accent hover:bg-accent/90 disabled:opacity-50"
                                 >
                                     {isUpdating ? <SoundWaveLoader variant="inline" /> : <Save className="w-3.5 h-3.5" />}
                                     保存网关

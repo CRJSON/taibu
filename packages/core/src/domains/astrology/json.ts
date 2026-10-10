@@ -1,3 +1,4 @@
+import { withRulesJSON } from '../../shared/calculation-rules.js';
 import type { AstrologyCanonicalTextOptions } from '../shared/text-options.js';
 import type {
   AstrologyCanonicalJSON,
@@ -10,6 +11,8 @@ import { buildAstrologyRenderModel } from './render-model.js';
 
 function factorToSnapshotJson(item: AstrologyFactor, isApproximate: boolean): AstrologyFactorSnapshotJSON {
   return {
+    标识: item.key,
+    黄经度: item.position.decimal,
     星座: item.sign.label,
     黄经: `${item.position.absolute} / ${item.position.withinSign}`,
     ...(!isApproximate && typeof item.house === 'number' ? { 宫位: `第${item.house}宫` } : {}),
@@ -19,6 +22,7 @@ function factorToSnapshotJson(item: AstrologyFactor, isApproximate: boolean): As
 
 function aspectToCompactJson(item: AstrologyAspect, currentFactorKey: string): AstrologyCompactAspectJSON {
   return {
+    对象标识: item.from.key === currentFactorKey ? item.to.key : item.from.key,
     对象: item.from.key === currentFactorKey ? item.to.label : item.from.label,
     相位: item.label,
     容许度: Number(item.orb.toFixed(4)),
@@ -27,6 +31,8 @@ function aspectToCompactJson(item: AstrologyAspect, currentFactorKey: string): A
 
 function aspectToJson(item: AstrologyAspect) {
   return {
+    起点标识: item.from.key,
+    终点标识: item.to.key,
     相位: item.label,
     起点: item.from.label,
     终点: item.to.label,
@@ -37,13 +43,17 @@ function aspectToJson(item: AstrologyAspect) {
 
 function houseToJson(item: AstrologyHouse): AstrologyHouseJSON {
   return {
+    宫位序号: item.id,
+    宫头黄经度: item.start.decimal,
     宫位: item.label,
     宫头星座: item.sign.label,
     宫头黄经: `${item.start.absolute} / ${item.start.withinSign}`,
   };
 }
 
-export function renderAstrologyCanonicalJSON(
+export const renderAstrologyCanonicalJSON = withRulesJSON(renderAstrologyCanonicalJSONBase);
+
+function renderAstrologyCanonicalJSONBase(
   result: AstrologyOutput,
   options: { detailLevel?: AstrologyCanonicalTextOptions['detailLevel']; } = {},
 ): AstrologyCanonicalJSON {

@@ -7,7 +7,8 @@
  */
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useId, useState } from 'react';
+import { Modal } from '@/components/ui/Modal';
 import { X } from 'lucide-react';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { useToast } from '@/components/ui/Toast';
@@ -36,6 +37,7 @@ export function AddToKnowledgeBaseModal({
     sourceId: string;
     sourceMeta?: Record<string, unknown>;
 }) {
+    const id = useId();
     const [kbLoading, setKbLoading] = useState(false);
     const [kbSaving, setKbSaving] = useState(false);
     const [kbError, setKbError] = useState<string | null>(null);
@@ -116,16 +118,16 @@ export function AddToKnowledgeBaseModal({
     if (!open || !knowledgeBaseEnabled) return null;
 
     return (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
-            <div className="bg-background/95 backdrop-blur-xl rounded-2xl w-full max-w-lg border border-white/10 shadow-2xl animate-in zoom-in-95 duration-200">
+        <Modal open={open} onClose={onClose} busy={kbSaving} labelledBy={id}>
                 <div className="p-4 sm:p-6 border-b border-border/50 flex items-center justify-between">
                     <div className="min-w-0">
-                        <div className="text-base font-semibold truncate">加入知识库</div>
+                        <h2 id={id} className="text-base font-semibold truncate">加入知识库</h2>
                         <div className="text-xs text-foreground-secondary truncate">{sourceTitle}</div>
                     </div>
                     <button
                         type="button"
                         onClick={onClose}
+                        disabled={kbSaving}
                         className="p-2 rounded-lg hover:bg-background-secondary transition-colors"
                         aria-label="关闭"
                     >
@@ -190,7 +192,7 @@ export function AddToKnowledgeBaseModal({
                     )}
 
                     {kbError && (
-                        <div className="text-sm text-red-500">{kbError}</div>
+                        <div role="alert" className="text-sm text-red-500">{kbError}</div>
                     )}
                 </div>
 
@@ -198,6 +200,7 @@ export function AddToKnowledgeBaseModal({
                     <button
                         type="button"
                         onClick={onClose}
+                        disabled={kbSaving}
                         className="px-4 py-2 text-sm rounded-xl bg-background border border-border hover:bg-background-secondary transition-colors"
                     >
                         取消
@@ -218,7 +221,6 @@ export function AddToKnowledgeBaseModal({
                         )}
                     </button>
                 </div>
-            </div>
-        </div>
+        </Modal>
     );
 }

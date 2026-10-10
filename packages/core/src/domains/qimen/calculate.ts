@@ -4,9 +4,11 @@
 
 import { Solar } from 'lunar-javascript';
 import { DI_ZHI, GAN_WUXING, TIAN_GAN, YI_MA_MAP } from '../../data/ganzhi.js';
-import { DEFAULT_DIVINATION_TIMEZONE, getTimeZoneOffsetMinutes } from '../../shared/timezone-utils.js';
+import { DEFAULT_DIVINATION_TIMEZONE, getZonedDateTimeParts, zonedTimeToUtc } from '../../shared/timezone-utils.js';
+import { CoreInputError, assertInteger, resolveEnum, validateCivilDateTime } from '../../shared/validation.js';
 import type { QimenInput, QimenOutput, QimenPalaceInfo } from './types.js';
-import { getKongWang } from '../../shared/utils.js';
+import { getElementRelation, getKongWang } from '../../shared/utils.js';
+import { calculateFlyingBoard, getQimenBureau, QIMEN_HIDDEN_JIA } from './rules.js';
 
 export type { QimenInput, QimenOutput } from './types.js';
 
@@ -107,8 +109,8 @@ const BRANCH_TO_PALACE: Record<string, number> = {
 
 // 入墓：天干→墓库地支
 const RU_MU_MAP: Record<string, string> = {
-  '甲': '未', '乙': '未', '丙': '戌', '丁': '戌',
-  '戊': '戌', '庚': '丑', '辛': '丑', '壬': '辰', '癸': '辰',
+  '甲': '未', '乙': '未', '丙': '戌', '丁': '丑',
+  '戊': '戌', '己': '丑', '庚': '丑', '辛': '辰', '壬': '辰', '癸': '未',
 };
 
 // 五行旺衰（季节→五行→状态）
@@ -122,6 +124,13 @@ const SEASON_WANG_SHUAI: Record<string, Record<string, string>> = {
 
 // 三元
 const YUAN_NAMES = ['上元', '中元', '下元'];
+const FORMATION_MAP: Record<string, string> = {
+  // Directional relations from《遁甲演义》and《烟波钓叟歌》.
+  '庚+丙': '太白入荧', '丙+庚': '荧入太白',
+  '辛+乙': '白虎猖狂', '乙+辛': '青龙逃走',
+  '丁+癸': '朱雀投江', '癸+丁': '腾蛇夭矫',
+  '庚+癸': '大格',
+};
 
 // ===== 辅助函数 =====
 
@@ -147,31 +156,17 @@ function buildMonthPhaseMap(season: string): Record<string, string> {
 }
 
 // 格局判断（天盘干+地盘干组合）
-function getFormations(heavenStem: string, earthStem: string): string[] {
+function getFormations(heavenStem: string, earthStem: string, gate: string, deity: string, hiddenJia: string, dutyGate: boolean): string[] {
   const formations: string[] = [];
   const key = `${heavenStem}+${earthStem}`;
-  const reverseKey = `${earthStem}+${heavenStem}`;
-
-  const FORMATION_MAP: Record<string, string> = {
-    // 吉格
-    '乙+丙': '奇仪相佐', '乙+丁': '奇仪相佐', '丙+丁': '星月相会',
-    '丙+戊': '飞鸟跌穴', '丁+戊': '青龙返首', '乙+戊': '日出扶桑',
-    // 五遁格
-    '丙+己': '天遁', '丁+壬': '地遁', '丁+己': '人遁',
-    '丙+壬': '神遁', '乙+癸': '鬼遁',
-    // 凶格
-    '庚+乙': '太白入荧', '庚+丙': '太白入荧', '庚+丁': '太白入荧',
-    '辛+乙': '白虎猖狂',
-    '乙+辛': '龙逃走',
-    '癸+丁': '腾蛇夭矫', '癸+丙': '蛇矫入火',
-    '庚+戊': '值符飞宫', '庚+壬': '上格', '庚+癸': '大格',
-    // 其他重要格局
-    '丁+癸': '玉女守门', '戊+壬': '小格', '戊+癸': '刑格',
-    '己+庚': '刑格入狱', '辛+壬': '凶蛇入刑',
-  };
 
   if (FORMATION_MAP[key]) formations.push(FORMATION_MAP[key]);
-  if (FORMATION_MAP[reverseKey] && reverseKey !== key) formations.push(FORMATION_MAP[reverseKey]);
+  if (deity === '值符' && earthStem === '丙') formations.push('青龙返首');
+  if (heavenStem === '丙' && earthStem === hiddenJia) formations.push('飞鸟跌穴');
+  if (gate === '生门' && heavenStem === '丙' && earthStem === '丁') formations.push('天遁');
+  if (gate === '开门' && heavenStem === '乙' && earthStem === '己') formations.push('地遁');
+  if (gate === '休门' && heavenStem === '丁' && deity === '太阴') formations.push('人遁');
+  if (dutyGate && earthStem === '丁') formations.push('玉女守门');
 
   return formations;
 }
@@ -185,15 +180,15 @@ function getXunShou(dayStem: string, dayBranch: string): string {
   return `甲${DI_ZHI[startZhiIdx]}`;
 }
 
-function assertValidTimeZone(timeZone: string): void {
-  try {
-    getTimeZoneOffsetMinutes(timeZone, new Date());
-  } catch (error) {
-    if (error instanceof RangeError) {
-      throw new Error('timezone 无效');
-    }
-    throw error;
-  }
+// taobi cannot accept pillar-only input without its ephemeris side data. A
+// modern Jia-Zi cycle supplies the same day/hour without its pre-1970 offset bug.
+function taobiCalendarDate(dayStem: string, dayBranch: string, hour: number, minute: number): Date {
+  const stemIndex = TIAN_GAN.indexOf(dayStem as typeof TIAN_GAN[number]);
+  const branchIndex = DI_ZHI.indexOf(dayBranch as typeof DI_ZHI[number]);
+  if (stemIndex < 0 || branchIndex < 0 || stemIndex % 2 !== branchIndex % 2) throw new Error('奇门日干支不可用');
+  const dayIndex = stemIndex + ((stemIndex - branchIndex + 12) % 12) * 5;
+  // 2024-01-01 is Jia-Zi; this date is used only for rotation with an explicit bureau.
+  return new Date(Date.UTC(2024, 0, 1 + dayIndex, (hour === 23 ? 0 : hour) - 8, minute));
 }
 
 // ===== 核心推演函数 =====
@@ -202,80 +197,87 @@ function assertValidTimeZone(timeZone: string): void {
 // 允许在进入 TZ 变异区间之前懒加载依赖，但从设置 process.env.TZ 到 finally 恢复期间绝对不能有 await。
 export function calculateQimenData(input: QimenInput): Promise<QimenOutput> {
   const { year, month, day, hour, minute = 0 } = input;
-  const timezone = input.timezone || DEFAULT_DIVINATION_TIMEZONE;
-  const juMethod = input.juMethod || 'chaibu';
-  const zhiFuJiGong = input.zhiFuJiGong || 'ji_liuyi';
-  const elementsOption = juMethod === 'maoshan' ? 2 : 1;
+  const timezone = input.timezone ?? DEFAULT_DIVINATION_TIMEZONE;
+  validateCivilDateTime({ year, month, day, hour, minute });
+  assertInteger(year, 'year', 1900, 2100);
+  const panType = resolveEnum(input.panType, ['zhuan', 'fei'], 'zhuan', 'panType');
+  const juMethod = resolveEnum(input.juMethod, ['chaibu', 'maoshan', 'equal'], 'chaibu', 'juMethod');
+  const zhiFuJiGong = resolveEnum(input.zhiFuJiGong, ['ji_liuyi', 'ji_wugong'], 'ji_liuyi', 'zhiFuJiGong');
+  const flyStarMethod = resolveEnum(input.flyStarMethod, ['forward', 'yin-reverse'], 'yin-reverse', 'flyStarMethod');
+  if (input.juNumber !== undefined) assertInteger(input.juNumber, 'juNumber', 1, 9);
+  if (input.dunType !== undefined) resolveEnum(input.dunType, ['yang', 'yin'], 'yang', 'dunType');
+  if (panType === 'zhuan' && input.flyStarMethod !== undefined) throw new CoreInputError('flyStarMethod', '仅飞盘可以设置飞星法');
+  const instant = zonedTimeToUtc({ year, month, day, hour, minute }, timezone);
+  const clockEightChar = Solar.fromYmdHms(year, month, day, hour, minute, 0).getLunar().getEightChar();
+  clockEightChar.setSect(1);
+  const bureau = getQimenBureau(input, instant, clockEightChar.getDayGan(), clockEightChar.getDayZhi());
+  const elementsOption = juMethod === 'maoshan' ? 2 : juMethod === 'equal' ? 0 : 1;
   const followOption = zhiFuJiGong === 'ji_wugong' ? 0 : 1;
-  assertValidTimeZone(timezone);
-  return loadTaobiConstructor().then((TheArtOfBecomingInvisible) => {
+  return (panType === 'fei' ? Promise.resolve(null) : loadTaobiConstructor()).then((TheArtOfBecomingInvisible) => {
     // 通过互斥锁串行化 TZ 变异区间，防止并发请求之间的竞争条件
     return withTzMutex(() => {
     // WARNING: process.env.TZ 全局变异区间 —— 此区间内禁止 await！
-    // taobi 库内部使用 Date 的 UTC 时间戳，zonedWallClockToSystemDate 无法替代。
+    // taobi receives a civil calendar and an explicit bureau, not the physical term instant.
     const previousTimeZone = process.env.TZ;
-    process.env.TZ = timezone;
+    if (TheArtOfBecomingInvisible) process.env.TZ = DEFAULT_DIVINATION_TIMEZONE;
     try {
-      const date = new Date(year, month - 1, day, hour, minute);
-      let t;
+      const date = instant;
+      let t: TaobiChartLike | null = null;
       try {
-        t = new TheArtOfBecomingInvisible(date, null, null, followOption, { elements: elementsOption });
+        if (TheArtOfBecomingInvisible) {
+          const backendDate = taobiCalendarDate(clockEightChar.getDayGan(), clockEightChar.getDayZhi(), hour, minute);
+          t = new TheArtOfBecomingInvisible(backendDate, bureau.round, null, followOption, { elements: elementsOption });
+          if (t.date.cs(true) !== clockEightChar.getDayGan() || t.date.tb(true) !== clockEightChar.getDayZhi()
+            || t.hour.cs(true) !== clockEightChar.getTimeGan() || t.hour.tb(true) !== clockEightChar.getTimeZhi()) {
+            throw new Error('转盘日时干支与历法不一致');
+          }
+        }
       } catch (err) {
         throw new Error(`奇门排盘失败: ${err instanceof Error ? err.message : String(err)}`);
       }
 
     // 基本信息
-    const round = t.round as number;
+    const round = bureau.round;
     const dunType: 'yang' | 'yin' = round > 0 ? 'yang' : 'yin';
     const juNumber = Math.abs(round);
 
-    // 四柱
-    const yearGan = t.year.cs(true) as string;
-    const yearZhi = t.year.tb(true) as string;
-    const monthGan = t.month.cs(true) as string;
-    const monthZhi = t.month.tb(true) as string;
-    const dayGan = t.date.cs(true) as string;
-    const dayZhi = t.date.tb(true) as string;
-    const hourGan = t.hour.cs(true) as string;
-    const hourZhi = t.hour.tb(true) as string;
+    // 四柱：tao_calendar 的子/丑月偏移及按天交节有误，年/月柱复用八字历法。
+    // lunar-javascript 的节气时刻采用北京时间（UTC+8）；先转换输入时区的实际时刻。
+    const beijingTime = new Date(date.getTime() + 8 * 60 * 60 * 1000);
+    const eightChar = Solar.fromYmdHms(
+      beijingTime.getUTCFullYear(), beijingTime.getUTCMonth() + 1, beijingTime.getUTCDate(),
+      beijingTime.getUTCHours(), beijingTime.getUTCMinutes(), beijingTime.getUTCSeconds(),
+    ).getLunar().getEightChar();
+    const yearGan = eightChar.getYearGan();
+    const yearZhi = eightChar.getYearZhi();
+    const monthGan = eightChar.getMonthGan();
+    const monthZhi = eightChar.getMonthZhi();
+    const dayGan = clockEightChar.getDayGan();
+    const dayZhi = clockEightChar.getDayZhi();
+    const hourGan = clockEightChar.getTimeGan();
+    const hourZhi = clockEightChar.getTimeZhi();
 
     // 节气
-    const solarTerm = t.getSolarTerms(true) as string;
+    const solarTerm = bureau.solarTerm;
 
     // 节气时间范围
-    const during = t.during as Date[];
-    let solarTermRange: string | undefined;
-    if (during && during.length >= 2) {
-      // 找到当前节气的起止时间
-      const solarTermNames = [
-        '小寒', '大寒', '立春', '雨水', '惊蛰', '春分',
-        '清明', '谷雨', '立夏', '小满', '芒种', '夏至',
-        '小暑', '大暑', '立秋', '处暑', '白露', '秋分',
-        '寒露', '霜降', '立冬', '小雪', '大雪', '冬至',
-      ];
-      const termIdx = solarTermNames.indexOf(solarTerm);
-      if (termIdx >= 0 && termIdx < during.length - 1) {
-        const start = during[termIdx];
-        const end = during[termIdx + 1];
-        solarTermRange = `${formatDateStr(start)} ~ ${formatDateStr(end)}`;
-      }
-    }
+    const solarTermRange = `${formatDateStr(bureau.start, timezone)} ~ ${formatDateStr(bureau.end, timezone)}`;
 
     // 旬首（奇门遁甲以时柱旬首为准）
     const xunShou = getXunShou(hourGan, hourZhi);
 
     // 三元（从 taobi 获取）
-    const elementsArr = t.ELEMENTS as number[] | undefined;
-    const yuanIdx = elementsArr ? elementsArr[elementsOption] : 0;
+    const yuanIdx = bureau.yuan;
     const yuan = YUAN_NAMES[yuanIdx] || '上元';
 
     // 值符值使
-    const zhiFuStar = t.getSymbol(true) as string;
-    const mandateIdx = t.mandate as number; // 值使门所在宫位index
+    const flying = panType === 'fei' ? calculateFlyingBoard(round, hourGan, xunShou, flyStarMethod) : null;
+    const zhiFuStar = flying ? flying.zhiFu.star : t!.getSymbol(true);
+    const mandateIdx = t?.mandate ?? 0; // 值使门的原宫，不能用作落宫
 
     // 值符所在宫位：找到值符星当前在哪个宫
-    let zhiFuPalace = 0;
-    for (let i = 0; i < 9; i++) {
+    let zhiFuPalace = flying ? flying.zhiFu.palace - 1 : 0;
+    for (let i = 0; t && i < 9; i++) {
       const p = t.acquired[i];
       const stars = p.getStar(true) as string[];
       if (stars && stars.includes(zhiFuStar)) {
@@ -285,7 +287,9 @@ export function calculateQimenData(input: QimenInput): Promise<QimenOutput> {
     }
 
     // 值使门名：从 mandate 索引获取
-    const zhiShiGate = DOOR_NAMES[mandateIdx] || '';
+    const zhiShiGate = flying ? flying.zhiShi.gate : DOOR_NAMES[mandateIdx] || '';
+    const zhiShiPalace = flying ? flying.zhiShi.palace : t!.acquired.findIndex(p => p.getDoor(true) === zhiShiGate) + 1;
+    if (!zhiShiPalace) throw new Error('值使门落宫不可用');
 
     // 月支季节
     const season = getSeason(monthZhi);
@@ -312,12 +316,12 @@ export function calculateQimenData(input: QimenInput): Promise<QimenOutput> {
     const globalFormations: string[] = [];
 
     for (let i = 0; i < 9; i++) {
-      const p = t.acquired[i];
-      const earthStems = p.getECS(true) as string[];
-      const heavenStems = p.getHCS(true) as string[];
-      const stars = p.getStar(true) as string[] | string;
-      const door = p.getDoor(true) as string;
-      const deity = p.getDivinity(true) as string;
+      const p = t?.acquired[i];
+      const earthStems = flying ? [flying.earth[i]] : p!.getECS(true);
+      const heavenStems = flying ? [flying.heaven[i]] : p!.getHCS(true);
+      const stars = flying ? flying.stars[i] : p!.getStar(true);
+      const door = flying ? flying.gates[i] : p!.getDoor(true);
+      const deity = flying ? flying.gods[i] : p!.getDivinity(true);
 
       const earthStem = earthStems?.[0] || '';
       const heavenStem = heavenStems?.[0] || '';
@@ -326,8 +330,8 @@ export function calculateQimenData(input: QimenInput): Promise<QimenOutput> {
 
       // 格局判断
       const formations: string[] = [];
-      if (heavenStem && earthStem && i !== 4) {
-        formations.push(...getFormations(heavenStem, earthStem));
+      if (heavenStem && earthStem && (panType === 'fei' || i !== 4)) {
+        formations.push(...getFormations(heavenStem, earthStem, door, deity, QIMEN_HIDDEN_JIA[xunShou], i + 1 === zhiShiPalace));
       }
 
       // 伏吟判断：天盘星回到原始宫位
@@ -354,6 +358,11 @@ export function calculateQimenData(input: QimenInput): Promise<QimenOutput> {
       const muBranch = RU_MU_MAP[heavenStem];
       const muPalace = muBranch ? BRANCH_TO_PALACE[muBranch] : undefined;
       const isRuMu = muPalace === i;
+      const isMenPo = Boolean(door && getElementRelation(DOOR_ELEMENTS[door], PALACE_ELEMENTS[i]) === 'control');
+      const punishment: Record<string, number> = { 戊: 3, 己: 2, 庚: 8, 辛: 9, 壬: 4, 癸: 4 };
+      const isJiXing = punishment[heavenStem] === i + 1;
+      if (isMenPo) formations.push('门迫');
+      if (isJiXing) formations.push('六仪击刑');
 
       if (formations.length > 0) {
         globalFormations.push(...formations.map(f => `${palaceName}宫: ${f}`));
@@ -379,6 +388,11 @@ export function calculateQimenData(input: QimenInput): Promise<QimenOutput> {
         isKongWang,
         isYiMa,
         isRuMu,
+        isMenPo,
+        isJiXing,
+        ...(Array.isArray(stars) && stars.length > 1 ? { hostedStars: stars.slice(1) } : {}),
+        ...(heavenStems.length > 1 ? { hostedHeavenStems: heavenStems.slice(1) } : {}),
+        ...(earthStems.length > 1 ? { hostedEarthStems: earthStems.slice(1) } : {}),
       });
     }
 
@@ -400,7 +414,7 @@ export function calculateQimenData(input: QimenInput): Promise<QimenOutput> {
       yuan,
       xunShou,
       zhiFu: { star: zhiFuStar, palace: zhiFuPalace + 1 },
-      zhiShi: { gate: zhiShiGate, palace: mandateIdx + 1 },
+      zhiShi: { gate: zhiShiGate, palace: zhiShiPalace },
       palaces,
       kongWang: {
         dayKong: {
@@ -414,10 +428,13 @@ export function calculateQimenData(input: QimenInput): Promise<QimenOutput> {
       },
       yiMa: { branch: yiMaBranch, palace: yiMaPalace >= 0 ? yiMaPalace + 1 : 0 },
       globalFormations,
-      panType: '转盘',
-      juMethod: juMethod === 'maoshan' ? '茅山法' : '拆补法',
+      panType: panType === 'fei' ? '飞盘' : '转盘',
+      juMethod: input.juNumber !== undefined ? '手工定局' : juMethod === 'maoshan' ? '茅山法' : juMethod === 'equal' ? '等时均分法' : '拆补法',
       question: input.question,
       monthPhase,
+      inputSnapshot: { year, month, day, hour, minute, timezone, panType, juMethod, zhiFuJiGong,
+        ...(panType === 'fei' ? { flyStarMethod } : {}),
+        ...(input.juNumber === undefined ? {} : { juNumber: input.juNumber, dunType: input.dunType }), ruleVersion: 'qimen-hour-2026.10' },
       };
     } finally {
       if (previousTimeZone == null) {
@@ -430,11 +447,12 @@ export function calculateQimenData(input: QimenInput): Promise<QimenOutput> {
   });
 }
 
-function formatDateStr(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const dd = String(d.getDate()).padStart(2, '0');
-  const hh = String(d.getHours()).padStart(2, '0');
-  const mm = String(d.getMinutes()).padStart(2, '0');
+function formatDateStr(d: Date, timezone: string): string {
+  const parts = getZonedDateTimeParts(d, timezone);
+  const y = parts.year;
+  const m = String(parts.month).padStart(2, '0');
+  const dd = String(parts.day).padStart(2, '0');
+  const hh = String(parts.hour).padStart(2, '0');
+  const mm = String(parts.minute).padStart(2, '0');
   return `${y}-${m}-${dd} ${hh}:${mm}`;
 }

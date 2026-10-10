@@ -2,6 +2,7 @@
 // ===== 每日黄历 =====
 
 export interface AlmanacCanonicalJSON {
+  计算规则?: Record<string, unknown>;
   基础与个性化坐标: {
     日期: string;
     日干支: string;
@@ -43,6 +44,7 @@ export interface AlmanacCanonicalJSON {
   };
   时辰吉凶?: Array<{
     时辰: string;
+    时间范围?: string;
     天神?: string;
     天神类型?: string;
     天神吉凶?: string;

@@ -487,7 +487,7 @@ export function ImportExportModal({
                         <button
                             onClick={handleExport}
                             disabled={exporting}
-                            className="w-full px-4 py-2 bg-accent text-white rounded-lg hover:bg-accent/90 transition-colors disabled:opacity-50"
+                            className="w-full px-4 py-2 bg-accent text-on-accent rounded-lg hover:bg-accent/90 transition-colors disabled:opacity-50"
                         >
                             {exporting ? '导出中...' : '导出数据'}
                         </button>

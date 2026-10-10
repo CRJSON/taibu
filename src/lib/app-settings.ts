@@ -9,7 +9,7 @@ export const FEATURE_MODULE_IDS = [
   'face', 'palm', 'mbti', 'chat', 'daily', 'monthly',
   'records', 'community', 'knowledge-base', 'mcp-service',
   'checkin', 'credits', 'charts', 'ai-personalization',
-  'notifications', 'upgrade', 'help',
+  'notifications', 'upgrade', 'help', 'agent',
 ] as const;
 
 export type FeatureModuleId = typeof FEATURE_MODULE_IDS[number];
@@ -41,6 +41,7 @@ export const FEATURE_MODULE_LABELS: Record<FeatureModuleId, string> = {
   notifications: '消息通知',
   upgrade: '订阅',
   help: '帮助',
+  agent: 'Agent 任务',
 };
 
 const FEATURE_PREFIX = 'feature_disabled:';

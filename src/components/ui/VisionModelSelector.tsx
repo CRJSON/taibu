@@ -6,13 +6,15 @@
  */
 'use client';
 
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useId, useRef } from 'react';
 import { ChevronDown, Eye, Lightbulb } from 'lucide-react';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { getVendorIcon } from '@/lib/ai/vendor-config';
 import { useAvailableModels } from '@/lib/hooks/useAvailableModels';
 import type { AIVendor } from '@/types';
-import { DEFAULT_VISION_MODEL_ID, getVendorName } from '@/lib/ai/ai-config';
+import { DEFAULT_VISION_MODEL_ID } from '@/lib/ai/ai-config';
+import { getVendorName } from '@/lib/ai/vendor-labels';
+import { FloatingPanel } from '@/components/ui/FloatingPanel';
 
 interface VisionModelConfig {
     id: string;
@@ -43,6 +45,8 @@ export function VisionModelSelector({
     compact = false,
 }: VisionModelSelectorProps) {
     const [dropdownOpen, setDropdownOpen] = useState(false);
+    const modelButtonRef = useRef<HTMLButtonElement>(null);
+    const modelMenuId = useId();
     const modelsQuery = useAvailableModels(null, {
         enabled: !!onModelChange,
         vision: true,
@@ -96,8 +100,9 @@ export function VisionModelSelector({
     return (
         <div className="flex items-center gap-2">
             {onModelChange && (
-                <div className="relative">
+                <div>
                     <button
+                        ref={modelButtonRef}
                         type="button"
                         onClick={() => setDropdownOpen(!dropdownOpen)}
                         className={`flex items-center gap-1.5 ${buttonPadding} rounded-lg transition-all ${textSize} ${isDisabled
@@ -105,6 +110,9 @@ export function VisionModelSelector({
                             : 'hover:bg-background-secondary border border-border text-foreground-secondary hover:text-foreground'
                             }`}
                         disabled={isDisabled}
+                        aria-haspopup="menu"
+                        aria-expanded={dropdownOpen}
+                        aria-controls={dropdownOpen ? modelMenuId : undefined}
                     >
                         {loading ? (
                             <SoundWaveLoader variant="inline" />
@@ -123,48 +131,42 @@ export function VisionModelSelector({
                         <ChevronDown className={`w-3.5 h-3.5 transition-transform ${dropdownOpen ? 'rotate-180' : ''}`} />
                     </button>
 
-                    {dropdownOpen && !isDisabled && (
-                        <>
-                            <div
-                                className="fixed inset-0 z-10"
-                                onClick={() => setDropdownOpen(false)}
-                            />
-                            <div className="absolute top-full left-0 mt-2 w-52 bg-background border border-border rounded-lg shadow-lg z-20 overflow-hidden">
-                                <div className="text-xs font-medium text-foreground-secondary px-3 py-2 bg-background-secondary/50 border-b border-border">
-                                    视觉分析模型
-                                </div>
-                                {models.map((model) => {
-                                    const isAllowed = model.allowed !== false;
-                                    return (
-                                        <button
-                                            key={model.id}
-                                            type="button"
-                                            onClick={() => {
-                                                if (isAllowed && onModelChange) {
-                                                    onModelChange(model.id);
-                                                }
-                                                setDropdownOpen(false);
-                                            }}
-                                            className={`w-full px-3 py-2.5 text-left text-sm transition-colors flex items-center gap-2 ${isAllowed ? 'hover:bg-background-secondary' : 'opacity-50 cursor-not-allowed'
-                                                } ${selectedModel === model.id ? 'bg-accent/10 text-accent' : ''}`}
-                                            disabled={!isAllowed}
-                                        >
-                                            {getVendorIcon(model.vendor)}
-                                            <div className="flex-1 min-w-0">
-                                                <div className="font-medium truncate">{model.name}</div>
-                                                <div className="text-xs text-foreground-secondary">
-                                                    {getVendorName(model.vendor)}
-                                                </div>
-                                            </div>
-                                            {!isAllowed && model.blockedReason && (
-                                                <span className="text-xs text-amber-600">{model.blockedReason}</span>
-                                            )}
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                        </>
-                    )}
+                    <FloatingPanel open={dropdownOpen && !isDisabled} anchorRef={modelButtonRef} onClose={() => setDropdownOpen(false)} id={modelMenuId} label="视觉分析模型" className="w-52 overflow-hidden p-0">
+                        <div className="border-b border-border bg-background-secondary/50 px-3 py-2 text-xs font-medium text-foreground-secondary">
+                            视觉分析模型
+                        </div>
+                        {models.map((model) => {
+                            const isAllowed = model.allowed !== false;
+                            return (
+                                <button
+                                    key={model.id}
+                                    type="button"
+                                    role="menuitemradio"
+                                    aria-checked={selectedModel === model.id}
+                                    onClick={() => {
+                                        if (isAllowed && onModelChange) {
+                                            onModelChange(model.id);
+                                        }
+                                        setDropdownOpen(false);
+                                    }}
+                                    className={`flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm transition-colors ${isAllowed ? 'hover:bg-background-secondary' : 'cursor-not-allowed opacity-50'
+                                        } ${selectedModel === model.id ? 'bg-accent/10 text-accent' : ''}`}
+                                    disabled={!isAllowed}
+                                >
+                                    {getVendorIcon(model.vendor)}
+                                    <div className="min-w-0 flex-1">
+                                        <div className="truncate font-medium">{model.name}</div>
+                                        <div className="text-xs text-foreground-secondary">
+                                            {getVendorName(model.vendor)}
+                                        </div>
+                                    </div>
+                                    {!isAllowed && model.blockedReason && (
+                                        <span className="text-xs text-amber-600">{model.blockedReason}</span>
+                                    )}
+                                </button>
+                            );
+                        })}
+                    </FloatingPanel>
 
                     {error && !loading && (
                         <div className="mt-1 text-xs text-rose-500">{error}</div>

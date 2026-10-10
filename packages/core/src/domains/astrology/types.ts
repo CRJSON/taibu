@@ -1,4 +1,4 @@
-export type AstrologyHouseSystem = 'placidus';
+export type AstrologyHouseSystem = 'placidus' | 'equal-house' | 'whole-sign' | 'koch' | 'campanus' | 'regiomontanus' | 'topocentric';
 
 export type AstrologyAspectType = 'conjunction' | 'opposition' | 'trine' | 'square' | 'sextile';
 
@@ -19,6 +19,12 @@ export interface AstrologyInput {
   birthPlace?: string;
   transitDateTime?: string;
   houseSystem?: AstrologyHouseSystem;
+  timezone?: string;
+  disambiguation?: 'reject' | 'earlier' | 'later' | 'compatible';
+  zodiac?: 'tropical' | 'sidereal';
+  /** 明确指定的恒星黄道偏移，单位度；本命和行运共用固定偏移。 */
+  ayanamsa?: number;
+  aspectOrbs?: Partial<Record<AstrologyAspectType, number>>;
 }
 
 export interface AstrologySignInfo {
@@ -78,10 +84,12 @@ export interface AstrologyChartSnapshot {
   origin: {
     localDateTime: string;
     derivedTimeZone: string;
+    timezoneSource?: 'provided' | 'coordinates' | 'default';
     latitude: number;
     longitude: number;
     coordinateSource: AstrologyCoordinateSource;
     birthPlace?: string;
+    utcDateTime?: string;
   };
   sunSign: AstrologySignInfo;
   bodies: AstrologyFactor[];
@@ -93,12 +101,17 @@ export interface AstrologyChartSnapshot {
 
 export interface AstrologyOutput {
   chartMeta: {
-    zodiac: 'tropical';
+    zodiac: 'tropical' | 'sidereal';
     houseSystem: AstrologyHouseSystem;
     supportedBodies: string[];
     supportedAspectTypes: AstrologyAspectType[];
     calculationMode: AstrologyCalculationMode;
     calculationNote?: string;
+    ephemeris?: string;
+    coordinateFrame?: string;
+    ruleVersion?: string;
+    ayanamsa?: number;
+    aspectOrbs?: Partial<Record<AstrologyAspectType, number>>;
   };
   natal: AstrologyChartSnapshot;
   transit: AstrologyChartSnapshot;

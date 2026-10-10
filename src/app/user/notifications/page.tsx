@@ -293,12 +293,12 @@ function NotificationsContent() {
                         <div className="flex items-center gap-3">
                             <h1 className="text-2xl font-bold">消息通知</h1>
                             {unreadCount > 0 && (
-                                <span className="px-2 py-0.5 text-[10px] font-bold bg-blue-50 text-[#2eaadc] rounded uppercase tracking-wider">
+                                <span className="px-2 py-0.5 text-[10px] font-bold bg-blue-50 text-accent rounded uppercase tracking-wider">
                                     {unreadCount} UNREAD
                                 </span>
                             )}
                         </div>
-                        <p className="text-sm text-foreground/50">查看系统提醒与命理更新</p>
+                        <p className="text-sm text-foreground-secondary">查看系统提醒与命理更新</p>
                     </div>
 
                     <div className="flex items-center gap-2">
@@ -316,7 +316,7 @@ function NotificationsContent() {
                             <button
                                 onClick={toggleSelectMode}
                                 className={`px-3 py-1.5 text-xs font-medium rounded-md border transition-colors ${
-                                    selectMode ? 'bg-[#2eaadc] text-white border-[#2eaadc]' : 'border-border hover:bg-background-secondary'
+                                    selectMode ? 'bg-accent text-on-accent border-accent' : 'border-border hover:bg-background-secondary'
                                 }`}
                             >
                                 {selectMode ? '完成' : '选择'}
@@ -328,7 +328,7 @@ function NotificationsContent() {
                 <div className="space-y-8">
                     {/* 筛选器 - 极简药丸 */}
                     {notifications.length > 0 && (
-                        <div className="flex flex-wrap items-center gap-6 text-xs text-foreground/40 border-b border-border/60 pb-4">
+                        <div className="flex flex-wrap items-center gap-6 text-xs text-foreground-secondary border-b border-border/60 pb-4">
                             <div className="flex items-center gap-2">
                                 <span className="font-semibold uppercase tracking-widest text-[10px]">阅读状态</span>
                                 <div className="flex items-center gap-1">
@@ -375,17 +375,17 @@ function NotificationsContent() {
                     ) : notifications.length === 0 ? (
                         <div className="text-center py-20 border border-dashed border-border rounded-md">
                             <Bell className="w-8 h-8 text-foreground/10 mx-auto mb-3" />
-                            <p className="text-sm text-foreground/40">暂无任何通知</p>
+                            <p className="text-sm text-foreground-secondary">暂无任何通知</p>
                         </div>
                     ) : visibleNotifications.length === 0 ? (
                         <div className="text-center py-20 border border-dashed border-border rounded-md">
-                            <p className="text-sm text-foreground/40">当前筛选下暂无相关消息</p>
+                            <p className="text-sm text-foreground-secondary">当前筛选下暂无相关消息</p>
                         </div>
                     ) : (
                         <div className={`space-y-8 ${selectMode ? 'mb-24' : ''}`}>
                             {groupedNotifications.map((group) => (
                                 <section key={group.label} className="space-y-3">
-                                    <h3 className="text-[11px] font-semibold text-foreground/40 uppercase tracking-widest px-1">
+                                    <h3 className="text-[11px] font-semibold text-foreground-secondary uppercase tracking-widest px-1">
                                         {group.label}
                                     </h3>
                                     <div className="bg-background border border-border rounded-md overflow-hidden divide-y divide-border/60">
@@ -406,7 +406,7 @@ function NotificationsContent() {
                                                     {selectMode && (
                                                         <div className="flex items-center shrink-0">
                                                             <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
-                                                                isSelected ? 'bg-[#2eaadc] border-[#2eaadc]' : 'border-border bg-background'
+                                                                isSelected ? 'bg-accent border-accent' : 'border-border bg-background'
                                                             }`}>
                                                                 {isSelected && <CheckSquare className="w-3 h-3 text-white" />}
                                                             </div>
@@ -418,25 +418,25 @@ function NotificationsContent() {
                                                     <div className="flex-1 min-w-0 space-y-1">
                                                         <div className="flex items-start justify-between gap-4">
                                                             <div className="flex items-center gap-2 min-w-0">
-                                                                <span className="text-[10px] font-bold text-foreground/30 uppercase tracking-wider shrink-0">
+                                                                <span className="text-[10px] font-bold text-foreground-secondary uppercase tracking-wider shrink-0">
                                                                     {style.label}
                                                                 </span>
-                                                                <h4 className={`text-sm font-medium truncate ${!notification.is_read ? 'text-foreground' : 'text-foreground/50'}`}>
+                                                                <h4 className={`text-sm font-medium truncate ${!notification.is_read ? 'text-foreground' : 'text-foreground-secondary'}`}>
                                                                     {notification.title}
                                                                 </h4>
                                                             </div>
-                                                            <span className="text-[10px] font-mono text-foreground/30 shrink-0 uppercase">
+                                                            <span className="text-[10px] font-mono text-foreground-secondary shrink-0 uppercase">
                                                                 {formatTime(notification.created_at)}
                                                             </span>
                                                         </div>
                                                         {notification.content && (
-                                                            <p className="text-sm text-foreground/50 leading-relaxed line-clamp-2">
+                                                            <p className="text-sm text-foreground-secondary leading-relaxed line-clamp-2">
                                                                 {notification.content}
                                                             </p>
                                                         )}
                                                         <div className="flex items-center gap-4 pt-1">
                                                             {notification.link && !selectMode && (
-                                                                <span className="text-[11px] font-semibold text-[#2eaadc] flex items-center gap-1 hover:underline">
+                                                                <span className="text-[11px] font-semibold text-accent flex items-center gap-1 hover:underline">
                                                                     查看详情
                                                                     <ExternalLink className="w-3 h-3" />
                                                                 </span>
@@ -444,7 +444,7 @@ function NotificationsContent() {
                                                             {!notification.is_read && !selectMode && (
                                                                 <button
                                                                     onClick={(e) => handleMarkRead(notification, e)}
-                                                                    className="text-[11px] font-semibold text-foreground/40 hover:text-[#2eaadc] transition-colors"
+                                                                    className="text-[11px] font-semibold text-foreground-secondary hover:text-accent transition-colors"
                                                                 >
                                                                     标记已读
                                                                 </button>
@@ -456,7 +456,7 @@ function NotificationsContent() {
                                                         <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                                             <button
                                                                 onClick={(e) => handleDeleteSingle(notification.id, e)}
-                                                                className="p-1.5 rounded hover:bg-[#eb5757]/10 text-[#eb5757]/60 hover:text-[#eb5757] transition-colors"
+                                                                className="p-1.5 rounded hover:bg-danger/10 text-danger/60 hover:text-danger transition-colors"
                                                                 title="删除通知"
                                                             >
                                                                 <Trash2 className="w-3.5 h-3.5" />
@@ -476,9 +476,9 @@ function NotificationsContent() {
                 {/* 底部批量操作栏 - Notion 浮动条风格 */}
                 {selectMode && visibleNotifications.length > 0 && (
                     <div className="fixed bottom-10 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-bottom-4">
-                        <div className="bg-[#37352f] text-white rounded-lg shadow-xl px-4 py-2 flex items-center gap-6 border border-white/10 backdrop-blur-md">
+                        <div className="bg-foreground text-white rounded-lg shadow-xl px-4 py-2 flex items-center gap-6 border border-white/10 backdrop-blur-md">
                             <div className="flex items-center gap-3 pr-6 border-r border-white/10">
-                                <button onClick={toggleSelectAll} className="hover:text-[#2eaadc] transition-colors">
+                                <button onClick={toggleSelectAll} className="hover:text-accent transition-colors">
                                     {allSelected ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
                                 </button>
                                 <span className="text-xs font-medium">已选择 {selectedCount} 项</span>
@@ -487,14 +487,14 @@ function NotificationsContent() {
                                 <button
                                     onClick={handleMarkSelectedRead}
                                     disabled={isProcessing || selectedCount === 0}
-                                    className="text-xs font-semibold hover:text-[#2eaadc] transition-colors disabled:opacity-30"
+                                    className="text-xs font-semibold hover:text-accent transition-colors disabled:opacity-30"
                                 >
                                     标记已读
                                 </button>
                                 <button
                                     onClick={handleDeleteSelected}
                                     disabled={isProcessing || selectedCount === 0}
-                                    className="text-xs font-semibold text-[#eb5757] hover:text-[#eb5757]/80 transition-colors disabled:opacity-30"
+                                    className="text-xs font-semibold text-danger hover:text-danger/80 transition-colors disabled:opacity-30"
                                 >
                                     删除
                                 </button>

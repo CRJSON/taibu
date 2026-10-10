@@ -5,8 +5,8 @@
  */
 'use client';
 
-import { useEffect, useCallback, type ReactNode } from 'react';
-import { createPortal } from 'react-dom';
+import { useCallback, useId, type ReactNode } from 'react';
+import { Modal } from './Modal';
 import { AlertTriangle } from 'lucide-react';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 
@@ -37,19 +37,7 @@ export function ConfirmDialog({
     variant = 'danger',
     loading = false,
 }: ConfirmDialogProps) {
-    // 检查是否在客户端环境
-    const isMounted = typeof window !== 'undefined';
-
-    // ESC 键关闭
-    useEffect(() => {
-        const handleEsc = (e: KeyboardEvent) => {
-            if (e.key === 'Escape' && isOpen && !loading) {
-                onClose();
-            }
-        };
-        window.addEventListener('keydown', handleEsc);
-        return () => window.removeEventListener('keydown', handleEsc);
-    }, [isOpen, loading, onClose]);
+    const id = useId();
 
     // 处理确认
     const handleConfirm = useCallback(async () => {
@@ -69,22 +57,15 @@ export function ConfirmDialog({
         },
         default: {
             icon: 'text-accent',
-            button: 'bg-accent hover:bg-accent/90 text-white',
+            button: 'bg-accent hover:bg-accent/90 text-on-accent',
         },
     };
 
     const styles = variantStyles[variant];
 
-    const dialog = (
-        <div className="fixed inset-0 z-[1100] flex items-center justify-center p-4">
-            {/* 背景遮罩 */}
-            <div
-                className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-                onClick={loading ? undefined : onClose}
-            />
-
-            {/* 弹窗内容 */}
-            <div className="relative bg-background rounded-xl border border-border shadow-xl p-6 max-w-sm w-full animate-fade-in">
+    return (
+        <Modal open={isOpen} onClose={onClose} busy={loading} labelledBy={`${id}-title`} describedBy={`${id}-description`} className="max-w-sm">
+            <div className="p-6">
                 {/* 图标 */}
                 {variant !== 'default' && (
                     <div className={`flex items-center justify-center w-12 h-12 rounded-full bg-background-secondary mb-4 mx-auto ${styles.icon}`}>
@@ -93,12 +74,12 @@ export function ConfirmDialog({
                 )}
 
                 {/* 标题 */}
-                <h3 className="text-lg font-semibold mb-2 text-center">
+                <h3 id={`${id}-title`} className="text-lg font-semibold mb-2 text-center">
                     {title}
                 </h3>
 
                 {/* 描述 */}
-                <p className="text-foreground-secondary text-sm mb-6 text-center">
+                <p id={`${id}-description`} className="text-foreground-secondary text-sm mb-6 text-center">
                     {description}
                 </p>
 
@@ -128,13 +109,6 @@ export function ConfirmDialog({
                     </div>
                 ) : null}
             </div>
-        </div>
+        </Modal>
     );
-
-    // 使用 Portal 渲染到 body 下，确保遮罩覆盖全屏
-    if (isMounted) {
-        return createPortal(dialog, document.body);
-    }
-
-    return null;
 }

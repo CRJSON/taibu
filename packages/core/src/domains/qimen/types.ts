@@ -9,8 +9,11 @@ export interface QimenInput {
   minute?: number;
   timezone?: string;
   question?: string;
-  panType?: 'zhuan';
-  juMethod?: 'chaibu' | 'maoshan';
+  panType?: 'zhuan' | 'fei';
+  juMethod?: 'chaibu' | 'maoshan' | 'equal';
+  flyStarMethod?: 'forward' | 'yin-reverse';
+  juNumber?: number;
+  dunType?: 'yang' | 'yin';
   zhiFuJiGong?: 'ji_liuyi' | 'ji_wugong';
 }
 
@@ -34,6 +37,11 @@ export interface QimenPalaceInfo {
   isKongWang?: boolean;       // 是否空亡
   isYiMa?: boolean;           // 是否驿马
   isRuMu?: boolean;           // 是否入墓
+  isMenPo?: boolean;
+  isJiXing?: boolean;
+  hostedStars?: string[];
+  hostedHeavenStems?: string[];
+  hostedEarthStems?: string[];
 }
 
 export interface QimenOutput {
@@ -66,4 +74,5 @@ export interface QimenOutput {
   juMethod: string;
   question?: string;
   monthPhase?: Record<string, string>; // 十干月令旺衰：干 → 旺/相/休/囚/死
+  inputSnapshot?: QimenInput & { timezone: string; panType: 'zhuan' | 'fei'; juMethod: 'chaibu' | 'maoshan' | 'equal'; ruleVersion: string };
 }

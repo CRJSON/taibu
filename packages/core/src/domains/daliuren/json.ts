@@ -1,3 +1,4 @@
+import { withRulesJSON } from '../../shared/calculation-rules.js';
 import type { DaliurenOutput } from './types.js';
 import type {
   DaliurenCanonicalJSON
@@ -9,7 +10,9 @@ import type {
   DaliurenCanonicalTextOptions
 } from '../shared/text-options.js';
 
-export function renderDaliurenCanonicalJSON(result: DaliurenOutput, options: { detailLevel?: DaliurenCanonicalTextOptions['detailLevel']; } = {}): DaliurenCanonicalJSON {
+export const renderDaliurenCanonicalJSON = withRulesJSON(renderDaliurenCanonicalJSONBase);
+
+function renderDaliurenCanonicalJSONBase(result: DaliurenOutput, options: { detailLevel?: DaliurenCanonicalTextOptions['detailLevel']; } = {}): DaliurenCanonicalJSON {
   const detailLevel = normalizeDetailLevelBinary(options.detailLevel);
   const basicInfo: DaliurenCanonicalJSON['基本信息'] = {
     占测时间: result.dateInfo.solarDate,
@@ -31,6 +34,7 @@ export function renderDaliurenCanonicalJSON(result: DaliurenOutput, options: { d
     if (result.benMing) basicInfo.本命 = result.benMing;
     if (result.xingNian) basicInfo.行年 = result.xingNian;
     if (result.keTi.extraTypes.length > 0) basicInfo.附加课体 = [...result.keTi.extraTypes];
+    if (result.keTi.subTypes.length > 0) basicInfo.细分课体 = [...result.keTi.subTypes];
   }
 
   const keLabels = ['一课 (干上)', '二课 (干阴)', '三课 (支上)', '四课 (支阴)'] as const;
@@ -68,6 +72,7 @@ export function renderDaliurenCanonicalJSON(result: DaliurenOutput, options: { d
     四课: siKe,
     三传: sanChuan,
     天地盘: gongInfos,
+    ...(detailLevel === 'full' ? { 神煞: result.shenSha.map(item => ({ 名称: item.name, 落点: item.value, ...(item.description ? { 说明: item.description } : {}) })) } : {}),
   };
 }
 

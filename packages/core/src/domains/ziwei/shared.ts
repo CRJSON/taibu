@@ -3,12 +3,15 @@
  */
 
 import { astro } from 'iztro';
-import { Lunar, LunarMonth, LunarYear } from 'lunar-javascript';
+import { resolveBaziCalendarContext } from '../bazi/calculate.js';
+import { assertInteger } from '../../shared/validation.js';
+import type { ZiweiCalculationOptions } from './types.js';
+import { bindZiweiProfile, resolveZiweiOptions, withZiweiOptions } from './profile.js';
 import type { BirthTimeInput, DiZhi, Gender, StarInfo, TrueSolarTimeInfo } from '../shared/types.js';
-import { hourToTimeIndex, resolveTrueSolarDateTime } from '../shared/true-solar.js';
+import { hourToTimeIndex } from '../shared/true-solar.js';
 
 export type { BirthTimeInput, DiZhi, Gender, StarInfo, TrueSolarTimeInfo } from '../shared/types.js';
-export { calculateTrueSolarTime, hourToTimeIndex, resolveTrueSolarDateTime } from '../shared/true-solar.js';
+export { calculateTrueSolarTime, hourToTimeIndex } from '../shared/true-solar.js';
 
 export const MUTAGEN_NAMES = ['禄', '权', '科', '忌'] as const;
 export type MutagenName = typeof MUTAGEN_NAMES[number];
@@ -96,193 +99,19 @@ export function mapStar(star: IztroStar): StarInfo {
   };
 }
 
-function validateLunarBirthInput(params: {
-  birthYear: number;
-  birthMonth: number;
-  birthDay: number;
-  birthHour: number;
-  birthMinute: number;
-  isLeapMonth: boolean;
-}): { lunar: ReturnType<typeof Lunar.fromYmdHms>; solar: ReturnType<ReturnType<typeof Lunar.fromYmdHms>['getSolar']>; } {
-  const {
-    birthYear,
-    birthMonth,
-    birthDay,
-    birthHour,
-    birthMinute,
-    isLeapMonth,
-  } = params;
-
-  if (!Number.isInteger(birthMonth) || birthMonth < 1 || birthMonth > 12) {
-    throw new Error(`农历月份无效：${birthMonth}月不存在。请输入 1-12 之间的整数。`);
-  }
-
-  const leapMonth = LunarYear.fromYear(birthYear).getLeapMonth();
-  if (isLeapMonth && leapMonth !== birthMonth) {
-    throw new Error(`农历闰月无效：${birthYear}年没有闰${birthMonth}月，请检查该年是否有闰月。`);
-  }
-
-  const lunarMonth = isLeapMonth ? -Math.abs(birthMonth) : birthMonth;
-  let lunarMonthInfo: ReturnType<typeof LunarMonth.fromYm>;
-  try {
-    lunarMonthInfo = LunarMonth.fromYm(birthYear, lunarMonth);
-  } catch {
-    throw new Error(`农历月份无效：${birthYear}年${isLeapMonth ? '闰' : ''}${birthMonth}月不存在。`);
-  }
-
-  if (!lunarMonthInfo) {
-    throw new Error(`农历月份无效：${birthYear}年${isLeapMonth ? '闰' : ''}${birthMonth}月不存在。`);
-  }
-
-  const dayCount = lunarMonthInfo.getDayCount();
-  if (birthDay < 1 || birthDay > dayCount) {
-    throw new Error(`农历日期无效：${birthYear}年${isLeapMonth ? '闰' : ''}${birthMonth}月只有${dayCount}天，请输入 1-${dayCount} 之间的日期。`);
-  }
-
-  let lunar: ReturnType<typeof Lunar.fromYmdHms>;
-  try {
-    lunar = Lunar.fromYmdHms(birthYear, lunarMonth, birthDay, birthHour, birthMinute, 0);
-  } catch {
-    throw new Error(`农历日期无效：${birthYear}年${isLeapMonth ? '闰' : ''}${birthMonth}月${birthDay}日不存在，请检查日期是否正确。`);
-  }
-
-  return {
-    lunar,
-    solar: lunar.getSolar(),
-  };
-}
-
-/** 校验出生参数并创建星盘 */
-export function createAstrolabe(input: BirthTimeInput & { gender: Gender; }): Astrolabe {
-  const {
-    gender,
-    birthYear,
-    birthMonth,
-    birthDay,
-    birthHour,
-    birthMinute = 0,
-    calendarType = 'solar',
-    isLeapMonth = false,
-  } = input;
-
-  if (gender !== 'male' && gender !== 'female') {
-    throw new Error('gender 必须是 "male" 或 "female"');
-  }
-  if (!Number.isInteger(birthYear) || birthYear < 1900 || birthYear > 2100) {
-    throw new Error('birthYear 必须是 1900-2100 之间的整数');
-  }
-  if (!Number.isInteger(birthMonth) || birthMonth < 1 || birthMonth > 12) {
-    throw new Error('birthMonth 必须是 1-12 之间的整数');
-  }
-  if (!Number.isInteger(birthDay) || birthDay < 1) {
-    throw new Error('birthDay 必须是合法日期');
-  }
-  if (calendarType === 'solar') {
-    const maxSolarDay = new Date(birthYear, birthMonth, 0).getDate();
-    if (birthDay > maxSolarDay) {
-      throw new Error(`birthDay 必须是 1-${maxSolarDay} 之间的整数`);
-    }
-  } else {
-    if (birthDay > 30) {
-      throw new Error('birthDay 必须是 1-30 之间的整数');
-    }
-
-    const leapMonth = LunarYear.fromYear(birthYear).getLeapMonth();
-    if (isLeapMonth && leapMonth !== birthMonth) {
-      throw new Error(`农历闰月无效：${birthYear}年没有闰${birthMonth}月，请检查该年是否有闰月。`);
-    }
-
-    const lunarMonth = isLeapMonth ? -Math.abs(birthMonth) : birthMonth;
-    let lunarMonthInfo: ReturnType<typeof LunarMonth.fromYm>;
-    try {
-      lunarMonthInfo = LunarMonth.fromYm(birthYear, lunarMonth);
-    } catch {
-      throw new Error(`农历月份无效：${birthYear}年${isLeapMonth ? '闰' : ''}${birthMonth}月不存在。`);
-    }
-    if (!lunarMonthInfo) {
-      throw new Error(`农历月份无效：${birthYear}年${isLeapMonth ? '闰' : ''}${birthMonth}月不存在。`);
-    }
-
-    const dayCount = lunarMonthInfo.getDayCount();
-    if (birthDay > dayCount) {
-      throw new Error(`农历日期无效：${birthYear}年${isLeapMonth ? '闰' : ''}${birthMonth}月只有${dayCount}天，请输入 1-${dayCount} 之间的日期。`);
-    }
-  }
-  if (!Number.isInteger(birthHour) || birthHour < 0 || birthHour > 23) {
-    throw new Error('birthHour 必须是 0-23 之间的整数');
-  }
-
-  const dateStr = `${birthYear}-${birthMonth}-${birthDay}`;
-  const hourValue = birthHour + birthMinute / 60;
-  const timeIndex = hourToTimeIndex(hourValue);
-  const genderStr = gender === 'male' ? '男' : '女';
-
-  if (calendarType === 'lunar') {
-    return astro.byLunar(dateStr, timeIndex, genderStr, isLeapMonth, true, 'zh-CN');
-  }
-  return astro.bySolar(dateStr, timeIndex, genderStr, true, 'zh-CN');
-}
-
-/**
- * 创建星盘（支持真太阳时校正）
- *
- * 当提供 longitude 时，先计算真太阳时，再用归一化后的日期与时辰索引排盘。
- */
+/** All birth paths share the same strict solar/lunar/timezone validation as Bazi. */
 export function createAstrolabeWithTrueSolar(
-  input: BirthTimeInput & { gender: Gender; longitude?: number; },
-): { astrolabe: Astrolabe; trueSolarTimeInfo?: TrueSolarTimeInfo; } {
-  const { longitude, ...baseInput } = input;
+  input: BirthTimeInput & { gender: Gender; longitude?: number; calculationOptions?: ZiweiCalculationOptions; },
+): { astrolabe: Astrolabe; timeIndex: number; trueSolarTimeInfo?: TrueSolarTimeInfo; } {
+  assertInteger(input.birthYear, 'birthYear', 1900, 2100);
+  const profile = resolveZiweiOptions(input.calculationOptions);
+  const { solar, trueSolarTimeInfo } = resolveBaziCalendarContext(input);
+  const dateStr = `${solar.getYear()}-${solar.getMonth()}-${solar.getDay()}`;
+  const timeIndex = hourToTimeIndex(solar.getHour() + solar.getMinute() / 60);
+  const astrolabe = withZiweiOptions(profile, () => astro.bySolar(dateStr, timeIndex, input.gender === 'male' ? '男' : '女', profile.fixLeap, 'zh-CN'));
+  return { astrolabe: bindZiweiProfile(astrolabe, profile, input.timezone, input.disambiguation), timeIndex, trueSolarTimeInfo };
+}
 
-  if (longitude == null) {
-    return { astrolabe: createAstrolabe(baseInput) };
-  }
-
-  if (typeof longitude !== 'number' || longitude < -180 || longitude > 180) {
-    throw new Error('longitude 必须是 -180 到 180 之间的数字');
-  }
-
-  const {
-    gender,
-    birthYear,
-    birthMonth,
-    birthDay,
-    birthHour,
-    birthMinute = 0,
-    calendarType = 'solar',
-    isLeapMonth = false,
-  } = input;
-
-  const baseSolarInput = calendarType === 'lunar'
-    ? (() => {
-      const prepared = validateLunarBirthInput({
-        birthYear,
-        birthMonth,
-        birthDay,
-        birthHour,
-        birthMinute,
-        isLeapMonth,
-      });
-      return {
-        birthYear: prepared.solar.getYear(),
-        birthMonth: prepared.solar.getMonth(),
-        birthDay: prepared.solar.getDay(),
-        birthHour: prepared.solar.getHour(),
-        birthMinute: prepared.solar.getMinute(),
-      };
-    })()
-    : { birthYear, birthMonth, birthDay, birthHour, birthMinute };
-
-  const resolvedDateTime = resolveTrueSolarDateTime(
-    baseSolarInput,
-    longitude,
-  );
-  const trueSolarTimeInfo = resolvedDateTime.trueSolarTimeInfo;
-
-  const dateStr = `${resolvedDateTime.year}-${resolvedDateTime.month}-${resolvedDateTime.day}`;
-  const genderStr = gender === 'male' ? '男' : '女';
-
-  return {
-    astrolabe: astro.bySolar(dateStr, trueSolarTimeInfo.trueTimeIndex, genderStr, true, 'zh-CN'),
-    trueSolarTimeInfo,
-  };
+export function createAstrolabe(input: BirthTimeInput & { gender: Gender; calculationOptions?: ZiweiCalculationOptions; }): Astrolabe {
+  return createAstrolabeWithTrueSolar(input).astrolabe;
 }

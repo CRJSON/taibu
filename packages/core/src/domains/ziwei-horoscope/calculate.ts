@@ -4,7 +4,10 @@
 
 import type { HoroscopePeriodInfo, TransitStarEntry, YearlyDecStarInfo, ZiweiHoroscopeInput, ZiweiHoroscopeOutput } from './types.js';
 import type { DiZhi } from '../shared/types.js';
-import { createAstrolabeWithTrueSolar, DI_ZHI, LUCUN_TABLE, normalizePalaceName } from '../ziwei/shared.js';
+import { createAstrolabeWithTrueSolar, DI_ZHI, hourToTimeIndex, LUCUN_TABLE, mapStar, normalizePalaceName } from '../ziwei/shared.js';
+import { ensureZiweiProfile, getZiweiOptions, snapshotZiweiResult } from '../ziwei/profile.js';
+import { assertInteger, parseCivilDate } from '../../shared/validation.js';
+import { getZonedDateTimeParts } from '../../shared/timezone-utils.js';
 
 export type { ZiweiHoroscopeInput, ZiweiHoroscopeOutput } from './types.js';
 
@@ -139,6 +142,7 @@ function mapPeriod(item: {
   mutagen?: string[];
   startAge?: number;
   endAge?: number;
+  stars?: NonNullable<HoroscopePeriodInfo['stars']>;
 }): HoroscopePeriodInfo {
   return {
     index: item.index ?? 0,
@@ -149,26 +153,26 @@ function mapPeriod(item: {
     mutagen: item.mutagen ?? [],
     ...(typeof item.startAge === 'number' ? { startAge: item.startAge } : {}),
     ...(typeof item.endAge === 'number' ? { endAge: item.endAge } : {}),
+    ...(item.stars ? { stars: item.stars.map(stars => stars.map(mapStar)) } : {}),
   };
 }
 
-function resolveTargetDateLabel(targetDate?: string | Date): string {
-  if (typeof targetDate === 'string' && targetDate) {
-    return targetDate;
-  }
-  if (targetDate instanceof Date) {
-    return targetDate.toISOString().slice(0, 10);
-  }
-  return new Date().toISOString().slice(0, 10);
-}
-
 export function calculateZiweiHoroscopeDataWithAstrolabe(
-  astrolabe: Astrolabe,
-  options: { targetDate?: string | Date; targetTimeIndex?: number; } = {},
+  sourceAstrolabe: Astrolabe,
+  options: { targetDate?: string | Date; targetTimeIndex?: number; timezone?: string; } = {},
 ): ZiweiHoroscopeOutput {
   const { targetDate, targetTimeIndex } = options;
-  const horoscope = astrolabe.horoscope(targetDate, targetTimeIndex) as HoroscopeLike;
-  const targetDateLabel = resolveTargetDateLabel(targetDate);
+  if (targetTimeIndex !== undefined) assertInteger(targetTimeIndex, 'targetTimeIndex', 0, 12);
+  const timezone = options.timezone ?? getZiweiOptions(sourceAstrolabe).timezone;
+  getZonedDateTimeParts(new Date(0), timezone);
+  const astrolabe = ensureZiweiProfile(sourceAstrolabe, timezone);
+  const parts = typeof targetDate === 'string'
+    ? { ...parseCivilDate(targetDate, 'targetDate'), hour: 0, minute: 0, second: 0 }
+    : getZonedDateTimeParts(targetDate ?? new Date(), timezone);
+  const queryDate = `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}:${parts.second}`;
+  const timeIndex = targetTimeIndex ?? hourToTimeIndex(parts.hour + parts.minute / 60);
+  const horoscope = astrolabe.horoscope(queryDate, timeIndex) as HoroscopeLike;
+  const targetDateLabel = `${parts.year}-${String(parts.month).padStart(2, '0')}-${String(parts.day).padStart(2, '0')}`;
 
   // 流年星曜：from flow year stem + branch
   const flowYearStem = horoscope.yearly?.heavenlyStem ?? '';
@@ -199,7 +203,7 @@ export function calculateZiweiHoroscopeDataWithAstrolabe(
     .map((palace) => palace.decadal?.range)
     .find((range): range is [number, number] => Array.isArray(range) && range.length === 2 && nominalAge >= range[0] && nominalAge <= range[1]);
 
-  return {
+  return snapshotZiweiResult({
     solarDate: astrolabe.solarDate || '',
     lunarDate: astrolabe.lunarDate || '',
     soul: astrolabe.soul || '',
@@ -219,7 +223,8 @@ export function calculateZiweiHoroscopeDataWithAstrolabe(
     hourly: mapPeriod(horoscope.hourly ?? {}),
     transitStars,
     yearlyDecStar,
-  };
+    calculationOptions: getZiweiOptions(astrolabe),
+  });
 }
 
 export function calculateZiweiHoroscopeData(input: ZiweiHoroscopeInput): ZiweiHoroscopeOutput {
@@ -227,5 +232,6 @@ export function calculateZiweiHoroscopeData(input: ZiweiHoroscopeInput): ZiweiHo
   return calculateZiweiHoroscopeDataWithAstrolabe(astrolabe, {
     targetDate: input.targetDate,
     targetTimeIndex: input.targetTimeIndex,
+    timezone: input.timezone,
   });
 }

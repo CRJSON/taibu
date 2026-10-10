@@ -25,12 +25,12 @@ export function LiuNianTable({
                             className={`
                                 flex-shrink-0 w-14 text-center p-2.5 rounded-md border transition-colors
                                 ${isSelected
-                                    ? 'border-[#2eaadc] bg-blue-50/30'
+                                    ? 'border-accent bg-blue-50/30'
                                     : 'border-border bg-background hover:bg-background-secondary'
                                 }
                             `}
                         >
-                            <div className="text-[10px] font-bold text-foreground/30 uppercase tracking-wider">{ln.year}</div>
+                            <div className="text-[10px] font-bold text-foreground-secondary uppercase tracking-wider">{ln.year}</div>
                             <div className="flex flex-col items-center gap-0.5 my-1.5">
                                 <span
                                     className="text-sm font-bold"
@@ -45,7 +45,7 @@ export function LiuNianTable({
                                     {ln.zhi}
                                 </span>
                             </div>
-                            <div className="text-[10px] font-bold text-foreground/40">{ln.age}岁</div>
+                            <div className="text-[10px] font-bold text-foreground-secondary">{ln.age}岁</div>
                         </button>
                     );
                 })}

@@ -12,13 +12,13 @@ test('conversations POST should create through transactional rpc', async (t) => 
   const apiUtilsModule = require('../lib/api-utils') as any;
   const routePath = require.resolve('../app/api/conversations/route');
   const originalRequireUserContext = apiUtilsModule.requireUserContext;
-  let rpcCall: { fn: string; args: Record<string, unknown> } | null = null;
+  const rpcCalls: { fn: string; args: Record<string, unknown> }[] = [];
 
   apiUtilsModule.requireUserContext = async () => ({
     user: { id: 'user-1' },
     supabase: {
       rpc(fn: string, args: Record<string, unknown>) {
-        rpcCall = { fn, args };
+        rpcCalls.push({ fn, args });
         return Promise.resolve({ data: 'conv-1', error: null });
       },
     },
@@ -50,8 +50,11 @@ test('conversations POST should create through transactional rpc', async (t) => 
   const payload = await response.json();
 
   assert.equal(response.status, 201);
-  assert.equal(rpcCall?.fn, 'create_conversation_with_messages');
-  assert.deepEqual(rpcCall?.args, {
+  assert.equal(rpcCalls.length, 1);
+  const [rpcCall] = rpcCalls;
+  assert.ok(rpcCall);
+  assert.equal(rpcCall.fn, 'create_conversation_with_messages');
+  assert.deepEqual(rpcCall.args, {
     p_user_id: 'user-1',
     p_title: '会话标题',
     p_personality: 'general',
@@ -146,13 +149,13 @@ test('conversations POST should normalize blank titles back to the default title
   const apiUtilsModule = require('../lib/api-utils') as any;
   const routePath = require.resolve('../app/api/conversations/route');
   const originalRequireUserContext = apiUtilsModule.requireUserContext;
-  let rpcCall: { fn: string; args: Record<string, unknown> } | null = null;
+  const rpcCalls: { fn: string; args: Record<string, unknown> }[] = [];
 
   apiUtilsModule.requireUserContext = async () => ({
     user: { id: 'user-1' },
     supabase: {
       rpc(fn: string, args: Record<string, unknown>) {
-        rpcCall = { fn, args };
+        rpcCalls.push({ fn, args });
         return Promise.resolve({ data: 'conv-1', error: null });
       },
     },
@@ -172,7 +175,10 @@ test('conversations POST should normalize blank titles back to the default title
   }));
 
   assert.equal(response.status, 201);
-  assert.equal(rpcCall?.args.p_title, '新对话');
+  assert.equal(rpcCalls.length, 1);
+  const [rpcCall] = rpcCalls;
+  assert.ok(rpcCall);
+  assert.equal(rpcCall.args.p_title, '新对话');
 });
 
 test('conversations POST should reject non-array non-null messages payloads', async (t) => {
@@ -284,13 +290,13 @@ test('conversation detail PATCH should update through transactional rpc', async 
   const apiUtilsModule = require('../lib/api-utils') as any;
   const routePath = require.resolve('../app/api/conversations/[id]/route');
   const originalRequireUserContext = apiUtilsModule.requireUserContext;
-  let rpcCall: { fn: string; args: Record<string, unknown> } | null = null;
+  const rpcCalls: { fn: string; args: Record<string, unknown> }[] = [];
 
   apiUtilsModule.requireUserContext = async () => ({
     user: { id: 'user-1' },
     supabase: {
       rpc(fn: string, args: Record<string, unknown>) {
-        rpcCall = { fn, args };
+        rpcCalls.push({ fn, args });
         return Promise.resolve({ data: { status: 'ok' }, error: null });
       },
     },
@@ -325,8 +331,11 @@ test('conversation detail PATCH should update through transactional rpc', async 
   const payload = await response.json();
 
   assert.equal(response.status, 200);
-  assert.equal(rpcCall?.fn, 'update_conversation_with_messages');
-  assert.deepEqual(rpcCall?.args, {
+  assert.equal(rpcCalls.length, 1);
+  const [rpcCall] = rpcCalls;
+  assert.ok(rpcCall);
+  assert.equal(rpcCall.fn, 'update_conversation_with_messages');
+  assert.deepEqual(rpcCall.args, {
     p_conversation_id: VALID_CONVERSATION_ID,
     p_title: '更新标题',
     p_title_present: true,
@@ -385,13 +394,13 @@ test('conversation detail PATCH should normalize messages null into an empty tra
   const apiUtilsModule = require('../lib/api-utils') as any;
   const routePath = require.resolve('../app/api/conversations/[id]/route');
   const originalRequireUserContext = apiUtilsModule.requireUserContext;
-  let rpcCall: { fn: string; args: Record<string, unknown> } | null = null;
+  const rpcCalls: { fn: string; args: Record<string, unknown> }[] = [];
 
   apiUtilsModule.requireUserContext = async () => ({
     user: { id: 'user-1' },
     supabase: {
       rpc(fn: string, args: Record<string, unknown>) {
-        rpcCall = { fn, args };
+        rpcCalls.push({ fn, args });
         return Promise.resolve({ data: { status: 'ok' }, error: null });
       },
     },
@@ -415,8 +424,11 @@ test('conversation detail PATCH should normalize messages null into an empty tra
   const payload = await response.json();
 
   assert.equal(response.status, 200);
-  assert.equal(rpcCall?.fn, 'update_conversation_with_messages');
-  assert.deepEqual(rpcCall?.args, {
+  assert.equal(rpcCalls.length, 1);
+  const [rpcCall] = rpcCalls;
+  assert.ok(rpcCall);
+  assert.equal(rpcCall.fn, 'update_conversation_with_messages');
+  assert.deepEqual(rpcCall.args, {
     p_conversation_id: VALID_CONVERSATION_ID,
     p_title: null,
     p_title_present: false,
@@ -788,6 +800,19 @@ test('conversation detail DELETE should reject invalid conversation ids', async 
 
   assert.equal(response.status, 400);
   assert.equal(payload.error, '对话ID格式不合法');
+});
+
+test('conversation DELETE returns a recoverable conflict while an Agent task is active', async (t) => {
+  const api = require('../lib/api-utils') as typeof import('../lib/api-utils');
+  const deletion = require('../lib/chat/conversation-delete') as typeof import('../lib/chat/conversation-delete');
+  t.mock.method(api, 'requireUserContext', async () => ({ user: { id: 'owner' }, supabase: {} }));
+  t.mock.method(deletion, 'deleteConversationGraph', async () => ({ error: { message: 'AGENT_CONVERSATION_BUSY' }, notFound: false }));
+  const { DELETE } = await import('../app/api/conversations/[id]/route');
+  const response = await DELETE(new NextRequest(`http://localhost/api/conversations/${VALID_CONVERSATION_ID}`, { method: 'DELETE' }), { params: Promise.resolve({ id: VALID_CONVERSATION_ID }) });
+  assert.equal(response.status, 409);
+  const payload = await response.json();
+  assert.equal(payload.code, 'CONVERSATION_BUSY');
+  assert.match(payload.error, /先停止/);
 });
 
 test('conversation detail route should fail loudly when message storage cannot be loaded', async (t) => {

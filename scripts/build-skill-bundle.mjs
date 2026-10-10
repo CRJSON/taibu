@@ -13,13 +13,14 @@ import { readFileSync, writeFileSync, mkdirSync, statSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { SKILL_DIR, requireGuide, shortDescription } from './skill-guides.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(import.meta.url);
 const coreVersion = require(path.join(repoRoot, 'packages/core/package.json')).version;
 
 const entry = path.join(repoRoot, 'packages/core/dist/mcp/index.js');
-const skillDir = path.join(repoRoot, 'skills/taibu-divination');
+const skillDir = SKILL_DIR;
 const bundlePath = path.join(skillDir, 'scripts/vendor/taibu-core.bundle.mjs');
 const referencesDir = path.join(skillDir, 'references');
 const skillMdPath = path.join(skillDir, 'SKILL.md');
@@ -31,16 +32,24 @@ const fixAstrologyRequire = {
   setup(buildApi) {
     buildApi.onLoad({ filter: /domains[\\/]astrology[\\/]calculate\.js$/ }, (args) => {
       const source = readFileSync(args.path, 'utf8');
-      const preamble = [
+      // createRequire 依赖真实模块解析，必须改写为静态 import。三条语句可能被
+      // 其它静态 import 分隔，因此按行定位而不是要求连续前缀。
+      const statements = [
         "import { createRequire } from 'node:module';",
         'const require = createRequire(import.meta.url);',
         "const horoscopePackage = require('circular-natal-horoscope-js');",
-      ].join('\n');
-      if (!source.startsWith(preamble)) {
-        throw new Error('astrology/calculate.js 的 createRequire 前导代码发生变化，请更新 build-skill-bundle.mjs 的改写逻辑');
+      ];
+      let rewritten = source;
+      for (const statement of statements) {
+        const lines = rewritten.split('\n');
+        const index = lines.indexOf(statement);
+        if (index === -1) {
+          throw new Error('astrology/calculate.js 的 createRequire 语句发生变化，请更新 build-skill-bundle.mjs 的改写逻辑');
+        }
+        lines.splice(index, 1);
+        rewritten = lines.join('\n');
       }
-      const rewritten = "import horoscopePackage from 'circular-natal-horoscope-js';" + source.slice(preamble.length);
-      return { contents: rewritten, loader: 'js' };
+      return { contents: "import horoscopePackage from 'circular-natal-horoscope-js';\n" + rewritten, loader: 'js' };
     });
   },
 };
@@ -142,37 +151,8 @@ function renderReference(tool) {
   return lines.join('\n');
 }
 
-function shortDescription(description) {
-  const [, afterDash] = description.split(/\s+-\s+/, 2);
-  const text = (afterDash ?? description).replace(/\n+/g, ' ');
-  const [firstSentence] = text.split(/[。；]/, 1);
-  return firstSentence || text;
-}
-
-// 工具 -> interpretation/ 解读指引的映射（同域工具共用一份）。新增工具时必须补充，否则构建报错。
-const TOOL_GUIDES = {
-  astrology: 'astrology',
-  bazi: 'bazi',
-  bazi_pillars_resolve: 'bazi',
-  bazi_dayun: 'bazi',
-  ziwei: 'ziwei',
-  ziwei_horoscope: 'ziwei',
-  ziwei_flying_star: 'ziwei',
-  liuyao: 'liuyao',
-  meihua: 'meihua',
-  tarot: 'tarot',
-  taiyi: 'taiyi',
-  almanac: 'almanac',
-  qimen: 'qimen',
-  daliuren: 'daliuren',
-  xiaoliuren: 'xiaoliuren',
-};
-
 function guideLink(toolName) {
-  const guide = TOOL_GUIDES[toolName];
-  if (!guide) throw new Error(`工具 ${toolName} 缺少解读指引映射，请更新 build-skill-bundle.mjs 的 TOOL_GUIDES 并补写 interpretation/ 文档`);
-  const guidePath = path.join(skillDir, 'interpretation', `${guide}.md`);
-  statSync(guidePath);
+  const guide = requireGuide(toolName);
   return `[interpretation/${guide}.md](interpretation/${guide}.md)`;
 }
 

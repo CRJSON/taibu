@@ -25,13 +25,13 @@ export function DaYunTable({
                             className={`
                                 flex-shrink-0 w-16 text-center p-2.5 rounded-md border transition-colors
                                 ${isSelected
-                                    ? 'border-[#2eaadc] bg-blue-50/30'
+                                    ? 'border-accent bg-blue-50/30'
                                     : 'border-border bg-background hover:bg-background-secondary'
                                 }
                             `}
                         >
-                            <div className="text-[10px] font-bold text-foreground/30 uppercase tracking-wider">{dy.startYear}</div>
-                            <div className="text-[11px] font-semibold text-foreground/50 mb-1.5">{dy.startAge}岁</div>
+                            <div className="text-[10px] font-bold text-foreground-secondary uppercase tracking-wider">{dy.startYear}</div>
+                            <div className="text-[11px] font-semibold text-foreground-secondary mb-1.5">{dy.startAge}岁</div>
                             <div className="flex flex-col items-center gap-0.5">
                                 <span
                                     className="text-base font-bold"

@@ -1,0 +1,46 @@
+.floating-panel {
+    position: fixed;
+    z-index: 1100;
+    width: max-content;
+    max-width: calc(100vw - 16px);
+    max-height: min(560px, calc(100dvh - 24px));
+    overflow: auto;
+    overscroll-behavior: contain;
+    padding: 6px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--background);
+    color: var(--foreground);
+    box-shadow: 0 10px 32px #0002;
+}
+.floating-panel :where(button, input, a):focus-visible, .app-modal :where(button, textarea, input, a, [tabindex]):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.floating-panel [role^="menuitem"] { border-radius: 7px; }
+.floating-panel [role^="menuitem"]:focus { background: var(--background-secondary); }
+.floating-panel [role^="menuitem"][aria-checked="true"] { color: var(--accent); background: color-mix(in srgb, var(--accent) 9%, transparent); }
+.app-modal {
+    position: fixed;
+    inset: 0;
+    margin: auto;
+    width: min(480px, calc(100vw - 32px));
+    max-height: calc(100dvh - 32px);
+    overflow: auto;
+    overscroll-behavior: contain;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    background: var(--background);
+    color: var(--foreground);
+    box-shadow: 0 24px 72px #0004;
+}
+.app-modal::backdrop { background: #0006; backdrop-filter: blur(3px); }
+.app-modal:not([open]) { display: none; }
+.settings-center-dialog { width: min(800px, calc(100vw - 64px)); height: min(660px, calc(100dvh - 64px)); overflow: hidden; }
+@media (max-width: 767px) { .settings-center-dialog { width: 100vw; height: 100dvh; max-height: 100dvh; border: 0; border-radius: 0; } }
+.app-modal, .floating-panel {
+    --background: var(--chat-background);
+    --background-secondary: var(--chat-secondary);
+    --background-tertiary: var(--chat-tertiary);
+    --foreground: var(--chat-foreground);
+    --foreground-secondary: var(--chat-muted);
+    --border: var(--chat-border);
+}

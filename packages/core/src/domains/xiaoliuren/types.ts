@@ -1,10 +1,16 @@
 export interface XiaoliurenInput {
   /** 农历月（1-12） */
-  lunarMonth: number;
+  lunarMonth?: number;
   /** 农历日（1-30） */
-  lunarDay: number;
+  lunarDay?: number;
   /** 时辰序号（子=1, 丑=2, ..., 亥=12）或0-23的小时数 */
   hour: number;
+  /** Explicit input convention; legacy retains the pre-3.6 mixed convention. */
+  hourType?: 'clock' | 'shichen' | 'legacy';
+  /** Gregorian alternative to the lunar month/day input. */
+  date?: string;
+  isLeapMonth?: boolean;
+  leapMonthStrategy?: 'repeat' | 'advance';
   /** 占问事项 */
   question?: string;
 }
@@ -21,6 +27,7 @@ export interface XiaoliurenStatusInfo {
 }
 
 export interface XiaoliurenOutput {
+  calculationOptions?: { hourType: NonNullable<XiaoliurenInput['hourType']>; leapMonthStrategy: NonNullable<XiaoliurenInput['leapMonthStrategy']>; ruleVersion: string; };
   /** 月上起的状态 */
   monthStatus: XiaoliurenStatus;
   /** 日上起的状态 */
@@ -35,6 +42,11 @@ export interface XiaoliurenOutput {
     lunarDay: number;
     hour: number;
     shichen: string;
+    date?: string;
+    isLeapMonth?: boolean;
+    leapMonthStrategy?: 'repeat' | 'advance';
+    hourType?: 'clock' | 'shichen' | 'legacy';
+    clockHour?: number;
   };
   question?: string;
 }

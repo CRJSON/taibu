@@ -1,3 +1,4 @@
+import { withRulesText } from '../../shared/calculation-rules.js';
 import type { DaliurenOutput } from './types.js';
 import {
   normalizeDetailLevelBinary
@@ -10,12 +11,14 @@ function formatDaliurenCoreStatus(result: DaliurenOutput): string {
   return `空亡(${result.dateInfo.kongWang.join(', ')}) / 驿马(${result.dateInfo.yiMa}) / 丁马(${result.dateInfo.dingMa}) / 天马(${result.dateInfo.tianMa})`;
 }
 
-function formatDaliurenDiPanLabel(item: DaliurenOutput['gongInfos'][number]): string {
+function formatDaliurenTianPanLabel(item: DaliurenOutput['gongInfos'][number]): string {
   const suffix = [item.wuXing, item.wangShuai].filter(Boolean).join('·');
-  return suffix ? `${item.diZhi}(${suffix})` : item.diZhi;
+  return suffix ? `${item.tianZhi}(${suffix})` : item.tianZhi;
 }
 
-export function renderDaliurenCanonicalText(result: DaliurenOutput, options: DaliurenCanonicalTextOptions = {}): string {
+export const renderDaliurenCanonicalText = withRulesText(renderDaliurenCanonicalTextBase);
+
+function renderDaliurenCanonicalTextBase(result: DaliurenOutput, options: DaliurenCanonicalTextOptions = {}): string {
   const detailLevel = normalizeDetailLevelBinary(options.detailLevel);
   const diurnalLabel = result.dateInfo.diurnal ? '昼占' : '夜占';
   const siKeLabels = ['一课 (干上)', '二课 (干阴)', '三课 (支上)', '四课 (支阴)'] as const;
@@ -39,6 +42,7 @@ export function renderDaliurenCanonicalText(result: DaliurenOutput, options: Dal
     if (result.benMing) lines.push(`- 本命: ${result.benMing}`);
     if (result.xingNian) lines.push(`- 行年: ${result.xingNian}`);
     if (result.keTi.extraTypes.length > 0) lines.push(`- 附加课体: ${result.keTi.extraTypes.join('、')}`);
+    if (result.keTi.subTypes.length > 0) lines.push(`- 细分课体: ${result.keTi.subTypes.join('、')}`);
   }
   lines.push('');
   lines.push('## 四课 (主客对立)');
@@ -63,16 +67,16 @@ export function renderDaliurenCanonicalText(result: DaliurenOutput, options: Dal
     lines.push('## 天地盘全图 (十二宫)');
     lines.push('');
     if (detailLevel === 'full') {
-      lines.push('| 地盘 (五行·状态) | 天盘 (月将) | 天将 | 遁干 | 长生十二神 | 建除 |');
+      lines.push('| 地盘 | 天盘 (五行·状态) | 天将 | 遁干 | 长生十二神 | 建除 |');
       lines.push('|---|---|---|---|---|---|');
     } else {
-      lines.push('| 地盘 (五行·状态) | 天盘 (月将) | 天将 | 遁干 | 长生十二神 |');
+      lines.push('| 地盘 | 天盘 (五行·状态) | 天将 | 遁干 | 长生十二神 |');
       lines.push('|---|---|---|---|---|');
     }
     for (const item of result.gongInfos) {
       const row = [
-        formatDaliurenDiPanLabel(item),
-        item.tianZhi || '-',
+        item.diZhi || '-',
+        formatDaliurenTianPanLabel(item),
         item.tianJiang || '-',
         item.dunGan || '-',
         item.changSheng || '-',
@@ -80,6 +84,9 @@ export function renderDaliurenCanonicalText(result: DaliurenOutput, options: Dal
       if (detailLevel === 'full') row.push(item.jianChu || '-');
       lines.push(`| ${row.join(' | ')} |`);
     }
+  }
+  if (detailLevel === 'full' && result.shenSha.length) {
+    lines.push('', '## 神煞', '', ...result.shenSha.map(item => `- ${item.name}: ${item.value}${item.description ? `（${item.description}）` : ''}`));
   }
   return lines.join('\n');
 }

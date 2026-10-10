@@ -1,4 +1,5 @@
 import { type NextRequest } from 'next/server';
+import type { BirthTimeResolution } from '@/lib/divination/birth-time';
 import { jsonError, jsonOk, requireUserContext, resolveRequestDbClient } from '@/lib/api-utils';
 import {
     buildDefaultChartSettingsPayload,
@@ -10,7 +11,7 @@ import {
 
 type ChartType = 'bazi' | 'ziwei';
 
-type ChartRecord = {
+type ChartRecord = BirthTimeResolution & {
     id: string;
     name: string;
     gender: 'male' | 'female' | null;
@@ -51,18 +52,22 @@ async function loadDefaultChartIds(
 export async function GET(request: NextRequest) {
     const auth = await requireUserContext(request);
     if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
+    const expectedUserId = request.headers.get('X-Expected-User-Id');
+    if (expectedUserId !== null && expectedUserId !== auth.user.id) {
+        return jsonError('账号已切换，请重新加载命盘', 409);
+    }
     const db = resolveRequestDbClient(auth);
     if (!db) return jsonError('获取命盘列表失败', 500);
 
     const [baziResult, ziweiResult, settingsResult] = await Promise.all([
         db
             .from('bazi_charts')
-            .select('id, name, gender, birth_date, birth_time, birth_place, longitude, calendar_type, is_leap_month, created_at')
+            .select('id, name, gender, birth_date, birth_time, birth_place, longitude, calendar_type, is_leap_month, timezone, disambiguation, created_at')
             .eq('user_id', auth.user.id)
             .order('created_at', { ascending: false }),
         db
             .from('ziwei_charts')
-            .select('id, name, gender, birth_date, birth_time, birth_place, longitude, calendar_type, is_leap_month, created_at')
+            .select('id, name, gender, birth_date, birth_time, birth_place, longitude, calendar_type, is_leap_month, timezone, disambiguation, created_at')
             .eq('user_id', auth.user.id)
             .order('created_at', { ascending: false }),
         loadDefaultChartIds(auth),
@@ -95,6 +100,10 @@ export async function GET(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
     const auth = await requireUserContext(request);
     if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
+    const expectedUserId = request.headers.get('X-Expected-User-Id');
+    if (expectedUserId !== null && expectedUserId !== auth.user.id) {
+        return jsonError('账号已切换，请重新加载命盘', 409);
+    }
     const db = resolveRequestDbClient(auth);
     if (!db) return jsonError('设置默认命盘失败', 500);
 
@@ -143,6 +152,10 @@ export async function PATCH(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
     const auth = await requireUserContext(request);
     if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
+    const expectedUserId = request.headers.get('X-Expected-User-Id');
+    if (expectedUserId !== null && expectedUserId !== auth.user.id) {
+        return jsonError('账号已切换，请重新加载命盘', 409);
+    }
     const db = resolveRequestDbClient(auth);
     if (!db) return jsonError('删除命盘失败', 500);
 

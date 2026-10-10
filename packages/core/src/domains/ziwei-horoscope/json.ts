@@ -1,3 +1,4 @@
+import { withRulesJSON } from '../../shared/calculation-rules.js';
 import { Solar } from 'lunar-javascript';
 import type {
   ZiweiHoroscopeCanonicalJSON
@@ -12,7 +13,9 @@ import type {
   ZiweiHoroscopeCanonicalTextOptions
 } from '../shared/text-options.js';
 
-export function renderZiweiHoroscopeCanonicalJSON(
+export const renderZiweiHoroscopeCanonicalJSON = withRulesJSON(renderZiweiHoroscopeCanonicalJSONBase);
+
+function renderZiweiHoroscopeCanonicalJSONBase(
   result: ZiweiHoroscopeOutput,
   options: { detailLevel?: ZiweiHoroscopeCanonicalTextOptions['detailLevel']; } = {},
 ): ZiweiHoroscopeCanonicalJSON {
@@ -101,6 +104,7 @@ export function renderZiweiHoroscopeCanonicalJSON(
         运限四化: formatMutagen(data.mutagen),
       };
       if (detailLevel === 'full' && data.palaceNames.length > 0) entry.十二宫重排 = [...data.palaceNames];
+      if (detailLevel === 'full' && data.stars) entry.流曜 = data.stars.flatMap((stars, palaceIndex) => stars.map(star => ({ 宫位索引: palaceIndex, 星曜: star.name, ...(star.type ? { 类型: star.type } : {}), ...(star.brightness ? { 亮度: star.brightness } : {}), ...(star.mutagen ? { 四化: star.mutagen } : {}) })));
       return entry;
     }),
   };

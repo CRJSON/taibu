@@ -7,10 +7,12 @@
  */
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { X, Calendar, Trash2 } from 'lucide-react';
 import type { HeavenlyStem, EarthlyBranch, PillarData } from '@/types';
-import { reversePillars } from '@/lib/divination/pillars-reverse';
+import { reversePillars, type ReversedDateTime } from '@/lib/divination/pillars-reverse';
+import type { BirthTimeResolution } from '@/lib/divination/birth-time';
+import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import {
     calculateMonthPillars,
     calculateHourPillars,
@@ -44,6 +46,7 @@ type PillarType = 'year' | 'month' | 'day' | 'hour';
 type SelectionStep = 'year_stem' | 'year_branch' | 'month' | 'day_stem' | 'day_branch' | 'hour' | 'complete';
 
 interface SmartPillarsInputProps {
+    timeOptions?: BirthTimeResolution & { longitude?: number };
     value?: {
         year: PillarData;
         month: PillarData;
@@ -62,16 +65,6 @@ interface SmartPillarsInputProps {
         hour: number;
         minute: number;
     }) => void;
-}
-
-interface ReversedDateTime {
-    year: number;
-    month: number;
-    day: number;
-    hour: number;
-    minute: number;
-    solarDate: string;
-    lunarDate: string;
 }
 
 // 选择步骤的标签
@@ -97,10 +90,30 @@ const EMPTY_PILLARS: {
     hour: { stem: '', branch: '' },
 };
 
-export function SmartPillarsInput({ value, onChange }: SmartPillarsInputProps) {
+export function SmartPillarsInput({ value, onChange: updatePillars, timeOptions }: SmartPillarsInputProps) {
     const [possibleDates, setPossibleDates] = useState<ReversedDateTime[]>([]);
     const [showDateSelector, setShowDateSelector] = useState(false);
+    const [searching, setSearching] = useState(false);
+    const requestId = useRef(0);
     const { showToast } = useToast();
+
+    useEffect(() => {
+        // 递增请求计数使在途反推失效；只写不读，卸载时同样处理。
+        const counter = requestId;
+        counter.current++;
+        setSearching(false);
+        setShowDateSelector(false);
+        setPossibleDates([]);
+        return () => { counter.current++; };
+    }, [timeOptions?.timezone, timeOptions?.disambiguation, timeOptions?.longitude]);
+
+    const onChange: SmartPillarsInputProps['onChange'] = (next, dateTime) => {
+        requestId.current++;
+        setSearching(false);
+        setShowDateSelector(false);
+        setPossibleDates([]);
+        updatePillars(next, dateTime);
+    };
 
     // 初始化为空的四柱
     const pillars = value || EMPTY_PILLARS;
@@ -197,34 +210,32 @@ export function SmartPillarsInput({ value, onChange }: SmartPillarsInputProps) {
     };
 
     // 选择时柱并尝试反推时间
-    const handleSelectHour = (hour: { stem: HeavenlyStem; branch: EarthlyBranch }) => {
+    const handleSelectHour = async (hour: { stem: HeavenlyStem; branch: EarthlyBranch }) => {
         const newPillars = { ...pillars, hour };
-
-        // 所有四柱都选择完整，进行反推时间
         const completePillars = {
             year: newPillars.year as { stem: HeavenlyStem; branch: EarthlyBranch },
             month: newPillars.month as { stem: HeavenlyStem; branch: EarthlyBranch },
             day: newPillars.day as { stem: HeavenlyStem; branch: EarthlyBranch },
             hour: newPillars.hour as { stem: HeavenlyStem; branch: EarthlyBranch },
         };
-        const dates = reversePillars(completePillars);
-
-        if (dates.length === 0) {
-            // 没有找到匹配时间，但仍然保存四柱
-            onChange(newPillars);
-            showToast('warning', '在1900-2100年范围内未找到匹配的时间，四柱已保存');
-        } else if (dates.length === 1) {
-            onChange(newPillars, {
-                year: dates[0].year,
-                month: dates[0].month,
-                day: dates[0].day,
-                hour: dates[0].hour,
-                minute: dates[0].minute,
-            });
-        } else {
-            onChange(newPillars);
-            setPossibleDates(dates);
-            setShowDateSelector(true);
+        onChange(newPillars);
+        const request = ++requestId.current;
+        setSearching(true);
+        try {
+            const dates = await reversePillars(completePillars, timeOptions);
+            if (request !== requestId.current) return;
+            if (dates.length === 0) {
+                showToast('warning', '在1900-2100年范围内未找到匹配的时间，请核对四柱及时间规则');
+            } else if (dates.length === 1) {
+                onChange(newPillars, dates[0]);
+            } else {
+                setPossibleDates(dates);
+                setShowDateSelector(true);
+            }
+        } catch (error) {
+            if (request === requestId.current) showToast('error', error instanceof Error ? error.message : '反推失败');
+        } finally {
+            if (request === requestId.current) setSearching(false);
         }
     };
 
@@ -378,7 +389,8 @@ export function SmartPillarsInput({ value, onChange }: SmartPillarsInputProps) {
 
     return (
         <>
-            <div className="space-y-4">
+            <div className="space-y-4" aria-busy={searching}>
+                {searching && <div role="status" className="flex items-center gap-2 text-sm text-foreground-secondary"><SoundWaveLoader variant="inline" />正在逐分钟核验候选时间…</div>}
                 {/* 四柱显示区域 */}
                 <div className="grid grid-cols-4 gap-2">
                     {(['year', 'month', 'day', 'hour'] as PillarType[]).map((pillarType) => {

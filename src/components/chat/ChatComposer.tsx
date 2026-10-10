@@ -21,7 +21,12 @@ import { useComposerState, type KnowledgeBaseSummary } from '@/components/chat/c
 import { MentionManager } from '@/components/chat/composer/MentionManager';
 import { AttachmentBar } from '@/components/chat/composer/AttachmentBar';
 import { ComposerToolbar } from '@/components/chat/composer/ComposerToolbar';
+import { ComposerDomainControls } from '@/components/chat/composer/ComposerDomainControls';
 import type { ChatMode } from '@/lib/chat/use-chat-state';
+import type { AgentRuntimeInfo } from '@/lib/agent/types';
+import { useComposerCommands } from './composer/ComposerCommands';
+import { usePrivateAttachments } from '@/lib/chat/use-private-attachments';
+import { PrivateAttachments } from './agent/PrivateAttachments';
 
 const findLastAtOutsideTokens = (value: string, tokens: MentionToken[]): number => {
     for (let i = value.length - 1; i >= 0; i -= 1) {
@@ -33,6 +38,12 @@ const findLastAtOutsideTokens = (value: string, tokens: MentionToken[]): number 
 };
 
 interface ChatComposerProps {
+    draftKey?: string;
+    agentMode?: boolean;
+    agentRuntime?: AgentRuntimeInfo;
+    awaitingInput?: boolean;
+    allowDuringRun?: boolean;
+    onQueueMessage?: () => Promise<void>;
     inputValue: string;
     isLoading: boolean;
     isSendingToList?: boolean;
@@ -64,6 +75,12 @@ interface ChatComposerProps {
 }
 
 export function ChatComposer({
+    draftKey,
+    agentMode = false,
+    agentRuntime,
+    awaitingInput = false,
+    allowDuringRun = false,
+    onQueueMessage,
     inputValue,
     isLoading,
     isSendingToList = false,
@@ -106,7 +123,7 @@ export function ChatComposer({
     const isDreamMode = chatMode === 'dream';
 
     const state = useComposerState({
-        userId, membershipType, selectedModel, reasoningEnabled,
+        userId, membershipType, selectedModel, reasoningEnabled, agentMode,
         mentions, contextMessages,
         isLoading, isSendingToList, chatMode,
         knowledgeBaseEnabled, promptKnowledgeBases,
@@ -134,6 +151,9 @@ export function ChatComposer({
         promptKbIdSet,
         formatLayerLabel, refreshMentionData,
     } = state;
+    const commands = useComposerCommands({ userId, draftKey, text: inputValue, change: onInputChange, textarea: textareaRef, mentionsOpen: mentionOpen, model: selectedModel });
+    const uploads = usePrivateAttachments({ scopeKey: draftKey ?? userId ?? 'anonymous', state: attachmentState ?? { webSearchEnabled: false }, change: value => onAttachmentChange?.(value), onError: message => showToast('error', message) });
+    const submit = () => { if (uploads.uploading) return; commands.remember(); onSend(); };
 
     const hasFile = !!attachmentState?.file;
     const hasWebSearch = !!attachmentState?.webSearchEnabled;
@@ -175,6 +195,7 @@ export function ChatComposer({
 
     // --- Event handlers ---
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (agentMode) { void uploads.upload(Array.from(e.target.files ?? [])); e.target.value = ''; return; }
         const file = e.target.files?.[0];
         if (!file || !onAttachmentChange) return;
         if (!canUseBoth && attachmentState?.webSearchEnabled) {
@@ -197,7 +218,7 @@ export function ChatComposer({
             onAttachmentChange({ file: undefined, webSearchEnabled: true });
             showToast('info', '同时使用搜索和附件仅限 Pro 用户，已自动清除附件');
         } else {
-            onAttachmentChange({ file: attachmentState?.file, webSearchEnabled: newWebSearch });
+            onAttachmentChange({ ...attachmentState, webSearchEnabled: newWebSearch });
         }
     };
 
@@ -245,6 +266,8 @@ export function ChatComposer({
     }, [inputValue, mentions, textareaRef, overlayRef]);
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+        if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
+        if (commands.keyDown(e)) return;
         if (mentionOpen) return;
         if (e.key === 'Backspace' || e.key === 'Delete') {
             const textarea = textareaRef.current;
@@ -288,17 +311,18 @@ export function ChatComposer({
                 }
             }
         }
-        if (e.key === 'Enter' && !e.shiftKey && !disabled && !isLoading && !isSendingToList && !dreamContextLoading && !mentionSettlingRef.current && inputValue.trim()) {
+        if (e.key === 'Enter' && !e.shiftKey && !disabled && !uploads.uploading && (!isLoading || allowDuringRun) && !isSendingToList && !dreamContextLoading && !mentionSettlingRef.current && inputValue.trim()) {
             e.preventDefault();
             if (!userId && onAuthRequired) {
                 onAuthRequired();
                 return;
             }
-            onSend();
+            submit();
         }
     };
 
     const handleInputChange = (value: string) => {
+        commands.changed();
         onInputChange(value);
         const tokens = extractMentionTokens(value, mentions);
         if (onMentionsChange) {
@@ -373,21 +397,30 @@ export function ChatComposer({
 
     const handleButtonClick = () => {
         if (isSendingToList || mentionSettlingRef.current) return;
-        if (isLoading && onStop) {
+        if (isLoading && onStop && !(allowDuringRun && inputValue.trim())) {
             onStop();
         } else if (inputValue.trim()) {
             if (!userId && onAuthRequired) {
                 onAuthRequired();
                 return;
             }
-            onSend();
+            submit();
         }
     };
 
+    let inputPlaceholder = '尽管问';
+    if (disabled) inputPlaceholder = '请先获取积分';
+    else if (awaitingInput) inputPlaceholder = '补充信息，继续当前任务…';
+    else if (isDreamMode) inputPlaceholder = '\u{1F319} 做了什么梦';
+    else if (agentMode) inputPlaceholder = canMentionAnything
+        ? '描述任务，或输入 @ 引用命盘与资料…'
+        : '描述你想完成的任务…';
+
     return (
-        <div className={`fixed left-0 right-0 bottom-[calc(3.5rem+var(--sab))] ${knowledgeBaseOpen ? 'z-[60]' : 'z-30'} md:sticky md:bottom-0 md:left-auto md:right-auto border-border bg-gradient-to-t from-background/95 to-transparent backdrop-blur-[2px] md:backdrop-blur-none pb-3 ${disabled ? 'opacity-50' : ''}`}>
-            <div className="relative max-w-3xl mx-auto md:p-0 p-2">
+        <div data-chat-composer className={`chat-composer-dock ${knowledgeBaseOpen ? 'z-[60]' : 'z-30'} ${disabled ? 'opacity-50' : ''}`}>
+            <div className="chat-composer-inner relative max-w-3xl mx-auto">
                 <MentionManager
+                    textareaRef={textareaRef}
                     userId={userId}
                     mentionOpen={mentionOpen}
                     setMentionOpen={setMentionOpen}
@@ -410,7 +443,10 @@ export function ChatComposer({
                 />
 
                 {/* 输入框容器 */}
-                <div className="relative flex flex-col gap-1 p-3 rounded-4xl bg-background/90 border border-border transition-all duration-300">
+                <div className="chat-composer-shell relative flex flex-col gap-1 border border-border">
+                    {commands.ui}
+                    <PrivateAttachments items={attachmentState?.uploaded} disabled={uploads.uploading} onRemove={id => onAttachmentChange?.({ ...attachmentState, webSearchEnabled: hasWebSearch, uploaded: attachmentState?.uploaded?.filter(item => item.id !== id) })} />
+                    {uploads.uploading && <p className="px-3 py-1 text-sm" role="status">正在保存资料…</p>}
                     <AttachmentBar
                         hasFile={hasFile}
                         attachmentState={attachmentState}
@@ -422,6 +458,13 @@ export function ChatComposer({
                         dreamContextLoading={dreamContextLoading}
                         dreamContext={dreamContext}
                     />
+                    {allowDuringRun && isLoading && !awaitingInput && (
+                        <div className="chat-run-actions">
+                            <span>任务执行中，可以补充要求</span>
+                            <button type="button" onClick={submit} disabled={!inputValue.trim() || isSendingToList || uploads.uploading} className="agent-secondary-button">调整任务</button>
+                            {onQueueMessage && <button type="button" onClick={() => void onQueueMessage()} disabled={!inputValue.trim() || isSendingToList || uploads.uploading} className="agent-secondary-button">排队继续</button>}
+                        </div>
+                    )}
 
                     {/* 输入框区域 */}
                     <div className="relative">
@@ -441,15 +484,23 @@ export function ChatComposer({
                                     </span>
                                 ) : (
                                     <span className="text-foreground-secondary/80">
-                                        {disabled ? "请先获取积分" : isDreamMode ? "\u{1F319} 做了什么梦" : "尽管问"}
+                                        {inputPlaceholder}
                                     </span>
                                 )}
                             </div>
                             <textarea
+                                aria-label={awaitingInput ? '补充任务信息' : '消息输入'}
                                 ref={textareaRef}
                                 value={inputValue}
                                 onChange={(e) => handleInputChange(e.target.value)}
                                 onKeyDown={handleKeyDown}
+                                onPaste={event => {
+                                    if (!agentMode || !userId || uploads.uploading) return;
+                                    const files = Array.from(event.clipboardData.files);
+                                    const text = event.clipboardData.getData('text/plain');
+                                    if (files.length) { event.preventDefault(); void uploads.upload(files); }
+                                    else if (text.length > 8000 && !event.clipboardData.getData('text/html')) { event.preventDefault(); void uploads.upload([new File([text], `粘贴资料-${new Date().toISOString().slice(0,10)}.txt`, { type: 'text/plain' })]); showToast('info', '长文本已转为资料，可预览后再发送'); }
+                                }}
                                 onScroll={(e) => {
                                     if (overlayRef.current) {
                                         overlayRef.current.scrollTop = e.currentTarget.scrollTop;
@@ -466,6 +517,9 @@ export function ChatComposer({
 
                     {/* 底部按钮栏 */}
                     <ComposerToolbar
+                        domainControls={<ComposerDomainControls key={`${userId}:${draftKey ?? 'draft'}`} userId={userId} value={inputValue} onChange={handleInputChange} disabled={!!disabled} />}
+                        agentMode={agentMode}
+                        agentRuntime={agentRuntime}
                         menuOpen={menuOpen}
                         setMenuOpen={setMenuOpen}
                         fileInputRef={fileInputRef}
@@ -509,16 +563,15 @@ export function ChatComposer({
                         customProviderLabel={customProviderLabel}
                         disabled={disabled}
                         isLoading={isLoading}
-                        isSendingToList={isSendingToList}
+                        isSendingToList={isSendingToList || uploads.uploading}
                         dreamContextLoading={dreamContextLoading}
                         handleButtonClick={handleButtonClick}
+                        sendsDuringRun={allowDuringRun && isLoading && Boolean(inputValue.trim())}
                     />
                 </div>
 
                 {!hideDisclaimer && (
-                    <p className="text-center text-xs text-foreground-secondary/90 mt-1">
-                        AI 回复仅供参考，请理性看待命理分析结果
-                    </p>
+                    <div className="chat-composer-footer"><span>AI 回复仅供参考，请理性看待命理分析结果</span><span className="chat-keyboard-hint">Enter 发送 <span aria-hidden="true">/</span> Shift + Enter 换行</span></div>
                 )}
             </div>
         </div>

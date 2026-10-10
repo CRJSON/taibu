@@ -13,7 +13,7 @@ import { calculateBaziOutputFromStoredFields } from '@/lib/divination/bazi-recor
 
 // ===== 提醒类型 =====
 
-export type ReminderType = 'solar_term' | 'fortune' | 'key_date';
+export type ReminderType = 'solar_term' | 'fortune' | 'key_date' | 'daily_briefing';
 
 export interface ReminderSubscription {
     id: string;
@@ -458,7 +458,7 @@ async function getUserPrimaryBaziChart(userId: string): Promise<CoreBaziOutput |
     // 查找用户最近保存的八字命盘
     const { data } = await serviceClient
         .from('bazi_charts')
-        .select('gender, birth_date, birth_time, birth_place, longitude, calendar_type, is_leap_month')
+        .select('gender, birth_date, birth_time, birth_place, longitude, calendar_type, is_leap_month, timezone, disambiguation')
         .eq('user_id', userId)
         .order('created_at', { ascending: false })
         .limit(1)
@@ -470,23 +470,29 @@ async function getUserPrimaryBaziChart(userId: string): Promise<CoreBaziOutput |
 /**
  * 为所有启用提醒的用户调度提醒（由 Cron 调用）
  */
+let reminderSchedulingCursor: string | null = null;
 export async function scheduleAllUsersReminders(): Promise<number> {
     const serviceClient = getSystemAdminClient();
     let totalScheduled = 0;
+    const deadline = Date.now() + 20_000;
 
     // 获取所有启用了提醒的订阅
-    const { data: subscriptions, error: subscriptionsError } = await serviceClient
+    let subscriptionQuery = serviceClient
         .from('reminder_subscriptions')
         .select('user_id, reminder_type, enabled, notify_site')
         .eq('enabled', true)
-        .eq('notify_site', true);
+        .eq('notify_site', true)
+        .in('reminder_type', ['solar_term', 'fortune', 'key_date'])
+        .order('user_id', { ascending: true }).limit(300);
+    if (reminderSchedulingCursor) subscriptionQuery = subscriptionQuery.gt('user_id', reminderSchedulingCursor);
+    const { data: subscriptions, error: subscriptionsError } = await subscriptionQuery;
 
     if (subscriptionsError) {
         console.error('[reminders] 获取订阅列表失败:', subscriptionsError);
         return 0;
     }
 
-    if (!subscriptions || subscriptions.length === 0) return 0;
+    if (!subscriptions || subscriptions.length === 0) { reminderSchedulingCursor = null; return 0; }
 
     const userIds = Array.from(new Set(subscriptions.map(sub => sub.user_id)));
     const settingsMap = new Map<string, { notifications_enabled?: boolean; notify_site?: boolean }>();
@@ -525,6 +531,7 @@ export async function scheduleAllUsersReminders(): Promise<number> {
 
     // 为每个用户调度提醒
     for (const [userId, types] of userSubscriptions) {
+        if (Date.now() >= deadline) break;
         try {
             // 节气提醒
             if (types.has('solar_term')) {
@@ -549,7 +556,9 @@ export async function scheduleAllUsersReminders(): Promise<number> {
         } catch (err) {
             console.error(`[reminders] 为用户 ${userId} 调度提醒失败:`, err);
         }
+        reminderSchedulingCursor = userId;
     }
+    if (!userSubscriptions.size) reminderSchedulingCursor = subscriptions[subscriptions.length - 1].user_id;
 
     return totalScheduled;
 }

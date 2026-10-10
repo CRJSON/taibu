@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { LunarMonth, LunarYear, Solar } from 'lunar-javascript';
 
 import * as mcpCore from 'taibu-core';
+import { analyzePillarRelations } from '../dist/domains/bazi/calculate.js';
 
 const SAMPLE_INPUT = {
   gender: 'male',
@@ -17,6 +18,57 @@ const SAMPLE_INPUT = {
 function toPillarString(pillar) {
   return `${pillar.stem}${pillar.branch}`;
 }
+
+test('stem combinations and clashes retain distinct stem positions in canonical chart coordinates', () => {
+  const chart = mcpCore.calculateBazi({ gender: 'male', birthYear: 1987, birthMonth: 6, birthDay: 15, birthHour: 12, timezone: 'Asia/Shanghai' });
+  assert.ok(chart.tianGanWuHe.length > 0 && chart.tianGanChongKe.length > 0, 'fixture has both combination and clash relations');
+  const stemRelations = [...chart.tianGanWuHe, ...chart.tianGanChongKe];
+  for (const relation of stemRelations) assert.ok(relation.positions.every(position => /^(年|月|日|时)干$/u.test(position)));
+  for (const detailLevel of ['default', 'full']) {
+    const coordinates = mcpCore.toBaziJson(chart, { detailLevel }).干支关系明细;
+    const combinations = coordinates.filter(relation => relation.类型 === '合' && relation.位置.every(cell => cell.部位 === '天干'));
+    const clashes = coordinates.filter(relation => relation.类型 === '冲克');
+    assert.equal(combinations.length, chart.tianGanWuHe.length);
+    assert.equal(clashes.length, chart.tianGanChongKe.length);
+    for (const relation of [...combinations, ...clashes]) assert.equal(relation.位置.length, 2);
+    assert.ok(coordinates.some(relation => relation.类型 === '生' || relation.类型 === '克'), 'element relation coordinates remain available');
+  }
+});
+
+test('bazi punishment groups require distinct branches unless explicitly self-punishing', () => {
+  for (const branch of ['子', '丑', '寅', '卯', '巳', '未', '申', '戌']) {
+    const punishments = analyzePillarRelations(branch, branch, '辰', '酉').filter(relation => relation.type === '刑');
+    assert.deepEqual(punishments, [], `${branch}${branch} is not a self-punishment`);
+  }
+  for (const branch of ['辰', '午', '酉', '亥']) {
+    const punishments = analyzePillarRelations(branch, branch, '寅', '丑').filter(relation => relation.type === '刑');
+    assert.deepEqual(punishments.map(relation => relation.description), [`${branch}自刑`]);
+  }
+  assert.ok(analyzePillarRelations('寅', '巳', '辰', '酉').some(relation => relation.description === '无恩之刑'));
+  assert.ok(analyzePillarRelations('子', '卯', '辰', '酉').some(relation => relation.description === '无礼之刑'));
+});
+
+test('bazi and dayun do not turn repeated Yin branches into punishment', () => {
+  const input = { gender: 'male', birthYear: 2022, birthMonth: 2, birthDay: 10, birthHour: 8, timezone: 'Asia/Shanghai' };
+  const chart = mcpCore.calculateBazi(input);
+  assert.deepEqual(Object.values(chart.fourPillars).map(toPillarString), ['壬寅', '壬寅', '甲午', '戊辰']);
+  assert.deepEqual(chart.relations.filter(relation => relation.type === '刑'), []);
+  const sameBranchYears = mcpCore.calculateBaziDayun(input).list.flatMap(dayun => dayun.liunianList)
+    .filter(year => year.ganZhi.endsWith('寅'));
+  assert.ok(sameBranchYears.length > 0);
+  for (const year of sameBranchYears) assert.deepEqual(year.taiSui, ['值太岁']);
+});
+
+test('dayun labels fixed-eight start times and retains true-solar calculation rules', () => {
+  const input = { gender: 'male', birthYear: 1987, birthMonth: 6, birthDay: 15, birthHour: 12, timezone: 'Asia/Shanghai', yunSect: 2 };
+  const result = mcpCore.calculateBaziDayun(input);
+  assert.equal(result.startSolar, '1990-06-02 23:00:00');
+  assert.equal(result.calculationOptions.startSolarTimezone, 'Etc/GMT-8');
+  const solarInput = { ...input, longitude: 116.4 };
+  const corrected = mcpCore.calculateBaziDayun(solarInput);
+  assert.equal(corrected.calculationOptions.longitude, 116.4);
+  assert.deepEqual(corrected.trueSolarTimeInfo, mcpCore.calculateBazi(solarInput).trueSolarTimeInfo);
+});
 
 test('bazi should expose enhanced pillar fields', async () => {
   const result = await mcpCore.calculateBazi(SAMPLE_INPUT);

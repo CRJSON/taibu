@@ -7,6 +7,8 @@ import {
     USER_SETTINGS_SELECT,
     type UserSettingsUpdateInput,
 } from '@/lib/user/settings';
+import { validBriefingPreferences } from '@/lib/briefing-preferences';
+import { validPromptTemplates } from '@/lib/agent/prompt-templates';
 
 async function loadSettings(auth: Exclude<Awaited<ReturnType<typeof requireUserContext>>, { error: unknown }>) {
   const db = resolveRequestDbClient(auth);
@@ -32,6 +34,10 @@ async function loadSettings(auth: Exclude<Awaited<ReturnType<typeof requireUserC
 export async function GET(request: NextRequest) {
   const auth = await requireUserContext(request);
   if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
+  const expectedUserId = request.headers.get('X-Expected-User-Id');
+  if (expectedUserId !== null && expectedUserId !== auth.user.id) {
+    return jsonError('账号已切换，请重新加载设置', 409);
+  }
 
   const { settings, error } = await loadSettings(auth);
   if (error) {
@@ -46,6 +52,10 @@ export async function GET(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   const auth = await requireUserContext(request);
   if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
+  const expectedUserId = request.headers.get('X-Expected-User-Id');
+  if (expectedUserId !== null && expectedUserId !== auth.user.id) {
+    return jsonError('账号已切换，请重新加载设置', 409);
+  }
   const db = resolveRequestDbClient(auth);
   if (!db) return jsonError('更新用户设置失败', 500);
 
@@ -56,6 +66,15 @@ export async function PATCH(request: NextRequest) {
     return jsonError('请求体不是合法 JSON', 400);
   }
 
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return jsonError('设置无效', 400);
+  if (body.briefingPreferences !== undefined && !validBriefingPreferences(body.briefingPreferences)) return jsonError('早报时区或时间无效', 400);
+  if (body.chatPreferences?.promptTemplates !== undefined && !validPromptTemplates(body.chatPreferences.promptTemplates)) return jsonError('问法模板无效，最多 20 个，每个正文最多 4000 字符', 400);
+  if (body.chatPreferences?.memoryEnabled !== undefined && typeof body.chatPreferences.memoryEnabled !== 'boolean') return jsonError('记忆设置无效', 400);
+  if (body.chatPreferences !== undefined) {
+    const previous = await loadSettings(auth);
+    if (previous.error) return jsonError('读取原设置失败', 500);
+    body.chatPreferences = { ...previous.settings.chatPreferences, ...body.chatPreferences };
+  }
   const payload = buildUserSettingsUpdatePayload(auth.user.id, body);
   if (!hasEffectiveUserSettingsUpdate(payload)) {
     return jsonError('没有可更新的设置字段', 400);

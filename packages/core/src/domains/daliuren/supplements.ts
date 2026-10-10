@@ -4,6 +4,7 @@
  */
 
 import { DI_ZHI, GAN_WUXING, TIAN_GAN, ZHI_WUXING } from '../../data/ganzhi.js';
+import { getDiShi } from '../../shared/utils.js';
 
 export type SingleKeResolution = {
   method: '元首' | '重审';
@@ -47,36 +48,11 @@ const TIAN_JIANG_SHORT: Record<string, string> = {
  * 十二长生序列
  * 阳干顺行，阴干逆行
  */
-const CHANG_SHENG_NAMES = ['长生', '沐浴', '冠带', '临官', '帝旺', '衰', '病', '死', '墓', '绝', '胎', '养'] as const;
-
-/** 各五行阳干长生起始地支 */
-const YANG_CHANG_SHENG_START: Record<string, number> = {
-  木: zhiIndex('亥'), // 甲木长生在亥
-  火: zhiIndex('寅'), // 丙火长生在寅
-  土: zhiIndex('寅'), // 戊土长生在寅（同火）
-  金: zhiIndex('巳'), // 庚金长生在巳
-  水: zhiIndex('申'), // 壬水长生在申
-};
-
 /**
  * 计算某地支在日干五行下的十二长生状态
  */
 export function getChangSheng(riGan: string, diZhi: string): string {
-  const wx = GAN_WUXING[riGan];
-  if (!wx) return '';
-  const isYang = ganYinYang(riGan) === '阳';
-  const start = YANG_CHANG_SHENG_START[wx];
-  const pos = zhiIndex(diZhi);
-
-  if (isYang) {
-    // 阳干顺行
-    const offset = (pos - start + 12) % 12;
-    return CHANG_SHENG_NAMES[offset];
-  } else {
-    // 阴干逆行
-    const offset = (start - pos + 12) % 12;
-    return CHANG_SHENG_NAMES[offset];
-  }
+  return getDiShi(riGan, diZhi);
 }
 
 // ===== 五行旺衰 =====

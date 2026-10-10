@@ -2,32 +2,36 @@ import type { ToolDefinition } from '../../contract.js';
 
 export const taiyiDefinition: ToolDefinition = {
   name: 'taiyi',
-  description: '太乙九星观测 - 根据问卜时间生成时空底盘、九星阵列与核心关系。',
+  description: '太乙排盘 - 支持九星观测，以及采用四库本金镜七十二局立成的现代历法适配年/月/日/时计。',
   inputSchema: {
     type: 'object',
     properties: {
+      system: { type: 'string', enum: ['nine-star', 'traditional'], default: 'nine-star', description: '九星观测或七十二局' },
+      tradition: { type: 'string', enum: ['jinjing', 'tongzong'], description: '传统分支的积数历元：金镜或统宗，默认金镜；立成表均用四库本金镜' },
+      accumulatedNumber: { type: 'integer', minimum: 1, maximum: Number.MAX_SAFE_INTEGER, description: '手工积数，覆写历元自动计算' },
+      dunType: { type: 'string', enum: ['yang', 'yin'], description: '覆写遁向；时计默认按冬夏至实际时刻，其他计默认阳遁' },
       mode: {
         type: 'string',
         enum: ['year', 'month', 'day', 'hour', 'minute'],
-        description: '观测尺度（year=年盘，month=月盘，day=日盘，hour=时盘，minute=在时盘基础上按 10 分钟细化）',
+        description: "观测尺度（year=年盘，month=月盘，day=日盘，hour=时盘，minute=在时盘基础上按 10 分钟细化）",
       },
       date: {
         type: 'string',
-        description: '观测日期（公历 YYYY-MM-DD）',
+        description: "观测日期（公历 YYYY-MM-DD）",
       },
       hour: {
-        type: 'number',
-        description: '小时（0-23；mode 为 hour 或 minute 时必填）',
+        type: 'integer', minimum: 0, maximum: 23,
+        description: "小时（0-23；mode 为 hour 或 minute 时必填）",
         default: 12,
       },
       minute: {
-        type: 'number',
-        description: '分钟（0-59；mode=minute 时必填）',
+        type: 'integer', minimum: 0, maximum: 59,
+        description: "分钟（0-59；mode=minute 时必填）",
         default: 0,
       },
       timezone: {
         type: 'string',
-        description: 'IANA 时区名（如 Asia/Shanghai）',
+        description: "IANA 时区名（如 Asia/Shanghai）",
         default: 'Asia/Shanghai',
       },
       question: {
@@ -37,12 +41,13 @@ export const taiyiDefinition: ToolDefinition = {
       detailLevel: {
         type: 'string',
         enum: ['default', 'full'],
-        description: '输出详略（本工具各档输出相同）',
+        description: "输出详略（本工具各档输出相同）",
         default: 'default',
       },
     },
     required: ['mode', 'date'],
     allOf: [
+      { if: { properties: { system: { const: 'traditional' } }, required: ['system'] }, then: { properties: { mode: { enum: ['year', 'month', 'day', 'hour'] } } } },
       {
         if: {
           properties: {

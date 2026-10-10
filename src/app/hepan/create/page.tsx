@@ -35,7 +35,7 @@ function BirthInput({
 }) {
     const theme = {
         love: { active: 'focus:border-rose-500', ring: 'focus:ring-rose-500/20', text: 'text-rose-500', bg: 'bg-rose-500' },
-        business: { active: 'focus:border-blue-500', ring: 'focus:ring-blue-500/20', text: 'text-blue-500', bg: 'bg-blue-500' },
+        business: { active: 'focus:border-accent', ring: 'focus:ring-accent/20', text: 'text-blue-500', bg: 'bg-blue-500' },
         family: { active: 'focus:border-emerald-500', ring: 'focus:ring-emerald-500/20', text: 'text-emerald-500', bg: 'bg-emerald-500' },
     }[type];
 
@@ -96,7 +96,7 @@ function BirthInput({
 
                 {/* 日期 */}
                 <div className="space-y-2">
-                    <label className="text-xs font-semibold text-foreground-secondary uppercase tracking-wider px-1">出生日期 (公历)</label>
+                    <label className="text-xs font-semibold text-foreground-secondary uppercase tracking-wider px-1">出生日期 ({value.calendarType === 'lunar' ? `${value.isLeapMonth ? '闰月' : ''}农历` : '公历'})</label>
                     <div className="grid grid-cols-3 gap-4">
                         {[
                             { key: 'year', label: '年', min: 1900, max: 2030, placeholder: '2000' },
@@ -149,12 +149,13 @@ function BirthInput({
                     <div className="relative group/select">
                         <select
                             value={value.hour ?? ''}
-                            onChange={(e) => onChange({ ...value, hour: e.target.value ? parseInt(e.target.value) : undefined })}
+                            onChange={(e) => onChange({ ...value, hour: e.target.value ? parseInt(e.target.value) : undefined, minute: 0 })}
                             className={`w-full px-4 py-3 bg-background/5 border border-white/10 rounded-xl
                                 text-foreground appearance-none cursor-pointer
                                 focus:outline-none ${theme.active} focus:ring-4 ${theme.ring} transition-all duration-300`}
                         >
                             <option value="">请选择时辰 (不清楚可不填)</option>
+                            {value.hour !== undefined && value.hour % 2 !== 0 && <option value={value.hour}>已导入 {String(value.hour).padStart(2, '0')}:{String(value.minute ?? 0).padStart(2, '0')}</option>}
                             <option value="0">子时 (23:00-01:00)</option>
                             <option value="2">丑时 (01:00-03:00)</option>
                             <option value="4">寅时 (03:00-05:00)</option>
@@ -205,20 +206,19 @@ function HepanCreateContent() {
         family: { p1: '父/母', p2: '子/女' },
     };
 
-    const normalizeHourToShichen = (hour?: number) => {
-        if (hour === undefined || Number.isNaN(hour)) return undefined;
-        const normalized = ((hour % 24) + 24) % 24;
-        const slot = Math.floor((normalized + 1) / 2) * 2;
-        return slot === 24 ? 0 : slot;
-    };
-
     const handleChartSelect = (chart: ChartItem) => {
         const birthInfo: Partial<BirthInfo> = {
             name: chart.name,
             year: chart.birth_year,
             month: chart.birth_month,
             day: chart.birth_day,
-            hour: normalizeHourToShichen(chart.birth_hour),
+            hour: chart.birth_hour,
+            minute: chart.birth_minute,
+            calendarType: chart.calendar_type === 'lunar' ? 'lunar' : 'solar',
+            isLeapMonth: chart.is_leap_month ?? false,
+            longitude: chart.longitude ?? undefined,
+            timezone: chart.timezone,
+            disambiguation: chart.disambiguation,
             gender: chart.gender || undefined,
         };
 
@@ -243,12 +243,15 @@ function HepanCreateContent() {
 
         setLoading(true);
 
-        // 计算合盘
-        const result = analyzeCompatibility(
-            person1 as BirthInfo,
-            person2 as BirthInfo,
-            type
-        );
+        // 计算合盘；时间规则错误不能留下无限 loading 或静默改用另一时区。
+        let result;
+        try {
+            result = analyzeCompatibility(person1 as BirthInfo, person2 as BirthInfo, type);
+        } catch (error) {
+            setValidationError(error instanceof Error ? error.message : '出生信息无效');
+            setLoading(false);
+            return;
+        }
 
         // 保存合盘记录到数据库
         let chartId: string | null = null;

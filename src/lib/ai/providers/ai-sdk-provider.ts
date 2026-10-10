@@ -22,6 +22,7 @@ export interface AIProviderOptions {
     reasoningEffort?: AIReasoningEffort;
     imageBase64?: string;
     imageMimeType?: string;
+    abortSignal?: AbortSignal;
 }
 
 export function getApiKey(envVar: string): string | undefined {
@@ -36,9 +37,9 @@ export function getApiKey(envVar: string): string | undefined {
  */
 export function createModelFromConfig(
     config: AIModelConfig,
-    options?: { reasoning?: boolean },
+    options?: { reasoning?: boolean; apiKey?: string; fetch?: typeof globalThis.fetch },
 ): LanguageModel {
-    const apiKey = getApiKey(config.apiKeyEnvVar);
+    const apiKey = options?.apiKey ?? getApiKey(config.apiKeyEnvVar);
     if (!apiKey || apiKey === 'your_api_key_here') {
         throw new Error(`${config.name || config.id} API key not configured (${config.apiKeyEnvVar})`);
     }
@@ -49,7 +50,7 @@ export function createModelFromConfig(
         baseURL,
         // 自定义 fetch：部分网关上游的 Cloudflare WAF 会拦截 Node.js 默认指纹，
         // 使用浏览器风格请求头绕过 bot 检测
-        fetch: gatewayFetch,
+        fetch: options?.fetch ?? gatewayFetch,
     });
 
     // 推理模式下使用 reasoningModelId（如 deepseek-pro 的独立推理模型）
@@ -131,7 +132,7 @@ function buildThinkingParams(
 /**
  * 构建 AI SDK 调用的 provider-specific 选项
  */
-function buildProviderOptions(
+export function buildProviderOptions(
     config: AIModelConfig,
     options?: AIProviderOptions,
 ): ProviderOptions | undefined {
@@ -169,9 +170,10 @@ export async function callWithAISDK(
     systemPrompt: string,
     config: AIModelConfig,
     options?: AIProviderOptions,
-): Promise<{ text: string; reasoning?: string }> {
+): Promise<{ text: string; reasoning?: string; usage?: import('ai').LanguageModelUsage }> {
     const result = await generateText({
         model,
+        abortSignal: options?.abortSignal,
         system: systemPrompt,
         messages,
         maxRetries: 0,
@@ -186,6 +188,7 @@ export async function callWithAISDK(
     return {
         text: result.text,
         reasoning: result.reasoningText ?? undefined,
+        usage: result.usage,
     };
 }
 

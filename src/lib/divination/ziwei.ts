@@ -20,6 +20,7 @@ import {
 } from 'taibu-core/ziwei-horoscope';
 import type { Gender, CalendarType } from '@/types';
 import { resolveChartTextDetailLevel, type ChartTextDetailLevel } from '@/lib/divination/detail-level';
+import { resolveBirthTimeOptions, type BirthTimeResolution } from '@/lib/divination/birth-time';
 
 export type Astrolabe = ReturnType<typeof createAstrolabeWithTrueSolar>['astrolabe'];
 
@@ -34,13 +35,14 @@ function toCoreZiweiInput(formData: ZiweiFormData) {
         calendarType: formData.calendarType === 'lunar' ? 'lunar' as const : 'solar' as const,
         isLeapMonth: formData.isLeapMonth,
         longitude: formData.longitude,
+        ...resolveBirthTimeOptions(formData),
     };
 }
 
 // ===== 类型定义 =====
 
 /** 紫微斗数表单数据 */
-export interface ZiweiFormData {
+export interface ZiweiFormData extends BirthTimeResolution {
     name: string;
     gender: Gender;
     birthYear: number;
@@ -163,7 +165,7 @@ export function getHoroscope(output: CoreZiweiOutput, astrolabe: Astrolabe, date
         };
 
         const yearly: FlowPeriodInfo = {
-            period: String(date.getFullYear()),
+            period: horoscope.targetDate.split('-')[0],
             palace: {
                 index: horoscope.yearly.index,
                 name: horoscope.yearly.name,
@@ -176,7 +178,7 @@ export function getHoroscope(output: CoreZiweiOutput, astrolabe: Astrolabe, date
         };
 
         const monthly: FlowPeriodInfo = {
-            period: String(date.getMonth() + 1),
+            period: String(Number(horoscope.targetDate.split('-')[1])),
             palace: {
                 index: horoscope.monthly.index,
                 name: horoscope.monthly.name,

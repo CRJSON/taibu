@@ -1,3 +1,4 @@
+import { withRulesJSON } from '../../shared/calculation-rules.js';
 import type {
   TarotCanonicalJSON
 } from './json-types.js';
@@ -11,7 +12,9 @@ import type {
   TarotCanonicalTextOptions
 } from '../shared/text-options.js';
 
-export function renderTarotCanonicalJSON(
+export const renderTarotCanonicalJSON = withRulesJSON(renderTarotCanonicalJSONBase);
+
+function renderTarotCanonicalJSONBase(
   result: TarotOutput,
   options: TarotCanonicalTextOptions = {},
 ): TarotCanonicalJSON {

@@ -1,13 +1,13 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useUnsavedSettingsGuard } from '@/lib/hooks/useUnsavedSettingsGuard';
 import { ArrowLeft, Eye, EyeOff, PencilLine, Trash2 } from 'lucide-react';
 import { requestBrowserData } from '@/lib/browser-api';
 import { MarkdownContent } from '@/components/ui/MarkdownContent';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { useToast } from '@/components/ui/Toast';
 import type { Announcement } from '@/lib/announcement';
-import { invalidateQueriesForPath } from '@/lib/query/invalidation';
 
 type PanelView = 'history' | 'editor';
 type EditorMode = 'create' | 'edit';
@@ -111,6 +111,7 @@ export function AnnouncementManagementPanel() {
     () => announcements.find((item) => item.id === selectedId) || null,
     [announcements, selectedId],
   );
+  useUnsavedSettingsGuard(view === 'editor' && JSON.stringify(form) !== JSON.stringify(selectedAnnouncement ? announcementToFormState(selectedAnnouncement) : emptyFormState()));
 
   const startCreateAnnouncement = () => {
     setView('editor');
@@ -156,7 +157,6 @@ export function AnnouncementManagementPanel() {
       setSelectedId(saved.id);
       setForm(announcementToFormState(saved));
       setPreviewOpen(false);
-      invalidateQueriesForPath('/api/admin/announcements');
       showToast('success', form.id ? '公告已更新' : '公告已发布');
       await loadAnnouncements(saved.id);
     } catch (saveError) {
@@ -182,7 +182,6 @@ export function AnnouncementManagementPanel() {
         resetToHistory();
       }
 
-      invalidateQueriesForPath('/api/admin/announcements');
       showToast('success', '公告已删除');
       await loadAnnouncements(deletingSelected ? null : selectedId);
     } catch (deleteError) {
@@ -196,13 +195,13 @@ export function AnnouncementManagementPanel() {
     return (
       <div className="space-y-4">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="min-w-0 text-lg font-semibold text-[#37352f]">公告历史</h2>
+          <h2 className="min-w-0 text-lg font-semibold text-foreground">公告历史</h2>
 
           <div className="flex shrink-0 items-center gap-2">
             <button
               type="button"
               onClick={startCreateAnnouncement}
-              className="inline-flex items-center gap-1.5 rounded-full bg-[#2383e2] px-3 py-2 text-sm font-medium text-white transition-colors duration-150 hover:bg-[#1d74c9] active:bg-[#1a64b0]"
+              className="inline-flex items-center gap-1.5 rounded-full bg-accent px-3 py-2 text-sm font-medium text-on-accent transition-colors duration-150 hover:bg-accent-hover active:bg-accent-hover"
             >
               新建公告
             </button>
@@ -214,9 +213,9 @@ export function AnnouncementManagementPanel() {
             <SoundWaveLoader variant="inline" />
           </div>
         ) : error ? (
-          <div className="py-12 text-center text-sm text-[#37352f]/45">{error}</div>
+          <div className="py-12 text-center text-sm text-foreground-secondary">{error}</div>
         ) : announcements.length === 0 ? (
-          <div className="py-12 text-center text-sm text-[#37352f]/45">还没有任何公告</div>
+          <div className="py-12 text-center text-sm text-foreground-secondary">还没有任何公告</div>
         ) : (
           <div className="space-y-2">
             {announcements.map((announcement) => {
@@ -227,8 +226,8 @@ export function AnnouncementManagementPanel() {
                   key={announcement.id}
                   className={`rounded-xl border px-4 py-3 transition-colors duration-150 ${
                     isSelected
-                      ? 'border-[#e2d8c6] bg-[#f7f2ea]'
-                      : 'border-[#f0ece5] bg-white hover:bg-[#faf7f1]'
+                      ? 'border-border bg-background-secondary'
+                      : 'border-border bg-surface hover:bg-surface'
                   }`}
                 >
                   <div className="flex items-start justify-between gap-4">
@@ -244,18 +243,18 @@ export function AnnouncementManagementPanel() {
                       }}
                       className="min-w-0 flex-1 cursor-pointer text-left"
                     >
-                      <div className="text-[11px] font-medium tracking-tight text-[#37352f]/38">
+                      <div className="text-[11px] font-medium tracking-tight text-foreground/38">
                         {formatPublishedAt(announcement.publishedAt)}
                       </div>
                       {announcement.content.trim() ? (
-                        <div className="mt-1 overflow-hidden text-sm leading-6 text-[#37352f]/82">
+                        <div className="mt-1 overflow-hidden text-sm leading-6 text-foreground/82">
                           <MarkdownContent
                             content={announcement.content}
-                            className="text-sm leading-6 text-[#37352f]/82"
+                            className="text-sm leading-6 text-foreground/82"
                           />
                         </div>
                       ) : (
-                        <div className="mt-1 text-sm leading-6 text-[#37352f]/45">
+                        <div className="mt-1 text-sm leading-6 text-foreground-secondary">
                           暂无内容
                         </div>
                       )}
@@ -265,7 +264,7 @@ export function AnnouncementManagementPanel() {
                       <button
                         type="button"
                         onClick={() => selectAnnouncement(announcement)}
-                        className="rounded-md p-1.5 text-[#37352f]/45 transition-colors duration-150 hover:bg-[#ebe5db] hover:text-[#2eaadc]"
+                        className="rounded-md p-1.5 text-foreground-secondary transition-colors duration-150 hover:bg-background-secondary hover:text-accent"
                         title="编辑"
                       >
                         <PencilLine className="h-3.5 w-3.5" />
@@ -274,7 +273,7 @@ export function AnnouncementManagementPanel() {
                         type="button"
                         onClick={() => void deleteAnnouncement(announcement)}
                         disabled={deletingId === announcement.id}
-                        className="rounded-md p-1.5 text-[#37352f]/45 transition-colors duration-150 hover:bg-[#ebe5db] hover:text-[#eb5757] disabled:opacity-50"
+                        className="rounded-md p-1.5 text-foreground-secondary transition-colors duration-150 hover:bg-background-secondary hover:text-danger disabled:opacity-50"
                         title="删除"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
@@ -296,7 +295,7 @@ export function AnnouncementManagementPanel() {
         <button
           type="button"
           onClick={resetToHistory}
-          className="inline-flex items-center gap-1.5 text-sm text-[#37352f]/50 transition-colors duration-150 hover:text-[#37352f]"
+          className="inline-flex items-center gap-1.5 text-sm text-foreground-secondary transition-colors duration-150 hover:text-foreground"
         >
           <ArrowLeft className="h-4 w-4" />
           返回历史
@@ -306,18 +305,18 @@ export function AnnouncementManagementPanel() {
           type="button"
           onClick={() => void saveAnnouncement()}
           disabled={saving}
-          className="inline-flex items-center gap-1.5 rounded-full bg-[#2383e2] px-3 py-2 text-sm font-medium text-white transition-colors duration-150 hover:bg-[#1d74c9] active:bg-[#1a64b0] disabled:opacity-50"
+          className="inline-flex items-center gap-1.5 rounded-full bg-accent px-3 py-2 text-sm font-medium text-on-accent transition-colors duration-150 hover:bg-accent-hover active:bg-accent-hover disabled:opacity-50"
         >
           {saving ? '保存中...' : mode === 'create' ? '发布公告' : '保存修改'}
         </button>
       </div>
 
       <section className="space-y-4">
-        <h2 className="text-lg font-semibold text-[#37352f]">{mode === 'create' ? '新建公告' : '编辑公告'}</h2>
+        <h2 className="text-lg font-semibold text-foreground">{mode === 'create' ? '新建公告' : '编辑公告'}</h2>
 
-        <div className="grid gap-3 border-b border-[#ece7de] pb-4 text-sm md:grid-cols-[88px_minmax(0,1fr)]">
-          <span className="text-[#37352f]/45">当前状态</span>
-          <span className="leading-6 text-[#37352f]">
+        <div className="grid gap-3 border-b border-border pb-4 text-sm md:grid-cols-[88px_minmax(0,1fr)]">
+          <span className="text-foreground-secondary">当前状态</span>
+          <span className="leading-6 text-foreground">
             {selectedAnnouncement
               ? `已发布于 ${formatPublishedAt(selectedAnnouncement.publishedAt)}，保存后即时生效。`
               : '未发布，保存后即时生效。'}
@@ -326,13 +325,13 @@ export function AnnouncementManagementPanel() {
 
         <section className="space-y-2">
           <div className="space-y-1">
-            <h3 className="text-sm font-semibold text-[#37352f]">公告内容</h3>
-            <p className="text-xs leading-5 text-[#37352f]/40">支持 Markdown，建议用标题、列表、加粗、链接等基础语法。</p>
+            <h3 className="text-sm font-semibold text-foreground">公告内容</h3>
+            <p className="text-xs leading-5 text-foreground-secondary">支持 Markdown，建议用标题、列表、加粗、链接等基础语法。</p>
           </div>
           <textarea
             value={form.content}
             onChange={(event) => setForm((current) => ({ ...current, content: event.target.value }))}
-            className="min-h-[220px] w-full resize-y rounded-xl border border-[#e6e1d8] bg-[#fcfbf8] px-4 py-3 text-sm leading-7 text-[#37352f] outline-none transition-all duration-150 focus:border-gray-300 focus:ring-2 focus:ring-blue-500/20"
+            className="min-h-[220px] w-full resize-y rounded-xl border border-border bg-surface px-4 py-3 text-sm leading-7 text-foreground outline-none transition-all duration-150 focus:border-gray-300 focus:ring-2 focus:ring-accent/20"
             placeholder="输入公告内容，支持多段文本..."
           />
         </section>
@@ -340,13 +339,13 @@ export function AnnouncementManagementPanel() {
         <section className="space-y-2">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="space-y-1">
-              <h3 className="text-sm font-semibold text-[#37352f]">Markdown 预览</h3>
-              <p className="text-xs leading-5 text-[#37352f]/40">默认收起，需要时再展开查看实际展示效果。</p>
+              <h3 className="text-sm font-semibold text-foreground">Markdown 预览</h3>
+              <p className="text-xs leading-5 text-foreground-secondary">默认收起，需要时再展开查看实际展示效果。</p>
             </div>
             <button
               type="button"
               onClick={() => setPreviewOpen((current) => !current)}
-              className="inline-flex items-center gap-1.5 rounded-full border border-[#e6e1d8] bg-[#faf7f1] px-3 py-1.5 text-xs text-[#37352f]/70 transition-colors duration-150 hover:bg-[#f4efe6] hover:text-[#37352f]"
+              className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-1.5 text-xs text-foreground/70 transition-colors duration-150 hover:bg-background-secondary hover:text-foreground"
             >
               {previewOpen ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
               {previewOpen ? '收起预览' : '展开预览'}
@@ -354,17 +353,17 @@ export function AnnouncementManagementPanel() {
           </div>
 
           {previewOpen ? (
-            <div className="rounded-xl border border-[#ece7de] bg-[#fbfaf7] px-4 py-4">
+            <div className="rounded-xl border border-border bg-surface px-4 py-4">
               {form.content.trim() ? (
-                <MarkdownContent content={form.content} className="text-sm leading-7 text-[#37352f]/85" />
+                <MarkdownContent content={form.content} className="text-sm leading-7 text-foreground/85" />
               ) : (
-                <div className="flex min-h-[120px] items-center justify-center text-sm text-[#37352f]/35">
+                <div className="flex min-h-[120px] items-center justify-center text-sm text-foreground-secondary">
                   输入公告内容后，这里会显示 Markdown 预览
                 </div>
               )}
             </div>
           ) : (
-            <div className="rounded-xl border border-dashed border-[#ddd6ca] bg-[#faf7f1] px-4 py-4 text-sm text-[#37352f]/45">
+            <div className="rounded-xl border border-dashed border-border bg-surface px-4 py-4 text-sm text-foreground-secondary">
               预览已收起。需要确认展示效果时再展开即可。
             </div>
           )}

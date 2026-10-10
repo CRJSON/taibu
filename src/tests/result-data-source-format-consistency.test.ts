@@ -72,6 +72,8 @@ test('qimen data source formatForAI should reuse canonical qimen text', async ()
     panType: 'zhuan',
     juMethod: 'chaibu',
     zhiFuJiGong: 'jiLiuYi',
+    juNumber: row.ju_number,
+    dunType: 'yang',
   });
 
   assert.equal(
@@ -228,6 +230,101 @@ test('ziwei data source formatForAI should rebuild canonical text from stored ba
       detailLevel: resolveChartTextDetailLevel('ziwei', undefined),
     }),
   );
+});
+
+test('saved bazi and ziwei data sources preserve timezone and DST policy in canonical text', async () => {
+  const { baziProvider } = await import('../lib/data-sources/bazi');
+  const { ziweiProvider } = await import('../lib/data-sources/ziwei');
+  const { calculateBaziChartBundle, generateBaziChartText } = await import('../lib/divination/bazi');
+  const { calculateZiweiChartBundle, generateZiweiChartText } = await import('../lib/divination/ziwei');
+  for (const disambiguation of ['earlier', 'later'] as const) {
+    const row = {
+      id: 'chart-time-1', user_id: 'user-1', name: '纽约命主', gender: 'female' as const,
+      birth_date: '2024-11-03', birth_time: '01:30', birth_place: '纽约', longitude: -74.006,
+      calendar_type: 'solar', is_leap_month: false, timezone: 'America/New_York', disambiguation,
+      created_at: '2026-03-25T00:00:00.000Z',
+    };
+    const form = {
+      name: row.name, gender: row.gender, birthYear: 2024, birthMonth: 11, birthDay: 3,
+      birthHour: 1, birthMinute: 30, birthPlace: row.birth_place, longitude: row.longitude,
+      calendarType: 'solar' as const, isLeapMonth: false, timezone: row.timezone, disambiguation,
+    };
+    const bazi = calculateBaziChartBundle(form);
+    const ziwei = calculateZiweiChartBundle(form);
+    assert.equal(baziProvider.formatForAI(row), generateBaziChartText(bazi.output, {
+      name: row.name, meta: bazi.meta, detailLevel: resolveChartTextDetailLevel('bazi', undefined),
+    }));
+    assert.equal(ziweiProvider.formatForAI(row), generateZiweiChartText(ziwei.output, {
+      detailLevel: resolveChartTextDetailLevel('ziwei', undefined),
+    }));
+  }
+});
+
+test('fortune and reminder chart reads pass saved time options to shared reconstruction', async (t) => {
+  const apiUtils = require('../lib/api-utils') as typeof import('../lib/api-utils');
+  const storedBazi = require('../lib/divination/bazi-record') as typeof import('../lib/divination/bazi-record');
+  const reminders = require('../lib/reminders') as typeof import('../lib/reminders');
+  const { dailyFortuneProvider, monthlyFortuneProvider } = await import('../lib/data-sources/fortune');
+  const { NextRequest } = await import('next/server');
+  const row: Record<string, unknown> = {
+    id: 'chart-time-1', user_id: 'user-1', name: '纽约命主', gender: 'female',
+    birth_date: '2024-11-03', birth_time: '01:30', birth_place: '纽约', longitude: -74.006,
+    calendar_type: 'solar', is_leap_month: false, timezone: 'America/New_York', disambiguation: 'later',
+  };
+  const rebuiltRows: Parameters<typeof storedBazi.calculateBaziOutputFromStoredFields>[0][] = [];
+  const client = {
+    from(table: string) {
+      return {
+        select(columns: string) {
+          if (table === 'bazi_charts') {
+            assert.ok(columns.split(', ').includes('timezone'));
+            assert.ok(columns.split(', ').includes('disambiguation'));
+          }
+          const query = {
+            eq() { return query; }, order() { return query; }, limit() { return query; }, in() { return query; },
+            async maybeSingle() {
+              if (table === 'user_settings') return { data: { default_bazi_chart_id: row.id }, error: null };
+              assert.equal(table, 'bazi_charts');
+              return { data: Object.fromEntries(columns.split(', ').map(key => [key, row[key]])), error: null };
+            },
+            then(resolve: (value: { data: Record<string, unknown>[]; error: null }) => unknown) {
+              assert.ok(table === 'reminder_subscriptions' || table === 'user_settings');
+              return Promise.resolve(resolve({
+                data: table === 'reminder_subscriptions'
+                  ? [{ user_id: 'user-1', reminder_type: 'key_date', enabled: true, notify_site: true }]
+                  : [{ user_id: 'user-1', notifications_enabled: true, notify_site: true }],
+                error: null,
+              }));
+            },
+          };
+          return query;
+        },
+      };
+    },
+  };
+  t.mock.method(apiUtils, 'getSystemAdminClient', () => client);
+  t.mock.method(apiUtils, 'requireUserContext', async () => ({ user: { id: 'user-1' }, db: client, supabase: client }));
+  t.mock.method(reminders, 'updateReminderSubscription', async () => true);
+  t.mock.method(storedBazi, 'calculateBaziOutputFromStoredFields', (input: Parameters<typeof storedBazi.calculateBaziOutputFromStoredFields>[0]) => {
+    rebuiltRows.push(input);
+    return null;
+  });
+  const ctx = { client: client as unknown as NonNullable<Parameters<typeof dailyFortuneProvider.get>[2]>['client'] };
+  await dailyFortuneProvider.get('2026-03-25', 'user-1', ctx);
+  await monthlyFortuneProvider.get('2026-03', 'user-1', ctx);
+  assert.equal(await reminders.scheduleAllUsersReminders(), 0);
+  const { POST } = await import('../app/api/reminders/route');
+  const response = await POST(new NextRequest('http://localhost/api/reminders', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ reminderType: 'key_date', enabled: true }),
+  }));
+  assert.equal(response.status, 200);
+  assert.equal(rebuiltRows.length, 4);
+  for (const input of rebuiltRows) {
+    assert.equal(input.timezone, 'America/New_York');
+    assert.equal(input.disambiguation, 'later');
+    assert.equal(input.birth_time, '01:30');
+  }
 });
 
 test('hepan data source formatForAI should match saved analysis structure instead of raw JSON dump', async () => {

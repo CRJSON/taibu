@@ -21,13 +21,17 @@ export async function GET(request: NextRequest) {
         if ('error' in auth) {
             return jsonError(auth.error.message, auth.error.status, { success: false });
         }
+        const expectedUserId = request.headers.get('X-Expected-User-Id');
+        if (expectedUserId !== null && expectedUserId !== auth.user.id) {
+            return jsonError('账号已切换，请重新加载设置', 409, { success: false });
+        }
         const { user } = auth;
         const db = auth.db;
 
         const subscriptions = await getReminderSubscriptions(user.id, { client: db });
 
         // 确保所有类型都有记录
-        const allTypes: ReminderType[] = ['solar_term', 'fortune', 'key_date'];
+        const allTypes: ReminderType[] = ['solar_term', 'fortune', 'key_date', 'daily_briefing'];
         const result = allTypes.map(type => {
             const existing = subscriptions.find(s => s.reminderType === type);
             return {
@@ -58,13 +62,17 @@ export async function POST(request: NextRequest) {
         if ('error' in auth) {
             return jsonError(auth.error.message, auth.error.status, { success: false });
         }
+        const expectedUserId = request.headers.get('X-Expected-User-Id');
+        if (expectedUserId !== null && expectedUserId !== auth.user.id) {
+            return jsonError('账号已切换，请重新加载设置', 409, { success: false });
+        }
         const { user } = auth;
         const db = auth.db;
 
         const body = await request.json();
         const { reminderType, enabled, notifyEmail, notifySite } = body;
 
-        if (!reminderType || !['solar_term', 'fortune', 'key_date'].includes(reminderType)) {
+        if (!reminderType || !['solar_term', 'fortune', 'key_date', 'daily_briefing'].includes(reminderType)) {
             return jsonError('无效的提醒类型', 400, { success: false });
         }
 
@@ -88,7 +96,7 @@ export async function POST(request: NextRequest) {
                 // 获取用户的八字命盘
                 const { data: chartData } = await db
                     .from('bazi_charts')
-                    .select('gender, birth_date, birth_time, birth_place, longitude, calendar_type, is_leap_month')
+                    .select('gender, birth_date, birth_time, birth_place, longitude, calendar_type, is_leap_month, timezone, disambiguation')
                     .eq('user_id', user.id)
                     .order('created_at', { ascending: false })
                     .limit(1)

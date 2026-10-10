@@ -110,7 +110,7 @@ function PropertyRow<T extends string>({
 }) {
     return (
         <div className="flex items-center gap-3 py-1.5 px-1 group transition-colors">
-            <div className="flex items-center gap-2 w-24 shrink-0 text-[11px] font-bold text-foreground/30 uppercase tracking-widest">
+            <div className="flex items-center gap-2 w-24 shrink-0 text-[11px] font-bold text-foreground-secondary uppercase tracking-widest">
                 <Icon className="w-3.5 h-3.5" />
                 {label}
             </div>
@@ -164,7 +164,7 @@ function PropertyTags<T extends string>({
 
     return (
         <div className="space-y-2 pt-2">
-            <div className="flex items-center gap-2 px-1 text-[11px] font-bold text-foreground/30 uppercase tracking-widest">
+            <div className="flex items-center gap-2 px-1 text-[11px] font-bold text-foreground-secondary uppercase tracking-widest">
                 <Tag className="w-3.5 h-3.5" />
                 {label}
             </div>
@@ -191,7 +191,7 @@ function PropertyTags<T extends string>({
                                 onChange([...values, nextValue]);
                             }
                         }}
-                        className="appearance-none bg-transparent border border-dashed border-border text-foreground/40 text-[10px] px-2 py-0.5 rounded cursor-pointer outline-none hover:bg-background-secondary hover:text-foreground transition-colors"
+                        className="appearance-none bg-transparent border border-dashed border-border text-foreground-secondary text-[10px] px-2 py-0.5 rounded cursor-pointer outline-none hover:bg-background-secondary hover:text-foreground transition-colors"
                     >
                         <option value="" disabled>+ 选择</option>
                         {availableOptions.map((option) => (
@@ -212,7 +212,7 @@ function PropertyTags<T extends string>({
                         }}
                         onBlur={commitDraft}
                         placeholder={placeholder}
-                        className="min-w-[120px] flex-1 bg-transparent border-b border-dashed border-border text-[11px] text-foreground/60 px-1 py-1 outline-none placeholder:text-foreground/20 focus:border-foreground/30"
+                        className="min-w-[120px] flex-1 bg-transparent border-b border-dashed border-border text-[11px] text-foreground-secondary px-1 py-1 outline-none placeholder:text-foreground/20 focus:border-foreground/30"
                     />
                 ) : null}
             </div>
@@ -298,7 +298,7 @@ function ElementsPreferences({ profile, setProfile }: { profile: BaziCaseProfile
 
     return (
         <div className="space-y-3 pt-4 border-t border-gray-50">
-             <div className="flex items-center gap-2 px-1 text-[11px] font-bold text-foreground/30 uppercase tracking-widest">
+             <div className="flex items-center gap-2 px-1 text-[11px] font-bold text-foreground-secondary uppercase tracking-widest">
                  <Sparkles className="w-3.5 h-3.5" />
                  五行喜忌
              </div>
@@ -321,11 +321,11 @@ function ElementsPreferences({ profile, setProfile }: { profile: BaziCaseProfile
                                  onChange={(e) => setRole(el, e.target.value)}
                                  className={cx(
                                      "w-full appearance-none text-center text-[10px] py-0.5 rounded cursor-pointer outline-none transition-colors",
-                                     role === 'yongShen' ? 'bg-[#0f7b6c]/10 text-[#0f7b6c] font-bold' :
-                                     role === 'xiShen' ? 'bg-[#2eaadc]/10 text-[#2eaadc] font-bold' :
-                                     role === 'jiShen' ? 'bg-[#eb5757]/10 text-[#eb5757] font-bold' :
-                                     role === 'xianShen' ? 'bg-[#dfab01]/10 text-[#dfab01] font-bold' :
-                                     'bg-transparent text-foreground/30 hover:bg-black/5'
+                                     role === 'yongShen' ? 'bg-success/10 text-success font-bold' :
+                                     role === 'xiShen' ? 'bg-accent/10 text-accent font-bold' :
+                                     role === 'jiShen' ? 'bg-danger/10 text-danger font-bold' :
+                                     role === 'xianShen' ? 'bg-warning/10 text-warning font-bold' :
+                                     'bg-transparent text-foreground-secondary hover:bg-black/5'
                                  )}
                                  style={{ textAlignLast: 'center' }}
                              >
@@ -342,10 +342,10 @@ function ElementsPreferences({ profile, setProfile }: { profile: BaziCaseProfile
                                                      onClick={() => setAdvancedOption(el, option, true)}
                                                      className={cx(
                                                          "rounded px-1.5 py-0.5 text-[10px] text-white transition-opacity hover:opacity-80",
-                                                         role === 'yongShen' ? 'bg-[#0f7b6c]' :
-                                                         role === 'xiShen' ? 'bg-[#2eaadc]' :
-                                                         role === 'jiShen' ? 'bg-[#eb5757]' :
-                                                         'bg-[#dfab01]'
+                                                         role === 'yongShen' ? 'bg-success' :
+                                                         role === 'xiShen' ? 'bg-accent' :
+                                                         role === 'jiShen' ? 'bg-danger' :
+                                                         'bg-warning'
                                                      )}
                                                      title="点击移除字项"
                                                  >
@@ -366,7 +366,7 @@ function ElementsPreferences({ profile, setProfile }: { profile: BaziCaseProfile
                                          className={cx(
                                              "w-full appearance-none rounded border border-dashed px-1 py-0.5 text-center text-[10px] outline-none transition-colors",
                                              availableOptions.length > 0
-                                                 ? 'border-border text-foreground/50 hover:bg-black/5'
+                                                 ? 'border-border text-foreground-secondary hover:bg-black/5'
                                                  : 'cursor-not-allowed border-border text-foreground/20'
                                          )}
                                          style={{ textAlignLast: 'center' }}
@@ -418,7 +418,7 @@ export function CaseNotesSection({ chartId }: { chartId?: string | null }) {
         return (
             <div className="rounded-md border border-border bg-background p-12 text-center space-y-4">
                 <BookOpenText className="w-8 h-8 text-foreground/10 mx-auto" />
-                <p className="text-sm text-foreground/40">保存当前命盘后即可开启断事笔记</p>
+                <p className="text-sm text-foreground-secondary">保存当前命盘后即可开启断事笔记</p>
             </div>
         );
     }
@@ -437,7 +437,7 @@ export function CaseNotesSection({ chartId }: { chartId?: string | null }) {
                             onClick={() => setActiveTab(tab.id as NotesTab)}
                             className={cx(
                                 "text-sm font-bold transition-colors border-b-2 -mb-[18px] pb-4",
-                                activeTab === tab.id ? "border-[#2eaadc] text-foreground" : "border-transparent text-foreground/20 hover:text-foreground/40"
+                                activeTab === tab.id ? "border-accent text-foreground" : "border-transparent text-foreground/20 hover:text-foreground-secondary"
                             )}
                         >
                             {tab.label}
@@ -447,7 +447,7 @@ export function CaseNotesSection({ chartId }: { chartId?: string | null }) {
                 <button
                     onClick={handleSave}
                     disabled={saving}
-                    className="flex items-center gap-1.5 px-3 py-1 bg-[#2383e2] text-white text-xs font-bold rounded-md hover:bg-[#2383e2]/90 transition-all disabled:opacity-50"
+                    className="flex items-center gap-1.5 px-3 py-1 bg-accent text-on-accent text-xs font-bold rounded-md hover:bg-accent/90 transition-all disabled:opacity-50"
                 >
                     {saving ? <SoundWaveLoader variant="inline" /> : <Save className="w-3.5 h-3.5" />}
                     保存
@@ -468,7 +468,7 @@ export function CaseNotesSection({ chartId }: { chartId?: string | null }) {
                                     ...prev,
                                     events: [{ eventDate: new Date().toISOString().slice(0, 10), category: '其他', title: '', detail: '' }, ...prev.events]
                                 }))}
-                                className="p-1 hover:bg-background-secondary rounded text-[#2eaadc] transition-colors"
+                                className="p-1 hover:bg-background-secondary rounded text-accent transition-colors"
                             >
                                 <Plus className="w-4 h-4" />
                             </button>
@@ -487,7 +487,7 @@ export function CaseNotesSection({ chartId }: { chartId?: string | null }) {
                                                 ...prev,
                                                 events: prev.events.map((item, i) => i === idx ? { ...item, eventDate: e.target.value } : item)
                                             }))}
-                                            className="bg-transparent text-[11px] font-mono text-foreground/40 outline-none w-24 shrink-0 mt-1 cursor-pointer hover:bg-background rounded px-1 transition-colors"
+                                            className="bg-transparent text-[11px] font-mono text-foreground-secondary outline-none w-24 shrink-0 mt-1 cursor-pointer hover:bg-background rounded px-1 transition-colors"
                                         />
                                         <div className="flex-1 space-y-2">
                                             <div className="flex items-center gap-3">
@@ -497,7 +497,7 @@ export function CaseNotesSection({ chartId }: { chartId?: string | null }) {
                                                         ...prev,
                                                         events: prev.events.map((item, i) => i === idx ? { ...item, category: e.target.value as BaziCaseEvent['category'] } : item)
                                                     }))}
-                                                    className="bg-transparent text-[11px] font-bold text-foreground/40 uppercase outline-none cursor-pointer hover:bg-background rounded px-1 transition-colors"
+                                                    className="bg-transparent text-[11px] font-bold text-foreground-secondary uppercase outline-none cursor-pointer hover:bg-background rounded px-1 transition-colors"
                                                 >
                                                     {BAZI_CASE_EVENT_CATEGORY_OPTIONS.map((option) => (
                                                         <option key={option} value={option}>{option}</option>
@@ -521,12 +521,12 @@ export function CaseNotesSection({ chartId }: { chartId?: string | null }) {
                                                 }))}
                                                 placeholder="补充详情..."
                                                 rows={2}
-                                                className="w-full bg-transparent text-xs leading-6 text-foreground/50 outline-none resize-none overflow-hidden placeholder:text-foreground/15"
+                                                className="w-full bg-transparent text-xs leading-6 text-foreground-secondary outline-none resize-none overflow-hidden placeholder:text-foreground/15"
                                             />
                                         </div>
                                         <button
                                             onClick={() => setProfile(prev => ({ ...prev, events: prev.events.filter((_, i) => i !== idx) }))}
-                                            className="opacity-0 group-hover:opacity-100 p-1.5 rounded text-foreground/20 hover:text-[#eb5757] hover:bg-red-50 transition-all"
+                                            className="opacity-0 group-hover:opacity-100 p-1.5 rounded text-foreground/20 hover:text-danger hover:bg-red-50 transition-all"
                                         >
                                             <Trash2 className="w-3.5 h-3.5" />
                                         </button>
@@ -570,7 +570,7 @@ export function CaseNotesSection({ chartId }: { chartId?: string | null }) {
                                     options={BAZI_CASE_FAMILY_TAG_OPTIONS}
                                     values={profile.ownerFeedback.familyStatusTags}
                                     onChange={(tags) => setProfile(p => ({ ...p, ownerFeedback: { ...p.ownerFeedback, familyStatusTags: tags } }))}
-                                    colorClass="bg-[#2eaadc]/10 text-[#2eaadc] border-[#2eaadc]/20"
+                                    colorClass="bg-accent/10 text-accent border-accent/20"
                                     allowCustom
                                     placeholder="可补充父子关系紧张、婆媳牵绊等"
                                 />
@@ -579,7 +579,7 @@ export function CaseNotesSection({ chartId }: { chartId?: string | null }) {
                                     options={BAZI_CASE_TEMPERAMENT_TAG_OPTIONS}
                                     values={profile.ownerFeedback.temperamentTags}
                                     onChange={(tags) => setProfile(p => ({ ...p, ownerFeedback: { ...p.ownerFeedback, temperamentTags: tags } }))}
-                                    colorClass="bg-[#0f7b6c]/10 text-[#0f7b6c] border-[#0f7b6c]/20"
+                                    colorClass="bg-success/10 text-success border-success/20"
                                     allowCustom
                                     placeholder="可补充嘴硬心软、执行力强等"
                                 />

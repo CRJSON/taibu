@@ -11,7 +11,7 @@ import Link from 'next/link';
 import { Brain, RotateCcw, RefreshCw, Sparkles, Copy, Check, Info } from 'lucide-react';
 import { useToast } from '@/components/ui/Toast';
 import { readSessionJSON, updateSessionJSON } from '@/lib/cache/session-storage';
-import { TianDiPanGrid } from '@/components/daliuren/TianDiPanGrid';
+import { DaliurenChart } from '@/components/daliuren/DaliurenChart';
 import { ModelSelector } from '@/components/ui/ModelSelector';
 import { MarkdownContent } from '@/components/ui/MarkdownContent';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
@@ -200,9 +200,9 @@ export default function DaliurenResultPage() {
     }, [divinationId, modelId, persistSessionIds, reasoningEnabled, result, streaming, userId]);
 
     if (isLoading) return <div className="min-h-screen bg-background flex items-center justify-center"><SoundWaveLoader variant="block" text="正在起课" /></div>;
-    if (!result) return <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4 text-center"><p className="text-sm text-foreground/40 mb-6">排盘失败</p><button onClick={() => router.back()} className="px-4 py-2 bg-[#2383e2] text-white text-sm font-medium rounded-md transition-colors">返回重试</button></div>;
+    if (!result) return <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4 text-center"><p className="text-sm text-foreground-secondary mb-6">排盘失败</p><button onClick={() => router.back()} className="px-4 py-2 bg-accent text-on-accent text-sm font-medium rounded-md transition-colors">返回重试</button></div>;
 
-    const { 基本信息: coreInfo, 四课: siKe, 三传: sanChuan } = canonicalResult!;
+    const { 基本信息: coreInfo } = canonicalResult!;
     const [keNameLabel, keTypeLabel] = coreInfo.课式.split(' / ');
 
     return (
@@ -211,84 +211,47 @@ export default function DaliurenResultPage() {
                 {/* 头部导航 */}
                 <div className="hidden md:flex items-center justify-between border-b border-border/60 pb-6">
                     <div className="flex items-center gap-4">
-                        <Link href="/daliuren" className="text-sm font-medium text-foreground/40 hover:text-foreground hover:bg-background-secondary px-2 py-1 rounded-md transition-colors">返回</Link>
+                        <Link href="/daliuren" className="text-sm font-medium text-foreground-secondary hover:text-foreground hover:bg-background-secondary px-2 py-1 rounded-md transition-colors">返回</Link>
                         <div className="flex flex-col">
                             <span className="text-sm font-bold">{keNameLabel}</span>
-                            {keTypeLabel && <span className="text-[10px] font-bold text-[#2eaadc] uppercase tracking-wider">{keTypeLabel}</span>}
+                            {keTypeLabel && <span className="text-[10px] font-bold text-accent uppercase tracking-wider">{keTypeLabel}</span>}
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
                         <button onClick={() => router.push('/daliuren')} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium border border-border hover:bg-background-secondary transition-colors"><RotateCcw className="w-3.5 h-3.5" />重新起课</button>
-                        <button onClick={handleCopy} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium border border-border hover:bg-background-secondary transition-colors">{copied ? <Check className="w-3.5 h-3.5 text-[#0f7b6c]" /> : <Copy className="w-3.5 h-3.5" />}复制</button>
+                        <button onClick={handleCopy} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium border border-border hover:bg-background-secondary transition-colors">{copied ? <Check className="w-3.5 h-3.5 text-success" /> : <Copy className="w-3.5 h-3.5" />}复制</button>
                     </div>
                 </div>
 
                 {/* 基础参数 */}
                 <div className="bg-background-secondary/30 border border-border rounded-md p-6 space-y-4">
                     <div className="flex items-center gap-3">
-                        <Info className="w-4 h-4 text-foreground/30" />
-                        <h2 className="text-sm font-bold uppercase tracking-widest text-foreground/60">排盘参数</h2>
+                        <Info className="w-4 h-4 text-foreground-secondary" />
+                        <h2 className="text-sm font-bold uppercase tracking-widest text-foreground-secondary">排盘参数</h2>
                     </div>
                     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                         {[ { label: '公历时间', value: coreInfo.占测时间 }, { label: '农历时间', value: result.dateInfo.lunarDate || coreInfo.农历 || '-' }, { label: '四柱干支', value: coreInfo.四柱 }, { label: '月将信息', value: `${coreInfo.月将} (空亡：${coreInfo.关键状态.空亡.join('')})` } ].map(item => (
                             <div key={item.label} className="bg-background border border-border/60 rounded-md p-3">
-                                <div className="text-[10px] font-bold text-foreground/30 uppercase mb-1">{item.label}</div>
+                                <div className="text-[10px] font-bold text-foreground-secondary uppercase mb-1">{item.label}</div>
                                 <div className="text-xs font-medium text-foreground/80">{item.value}</div>
                             </div>
                         ))}
                     </div>
                 </div>
 
-                {/* 三传四课 */}
-                <div className="grid gap-8 lg:grid-cols-2">
-                    <section className="bg-background border border-border rounded-md p-6">
-                        <h3 className="text-[11px] font-bold text-foreground/30 uppercase tracking-widest mb-6">三传分析</h3>
-                        <div className="grid grid-cols-3 gap-3">
-                            {sanChuan.map((data: typeof sanChuan[number], i: number) => (
-                                <div key={i} className="flex flex-col items-center p-3 rounded-md bg-background-secondary/30 border border-border/60">
-                                    <span className="text-[10px] text-foreground/40 font-bold mb-2">{['初传', '中传', '末传'][i]}</span>
-                                    <span className="text-xl font-bold mb-1">{data?.地支}</span>
-                                    <span className="text-xs font-medium text-foreground/60">{data?.天将}</span>
-                                    <span className="text-[10px] font-bold text-[#2eaadc] uppercase">{data?.六亲}</span>
-                                </div>
-                            ))}
-                        </div>
-                    </section>
-                    <section className="bg-background border border-border rounded-md p-6">
-                        <h3 className="text-[11px] font-bold text-foreground/30 uppercase tracking-widest mb-6">四课排布</h3>
-                        <div className="grid grid-cols-4 gap-2">
-                            {['四课', '三课', '二课', '一课'].map(label => {
-                                const data = siKe.find((item: typeof siKe[number]) => item.课别.startsWith(label));
-                                return (
-                                    <div key={label} className="flex flex-col items-center p-2 rounded-md bg-background-secondary/30 border border-border/60">
-                                        <span className="text-[10px] font-bold text-[#2eaadc] mb-1">{data?.乘将}</span>
-                                        <span className="text-lg font-bold">{data?.上神}</span>
-                                        <div className="w-4 h-px bg-background-secondary my-1" />
-                                        <span className="text-xs font-medium text-foreground/60">{data?.下神}</span>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    </section>
-                </div>
-
-                {/* 天地盘 */}
-                <section className="bg-background border border-border rounded-md p-6">
-                    <h3 className="text-[11px] font-bold text-foreground/30 uppercase tracking-widest mb-6">天地盘九宫</h3>
-                    <TianDiPanGrid result={canonicalResult!} />
-                </section>
+                <DaliurenChart chart={canonicalResult!} />
 
                 {/* AI 解读 */}
                 <AIFeatureGate><div className="bg-background border border-border rounded-md p-6 space-y-6">
                     <div className="flex items-center justify-between border-b border-border/60 pb-4">
-                        <h2 className="text-sm font-bold flex items-center gap-2 uppercase tracking-wider text-foreground/60"><Brain className="w-4 h-4 text-[#2eaadc]" />AI 深度解读</h2>
+                        <h2 className="text-sm font-bold flex items-center gap-2 uppercase tracking-wider text-foreground-secondary"><Brain className="w-4 h-4 text-accent" />AI 深度解读</h2>
                         <div className="flex items-center gap-2">
                             <ModelSelector compact selectedModel={modelId} onModelChange={setModelId} reasoningEnabled={reasoningEnabled} onReasoningChange={setReasoningEnabled} userId={userId} membershipType={membershipType} disabled={membershipPending} />
                             {interpretation && <button onClick={handleInterpret} disabled={streaming.isStreaming} className="p-1.5 rounded-md hover:bg-background-secondary transition-colors"><RefreshCw className={`w-3.5 h-3.5 ${streaming.isStreaming ? 'animate-spin' : ''}`} /></button>}
                         </div>
                     </div>
                     {error && (
-                        <div className="p-3 bg-red-50 text-[#eb5757] text-xs rounded-md border border-red-100">
+                        <div className="p-3 bg-red-50 text-danger text-xs rounded-md border border-red-100">
                             {error}
                         </div>
                     )}
@@ -299,7 +262,7 @@ export default function DaliurenResultPage() {
                         </div>
                     ) : (
                         <div className="py-12 text-center space-y-6">
-                            {sessionLoading || membershipPending ? <SoundWaveLoader variant="inline" /> : !userId ? <button onClick={() => setShowAuthModal(true)} className="px-8 py-2.5 bg-[#2383e2] text-white text-sm font-bold rounded-md hover:bg-[#2383e2]/90 transition-colors">登录解锁 AI 解读</button> : <button onClick={handleInterpret} disabled={membershipPending} className="px-8 py-2.5 bg-[#2383e2] text-white text-sm font-bold rounded-md hover:bg-[#2383e2]/90 transition-all active:scale-95 disabled:opacity-50 flex items-center gap-2 mx-auto"><Sparkles className="w-4 h-4" />获取 AI 解读</button>}
+                            {sessionLoading || membershipPending ? <SoundWaveLoader variant="inline" /> : !userId ? <button onClick={() => setShowAuthModal(true)} className="px-8 py-2.5 bg-accent text-on-accent text-sm font-bold rounded-md hover:bg-accent/90 transition-colors">登录解锁 AI 解读</button> : <button onClick={handleInterpret} disabled={membershipPending} className="px-8 py-2.5 bg-accent text-on-accent text-sm font-bold rounded-md hover:bg-accent/90 transition-all active:scale-95 disabled:opacity-50 flex items-center gap-2 mx-auto"><Sparkles className="w-4 h-4" />获取 AI 解读</button>}
                         </div>
                     )}
                 </div></AIFeatureGate>

@@ -24,6 +24,7 @@ import {
     calculateTenGod as calculateTenGodCore,
 } from 'taibu-core/utils';
 import { resolveChartTextDetailLevel, type ChartTextDetailLevel } from '@/lib/divination/detail-level';
+import { resolveBirthTimeOptions, type BirthTimeResolution } from '@/lib/divination/birth-time';
 import {
     HIDDEN_STEM_DETAILS,
     LIU_CHONG as CORE_LIU_CHONG,
@@ -44,7 +45,8 @@ import type {
 
 const DI_ZHI = CORE_DI_ZHI as readonly EarthlyBranch[];
 
-export interface BaziMeta {
+export interface BaziMeta extends BirthTimeResolution {
+    longitude?: number;
     name: string;
     birthDate: string;
     birthTime: string;
@@ -67,6 +69,7 @@ function toCoreBaziInput(formData: BaziFormData) {
         isLeapMonth: formData.isLeapMonth,
         birthPlace: formData.birthPlace,
         longitude: formData.longitude,
+        ...resolveBirthTimeOptions(formData),
     };
 }
 
@@ -80,6 +83,8 @@ function buildBaziMeta(formData: BaziFormData): BaziMeta {
         calendarType: formData.calendarType,
         isLeapMonth: formData.isLeapMonth,
         isUnknownTime: formData.isUnknownTime,
+        longitude: formData.longitude,
+        ...resolveBirthTimeOptions(formData),
     };
 }
 
@@ -285,17 +290,7 @@ export const LIU_CHONG_TABLE: Record<EarthlyBranch, EarthlyBranch> = CORE_LIU_CH
  * 计算神煞信息（含按柱分类的神煞星）
  */
 export function calculateShenSha(formData: BaziFormData): ShenShaInfo {
-    const shenSha = calculateBaziShenShaData({
-        gender: formData.gender,
-        birthYear: formData.birthYear,
-        birthMonth: formData.birthMonth,
-        birthDay: formData.birthDay,
-        birthHour: formData.birthHour,
-        birthMinute: formData.birthMinute,
-        calendarType: formData.calendarType === 'lunar' ? 'lunar' : 'solar',
-        isLeapMonth: formData.isLeapMonth,
-        birthPlace: formData.birthPlace,
-    });
+    const shenSha = calculateBaziShenShaData(toCoreBaziInput(formData));
 
     return {
         jiShen: shenSha.jiShen,
@@ -351,19 +346,7 @@ export function calculateProfessionalData(
     formData: BaziFormData,
     currentYear: number = new Date().getFullYear()
 ): ProfessionalBaziData {
-    const longitude = formData.longitude;
-    const coreBazi = calculateBazi({
-        gender: formData.gender,
-        birthYear: formData.birthYear,
-        birthMonth: formData.birthMonth,
-        birthDay: formData.birthDay,
-        birthHour: formData.birthHour,
-        birthMinute: formData.birthMinute,
-        calendarType: formData.calendarType === 'lunar' ? 'lunar' : 'solar',
-        isLeapMonth: formData.isLeapMonth,
-        birthPlace: formData.birthPlace,
-        longitude,
-    });
+    const coreBazi = calculateBazi(toCoreBaziInput(formData));
 
     // 纳音
     const naYin = {
@@ -396,16 +379,7 @@ export function calculateProfessionalData(
         hour: coreBazi.fourPillars.hour.hiddenStems.map((item) => item.tenGod),
     };
 
-    const coreDayun = calculateBaziDayun({
-        gender: formData.gender,
-        birthYear: formData.birthYear,
-        birthMonth: formData.birthMonth,
-        birthDay: formData.birthDay,
-        birthHour: formData.birthHour,
-        birthMinute: formData.birthMinute,
-        calendarType: formData.calendarType === 'lunar' ? 'lunar' : 'solar',
-        isLeapMonth: formData.isLeapMonth,
-    });
+    const coreDayun = calculateBaziDayun(toCoreBaziInput(formData));
 
     // 处理大运数据 - web 保留现有展示结构，但数据来源切到 core
     const daYun: DaYunInfo[] = coreDayun.list.map((dy) => ({
@@ -471,19 +445,7 @@ export function calculateLiuYue(year: number, formData?: BaziFormData): LiuYueIn
         return calculateBaziLiuYueData(year) as LiuYueInfo[];
     }
 
-    const longitude = formData.longitude;
-    const coreBazi = calculateBazi({
-        gender: formData.gender,
-        birthYear: formData.birthYear,
-        birthMonth: formData.birthMonth,
-        birthDay: formData.birthDay,
-        birthHour: formData.birthHour,
-        birthMinute: formData.birthMinute,
-        calendarType: formData.calendarType === 'lunar' ? 'lunar' : 'solar',
-        isLeapMonth: formData.isLeapMonth,
-        birthPlace: formData.birthPlace,
-        longitude,
-    });
+    const coreBazi = calculateBazi(toCoreBaziInput(formData));
 
     return calculateBaziLiuYueData(year, {
         dayStem: coreBazi.fourPillars.day.stem,
@@ -513,19 +475,7 @@ export function calculateLiuRi(startDate: string, endDate: string, formData?: Ba
         return calculateBaziLiuRiData(startDate, endDate) as LiuRiInfo[];
     }
 
-    const longitude = formData.longitude;
-    const coreBazi = calculateBazi({
-        gender: formData.gender,
-        birthYear: formData.birthYear,
-        birthMonth: formData.birthMonth,
-        birthDay: formData.birthDay,
-        birthHour: formData.birthHour,
-        birthMinute: formData.birthMinute,
-        calendarType: formData.calendarType === 'lunar' ? 'lunar' : 'solar',
-        isLeapMonth: formData.isLeapMonth,
-        birthPlace: formData.birthPlace,
-        longitude,
-    });
+    const coreBazi = calculateBazi(toCoreBaziInput(formData));
 
     return calculateBaziLiuRiData(startDate, endDate, {
         dayStem: coreBazi.fourPillars.day.stem,
@@ -548,7 +498,7 @@ export function calculateLiuRi(startDate: string, endDate: string, formData?: Ba
     }));
 }
 
-type BaziDayunMeta = Pick<BaziMeta, 'birthDate' | 'birthTime' | 'gender' | 'calendarType' | 'isLeapMonth'>;
+type BaziDayunMeta = Pick<BaziMeta, 'birthDate' | 'birthTime' | 'gender' | 'calendarType' | 'isLeapMonth' | 'longitude' | 'timezone' | 'disambiguation'>;
 
 export function buildBaziCanonicalJSON(
     output: CoreBaziOutput,
@@ -569,6 +519,8 @@ function buildCanonicalDayunFromMeta(meta: BaziDayunMeta) {
             birthMinute: minute || 0,
             calendarType: meta.calendarType === 'lunar' ? 'lunar' : 'solar',
             isLeapMonth: meta.isLeapMonth,
+            longitude: meta.longitude,
+            ...resolveBirthTimeOptions(meta),
         });
     } catch {
         return undefined;

@@ -15,13 +15,14 @@ import { buildZiweiCanonicalJSON, calculateZiweiChartBundle, generateZiweiChartT
 import type { Gender, CalendarType } from '@/types';
 import { ZiweiChartGrid } from '@/components/ziwei/ZiweiChartGrid';
 import { ZiweiHoroscopePanel, type HoroscopeInfo, type HoroscopeHighlight } from '@/components/ziwei/ZiweiHoroscopePanel';
-import { supabase } from '@/lib/auth';
+import { useSessionSafe } from '@/components/providers/ClientProviders';
 import { AuthModal } from '@/components/auth/AuthModal';
 import { useToast } from '@/components/ui/Toast';
 import { useHeaderMenu } from '@/components/layout/HeaderMenuContext';
 import { getDayCount } from '@/lib/date-utils';
-import { createSavedChart, loadSavedChart } from '@/lib/user/charts-client';
-import { parseBirthTimeString } from '@/lib/divination/birth-time';
+import { createSavedChart, loadSavedChart, updateSavedChart } from '@/lib/user/charts-client';
+import { useChartMutation } from '@/lib/hooks/useUserCharts';
+import { parseBirthTimeString, readBirthTimeOptions, resolveBirthTimeOptions, writeBirthTimeOptions, type BirthTimeResolution } from '@/lib/divination/birth-time';
 import { parseLongitude } from '@/lib/divination/place-resolution';
 import { useAdminJsonCopy } from '@/lib/admin/useAdminJsonCopy';
 import { CopyTextModal } from '@/components/divination/CopyTextModal';
@@ -36,8 +37,12 @@ function ZiweiResultContent() {
         const params = ['name', 'gender', 'year', 'month', 'day', 'hour', 'calendar', 'leap', 'place'];
         return params.some((key) => searchParams.has(key));
     }, [searchParams]);
-    const [saving, setSaving] = useState(false);
-    const [saved, setSaved] = useState(false);
+    const { user, loading: sessionLoading } = useSessionSafe();
+    const userId = user?.id ?? null;
+    const { pending: saving, run: runSave } = useChartMutation(userId);
+    const [loadedForUserId, setLoadedForUserId] = useState<string | null | undefined>(undefined);
+    const [savedState, setSaved] = useState(false);
+    const saved = savedState && !searchParams.has('timezone') && !searchParams.has('disambiguation');
     const [loading, setLoading] = useState(() => Boolean(chartId) && !hasFormParams);
     const [notFound, setNotFound] = useState(false);
     const [loadError, setLoadError] = useState<string | null>(null);
@@ -51,7 +56,7 @@ function ZiweiResultContent() {
     const [showAuthModal, setShowAuthModal] = useState(false);
     const { showToast } = useToast();
 
-    type SavedZiweiChartRow = {
+    type SavedZiweiChartRow = BirthTimeResolution & {
         name: string;
         gender: Gender;
         birth_date: string;
@@ -73,11 +78,17 @@ function ZiweiResultContent() {
         }
     }, [hasFormParams]);
 
+    useEffect(() => {
+        setSaved(false);
+        setChartFromDb(null);
+    }, [userId]);
+
     // 加载已保存命盘
     useEffect(() => {
-        if (!chartId || hasFormParams) return;
+        if (sessionLoading || !chartId || hasFormParams) return;
 
         let cancelled = false;
+        const controller = new AbortController();
 
         const loadChart = async () => {
             setLoading(true);
@@ -85,7 +96,7 @@ function ZiweiResultContent() {
             setLoadError(null);
 
             try {
-                const row = await loadSavedChart('ziwei', chartId);
+                const row = await loadSavedChart('ziwei', chartId, { expectedUserId: userId ?? undefined, signal: controller.signal });
                 if (cancelled) return;
 
                 const data = row as SavedZiweiChartRow | null;
@@ -114,6 +125,7 @@ function ZiweiResultContent() {
                     isLeapMonth: (data.is_leap_month as boolean | undefined) ?? false,
                     birthPlace: (data.birth_place as string) || '',
                     longitude: parseLongitude(data.longitude),
+                    ...resolveBirthTimeOptions(data),
                 });
                 setSaved(true);
             } catch (error) {
@@ -122,6 +134,7 @@ function ZiweiResultContent() {
                 }
             } finally {
                 if (!cancelled) {
+                    setLoadedForUserId(userId);
                     setLoading(false);
                 }
             }
@@ -130,8 +143,9 @@ function ZiweiResultContent() {
         void loadChart();
         return () => {
             cancelled = true;
+            controller.abort();
         };
-    }, [chartId, hasFormParams]);
+    }, [chartId, hasFormParams, sessionLoading, userId]);
 
     // 从 URL 参数获取表单数据
     const formData: ZiweiFormData | null = useMemo(() => {
@@ -166,9 +180,13 @@ function ZiweiResultContent() {
             isLeapMonth: searchParams.get('leap') === '1',
             birthPlace: searchParams.get('place') || '',
             longitude: parseLongitude(searchParams.get('longitude')),
+            ...readBirthTimeOptions(searchParams),
         };
     }, [searchParams]);
-    const resolvedFormData = chartFromDb || formData;
+    const resolvedFormData = useMemo(() => {
+        const base = (loadedForUserId === userId ? chartFromDb : null) || formData;
+        return base ? { ...base, ...readBirthTimeOptions(searchParams) } : null;
+    }, [loadedForUserId, userId, chartFromDb, formData, searchParams]);
 
     // 应用时辰偏移
     const adjustedFormData = useMemo(() => {
@@ -227,6 +245,7 @@ function ZiweiResultContent() {
             minute: String(resolvedFormData.birthMinute || 0),
             calendar: resolvedFormData.calendarType,
         });
+        writeBirthTimeOptions(params, resolvedFormData);
         if (resolvedFormData.calendarType === 'lunar' && resolvedFormData.isLeapMonth) params.set('leap', '1');
         if (resolvedFormData.birthPlace) params.set('place', resolvedFormData.birthPlace);
         if (resolvedFormData.longitude != null) params.set('longitude', String(resolvedFormData.longitude));
@@ -236,10 +255,8 @@ function ZiweiResultContent() {
 
     const handleSave = useCallback(async () => {
         if (saving || !output || !resolvedFormData) return;
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session?.user) { showToast('warning', '请先登录后再保存命盘'); setShowAuthModal(true); return; }
-        setSaving(true);
-        try {
+        if (!userId) { showToast('warning', '请先登录后再保存命盘'); setShowAuthModal(true); return; }
+        await runSave(async (scope) => {
             const payload = {
                 name: resolvedFormData.name,
                 gender: resolvedFormData.gender,
@@ -249,22 +266,23 @@ function ZiweiResultContent() {
                 is_leap_month: resolvedFormData.isLeapMonth ?? false,
                 birth_place: resolvedFormData.birthPlace || null,
                 longitude: resolvedFormData.longitude ?? null,
+                ...resolveBirthTimeOptions(resolvedFormData),
             };
             if (chartId) {
-                const response = await fetch('/api/ziwei/charts/update', {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ chartId, payload }),
-                });
-                if (!response.ok) { const result = await response.json().catch(() => null); throw new Error(result?.error || '更新失败'); }
-            } else {
-                const insertedId = await createSavedChart('ziwei', payload);
-                if (insertedId) router.replace(`/ziwei/result?chart=${insertedId}`);
-                else throw new Error('保存失败');
+                await updateSavedChart('ziwei', chartId, payload, scope);
+                return chartId;
             }
+            return createSavedChart('ziwei', payload, scope);
+        }, (savedId) => {
             setSaved(true);
             setChartFromDb(resolvedFormData);
-        } catch (error) { console.error('保存失败:', error); showToast('error', '保存失败，请重试'); } finally { setSaving(false); }
-    }, [saving, output, resolvedFormData, chartId, router, showToast]);
+            setLoadedForUserId(userId);
+            router.replace(`/ziwei/result?chart=${savedId}`);
+        }, (error) => {
+            console.error('保存失败:', error);
+            showToast('error', '保存失败，请重试');
+        });
+    }, [saving, output, resolvedFormData, chartId, router, showToast, userId, runSave]);
 
     // 分享
     const handleShare = useCallback(async () => {
@@ -304,20 +322,20 @@ function ZiweiResultContent() {
         return () => clearMenuItems();
     }, [saving, saved, isAdmin, canonicalChart, jsonCopied, copyJson, setMenuItems, clearMenuItems, handleEdit, handleSave, handleShare]);
 
-    if (loading) return <SoundWaveLoader variant="block" text="" />;
+    if (loading || (chartId && !hasFormParams && (sessionLoading || loadedForUserId !== userId))) return <SoundWaveLoader variant="block" text="" />;
     if (notFound) {
         return (
             <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4 text-center">
-                <p className="text-sm text-foreground/40 mb-6">未找到该命盘，请返回重新选择</p>
-                <SettingsCenterLink tab="charts" className="px-4 py-2 bg-[#2383e2] text-white text-sm font-medium rounded-md hover:bg-[#2383e2]/90 transition-colors">返回我的命盘</SettingsCenterLink>
+                <p className="text-sm text-foreground-secondary mb-6">未找到该命盘，请返回重新选择</p>
+                <SettingsCenterLink tab="charts" className="px-4 py-2 bg-accent text-on-accent text-sm font-medium rounded-md hover:bg-accent/90 transition-colors">返回我的命盘</SettingsCenterLink>
             </div>
         );
     }
     if (!resolvedFormData || loadError || !output || !astrolabe || !canonicalChart) {
         return (
             <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4 text-center">
-                <p className="text-sm text-foreground/40 mb-6">{loadError || '紫微斗数必须提供出生时辰，请返回重新输入'}</p>
-                <Link href="/ziwei" className="px-4 py-2 bg-[#2383e2] text-white text-sm font-medium rounded-md hover:bg-[#2383e2]/90 transition-colors">返回重新输入</Link>
+                <p className="text-sm text-foreground-secondary mb-6">{loadError || '紫微斗数必须提供出生时辰，请返回重新输入'}</p>
+                <Link href="/ziwei" className="px-4 py-2 bg-accent text-on-accent text-sm font-medium rounded-md hover:bg-accent/90 transition-colors">返回重新输入</Link>
             </div>
         );
     }
@@ -330,10 +348,10 @@ function ZiweiResultContent() {
             <div className="max-w-5xl mx-auto px-4 py-8 animate-fade-in space-y-8">
                 {/* 头部操作栏 */}
                 <div className="hidden md:flex items-center justify-between">
-                    <Link href="/ziwei" className="text-sm font-medium text-foreground/40 hover:text-foreground hover:bg-background-secondary px-2 py-1 rounded-md transition-colors">返回</Link>
+                    <Link href="/ziwei" className="text-sm font-medium text-foreground-secondary hover:text-foreground hover:bg-background-secondary px-2 py-1 rounded-md transition-colors">返回</Link>
                     <div className="flex items-center gap-2">
                         <button onClick={handleEdit} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium border border-border hover:bg-background-secondary transition-colors"><Edit3 className="w-3.5 h-3.5" />修改</button>
-                        <button onClick={handleSave} disabled={saving || saved} className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${saved ? 'text-[#0f7b6c] bg-[#0f7b6c]/5 border border-[#0f7b6c]/10' : 'bg-[#2383e2] text-white hover:bg-[#2383e2]/90'}`}>{saved ? <><Check className="w-3.5 h-3.5" />已保存</> : saving ? <><SoundWaveLoader variant="inline" />保存中</> : <><Save className="w-3.5 h-3.5" />保存</>}</button>
+                        <button onClick={handleSave} disabled={saving || saved} className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${saved ? 'text-success bg-success/5 border border-success/10' : 'bg-accent text-on-accent hover:bg-accent/90'}`}>{saved ? <><Check className="w-3.5 h-3.5" />已保存</> : saving ? <><SoundWaveLoader variant="inline" />保存中</> : <><Save className="w-3.5 h-3.5" />保存</>}</button>
                         <button onClick={handleShare} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium border border-border hover:bg-background-secondary transition-colors"><Share2 className="w-3.5 h-3.5" />分享</button>
                     </div>
                 </div>
@@ -349,29 +367,29 @@ function ZiweiResultContent() {
                             </span>
                         </div>
 
-                        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-foreground/60 lg:justify-end lg:min-w-0 lg:pl-6 lg:border-l lg:border-border/60">
+                        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-foreground-secondary lg:justify-end lg:min-w-0 lg:pl-6 lg:border-l lg:border-border/60">
                             <div className="flex items-center gap-1.5 min-w-0">
-                                <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-foreground/30 shrink-0">
+                                <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-foreground-secondary shrink-0">
                                     出生时间
                                 </span>
-                                <Clock className="w-3.5 h-3.5 text-foreground/35 shrink-0" />
+                                <Clock className="w-3.5 h-3.5 text-foreground-secondary shrink-0" />
                                 <span className="font-medium text-foreground/80 truncate">
                                     {displayFormData.birthYear}年{displayFormData.birthMonth}月{displayFormData.birthDay}日 {timeText}
                                 </span>
                                 {hourOffset !== 0 && (
-                                    <span className="text-xs font-medium text-[#2eaadc] shrink-0">
+                                    <span className="text-xs font-medium text-accent shrink-0">
                                         ({hourOffset > 0 ? '+' : ''}{hourOffset}h)
                                     </span>
                                 )}
                                 <div className="flex items-center bg-background-secondary rounded p-0.5 shrink-0">
                                     <button onClick={() => setHourOffset(prev => prev - 1)} className="p-0.5 hover:bg-background rounded transition-colors"><Minus className="w-3 h-3" /></button>
                                     <button onClick={() => setHourOffset(prev => prev + 1)} className="p-0.5 hover:bg-background rounded transition-colors"><Plus className="w-3 h-3" /></button>
-                                    {hourOffset !== 0 && <button onClick={() => setHourOffset(0)} className="px-1 text-[10px] font-bold text-foreground/40 hover:text-foreground">RESET</button>}
+                                    {hourOffset !== 0 && <button onClick={() => setHourOffset(0)} className="px-1 text-[10px] font-bold text-foreground-secondary hover:text-foreground">RESET</button>}
                                 </div>
                             </div>
 
                             <div className="flex items-center gap-1.5 min-w-0">
-                                <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-foreground/30 shrink-0">
+                                <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-foreground-secondary shrink-0">
                                     农历
                                 </span>
                                 <span className="font-medium text-foreground/80 truncate">{canonicalChart.基本信息.农历}</span>
@@ -379,7 +397,7 @@ function ZiweiResultContent() {
 
                             {trueSolarTimeText && (
                                 <div className="flex items-center gap-1.5 min-w-0">
-                                    <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-foreground/30 shrink-0">
+                                    <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-foreground-secondary shrink-0">
                                         真太阳时
                                     </span>
                                     <span className="font-medium text-foreground/80 truncate">{trueSolarTimeText}</span>
@@ -388,10 +406,10 @@ function ZiweiResultContent() {
 
                             {resolvedFormData.birthPlace && (
                                 <div className="flex items-center gap-1.5 min-w-0">
-                                    <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-foreground/30 shrink-0">
+                                    <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-foreground-secondary shrink-0">
                                         出生地点
                                     </span>
-                                    <MapPinned className="w-3.5 h-3.5 text-foreground/35 shrink-0" />
+                                    <MapPinned className="w-3.5 h-3.5 text-foreground-secondary shrink-0" />
                                     <span className="font-medium text-foreground/80 truncate">{resolvedFormData.birthPlace}</span>
                                 </div>
                             )}
@@ -421,7 +439,7 @@ function ZiweiResultContent() {
                 />
 
                 <footer className="py-12 text-center">
-                    <p className="text-[11px] text-foreground/30 font-medium italic">* 点击命盘宫位可查看三方四正与详细分析</p>
+                    <p className="text-[11px] text-foreground-secondary font-medium italic">* 点击命盘宫位可查看三方四正与详细分析</p>
                 </footer>
             </div>
 

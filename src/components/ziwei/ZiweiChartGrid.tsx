@@ -7,7 +7,7 @@
  */
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { ZiweiCanonicalJSON } from 'taibu-core/ziwei';
 import { getBranchIndex, getTriangleSquare } from '@/lib/divination/ziwei';
 import { getBranchElement, getStemElement, getElementColor } from '@/lib/divination/display-helpers';
@@ -26,6 +26,13 @@ interface ZiweiChartProps {
     onCopyJson?: () => void;
     horoscopeHighlight?: HoroscopeHighlight;
     horoscopeInfo?: HoroscopeInfo;
+    interaction?: {
+        palaceIndices: number[];
+        stars: Array<{ palaceIndex: number; group: '主星及四化' | '辅星' | '杂曜'; starIndex: number }>;
+        includeRelated: boolean;
+        onPalaceSelect: (index: number) => void;
+        onStarSelect: (palaceIndex: number, group: '主星及四化' | '辅星' | '杂曜', starIndex: number) => void;
+    };
 }
 
 // 五行颜色映射：天干地支五行颜色统一走 display helpers
@@ -46,7 +53,7 @@ function getBranchElementStyle(branch: string | undefined): { color: string } | 
  * 紫微斗数命盘 12 宫位图
  */
 export function ZiweiChartGrid({
-    canonicalChart,
+    canonicalChart: inputChart,
     copied = false,
     onCopy,
     showJsonCopy = false,
@@ -54,7 +61,13 @@ export function ZiweiChartGrid({
     onCopyJson,
     horoscopeHighlight = {},
     horoscopeInfo,
+    interaction,
 }: ZiweiChartProps) {
+    // Slim persisted tool results omit the optional index. Place their returned
+    // palaces by branch; iztro's index starts at 寅. No chart is recalculated.
+    const canonicalChart = useMemo(() => ({ ...inputChart, 十二宫位: inputChart.十二宫位.map(palace => ({ ...palace,
+        宫位索引: palace.宫位索引 ?? (getBranchIndex(palace.干支.slice(-1)) + 10) % 12,
+    })) }), [inputChart]);
     const lifePalaceIndex = canonicalChart.十二宫位.find(p => p.宫位 === '命宫')?.宫位索引 ?? null;
     // 默认选中命宫，显示三方四正
     const [selectedPalace, setSelectedPalace] = useState<number | null | undefined>(undefined);
@@ -62,14 +75,15 @@ export function ZiweiChartGrid({
     const { showToast } = useToast();
 
     const defaultSelectedPalace = typeof lifePalaceIndex === 'number' && lifePalaceIndex >= 0 ? lifePalaceIndex : null;
-    const activeSelectedPalace = selectedPalace === undefined ? defaultSelectedPalace : selectedPalace;
+    const activeSelectedPalace = interaction ? interaction.palaceIndices[0] ?? null : selectedPalace === undefined ? defaultSelectedPalace : selectedPalace;
 
     const getCanonicalPalaceByBranch = (branchIndex: number) => {
         return canonicalChart.十二宫位.find((p) => getBranchIndex(p.干支.slice(-1)) === branchIndex);
     };
 
     // 计算三方四正高亮
-    const sanFangSiZhengPalaces = activeSelectedPalace !== null ? getTriangleSquare(activeSelectedPalace).square : [];
+    const showRelated = !interaction || interaction.includeRelated;
+    const sanFangSiZhengPalaces = activeSelectedPalace !== null && showRelated ? getTriangleSquare(activeSelectedPalace).square : [];
 
     // 获取宫位高亮类型（多色支持）
     const getHighlightTypes = (palaceIndex: number) => {
@@ -135,7 +149,7 @@ export function ZiweiChartGrid({
         <div className="w-full">
             {/* 工具栏 */}
             <div className="flex justify-end gap-2 mb-2 md:pr-0 pr-3">
-                <button
+                {onCopy && <button
                     onClick={handleCopy}
                     className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs transition-colors ${copied
                         ? 'bg-green-500/10 text-green-500'
@@ -143,7 +157,7 @@ export function ZiweiChartGrid({
                         }`}
                 >
                     {copied ? '已复制' : '复制排盘'}
-                </button>
+                </button>}
                 {showJsonCopy && onCopyJson && (
                     <button
                         onClick={onCopyJson}
@@ -168,7 +182,7 @@ export function ZiweiChartGrid({
             </div>
             {/* 三方四正连线SVG层 */}
             <div className="relative">
-                {activeSelectedPalace !== null && (
+                {activeSelectedPalace !== null && showRelated && (
                     <svg
                         className="absolute inset-0 w-full h-full pointer-events-none z-10"
                         viewBox="0 0 100 100"
@@ -354,16 +368,16 @@ export function ZiweiChartGrid({
                                 <PalaceCard
                                     key={`palace-${branchIdx}`}
                                     palace={palace}
-                                    isSelected={activeSelectedPalace === palaceIndex}
+                                    isSelected={interaction ? interaction.palaceIndices.includes(palaceIndex) : activeSelectedPalace === palaceIndex}
                                     isLifePalace={isLifePalace}
                                     isHighlighted={isHighlighted}
                                     highlightTypes={highlightTypes}
                                     isSanFangSiZheng={sanFangSiZhengPalaces.includes(palaceIndex) && activeSelectedPalace !== palaceIndex}
-                                    showAdjStars={showAdjStars}
+                                    showAdjStars={showAdjStars || Boolean(interaction?.stars.some(star => star.palaceIndex === palaceIndex && star.group === '杂曜'))}
                                     flowInfo={flowInfo}
-                                    onClick={() => setSelectedPalace(
-                                        activeSelectedPalace === palaceIndex ? null : palaceIndex
-                                    )}
+                                    highlightedStars={interaction?.stars.filter(star => star.palaceIndex === palaceIndex)}
+                                    onStarSelect={interaction ? (group, starIndex) => interaction.onStarSelect(palaceIndex, group, starIndex) : undefined}
+                                    onClick={() => interaction ? interaction.onPalaceSelect(palaceIndex) : setSelectedPalace(activeSelectedPalace === palaceIndex ? null : palaceIndex)}
                                 />
                             );
                         })

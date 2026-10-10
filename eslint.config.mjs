@@ -9,6 +9,8 @@ const eslintConfig = defineConfig([
   globalIgnores([
     // Default ignores of eslint-config-next:
     ".next/**",
+    ".agent/**",
+    ".taibu-local/**",
     "out/**",
     "build/**",
     "android/**/build/**",

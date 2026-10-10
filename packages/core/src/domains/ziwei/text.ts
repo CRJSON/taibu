@@ -1,3 +1,4 @@
+import { withRulesText } from '../../shared/calculation-rules.js';
 import {
   formatZiweiCanonicalLunarDate,
   normalizeDetailLevelBinary
@@ -32,7 +33,9 @@ export function sortZiweiPalaces<T extends { name: string; index?: number; }>(pa
   });
 }
 
-export function renderZiweiCanonicalText(result: ZiweiOutput, options: ZiweiCanonicalTextOptions = {}): string {
+export const renderZiweiCanonicalText = withRulesText(renderZiweiCanonicalTextBase);
+
+function renderZiweiCanonicalTextBase(result: ZiweiOutput, options: ZiweiCanonicalTextOptions = {}): string {
   const detailLevel = normalizeDetailLevelBinary(options.detailLevel);
   if (detailLevel === 'full') {
     return renderZiweiCanonicalFullText(result, options);

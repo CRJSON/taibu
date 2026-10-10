@@ -1,8 +1,8 @@
 'use client';
 
-import { Suspense, lazy } from 'react';
+import { Suspense, lazy, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
-import { useSettingsCenterSubpath } from '@/lib/hooks/useSettingsCenterRouteState';
+import { useActiveSettingsCenterTab, useSettingsCenterSubpath } from '@/lib/hooks/useSettingsCenterRouteState';
 import { openSettingsCenter } from '@/lib/settings-center';
 import {
   Bot,
@@ -73,8 +73,8 @@ function SubtabButton({
       onClick={onClick}
       className={`inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium transition-colors duration-150 ${
         active
-          ? 'border-border bg-[#e3e1db] text-[#37352f] dark:bg-background-tertiary dark:text-foreground'
-          : 'border-border bg-background text-foreground-secondary hover:bg-[#efedea] dark:hover:bg-background-secondary'
+          ? 'border-border bg-background-tertiary text-foreground dark:bg-background-tertiary dark:text-foreground'
+          : 'border-border bg-background text-foreground-secondary hover:bg-background-secondary dark:hover:bg-background-secondary'
       }`}
     >
       {icon}
@@ -115,19 +115,38 @@ function resolveAdminAITab(value: string | null | undefined): AdminAITab {
 }
 
 function useResolvedSettingsCenterSubtab<T extends string>(
+  owner: 'admin-features' | 'admin-ai-services',
   resolveTab: (value: string | null | undefined) => T,
 ) {
   const subpath = useSettingsCenterSubpath();
-  return resolveTab(subpath);
+  const active = useActiveSettingsCenterTab() === owner;
+  const resolved = resolveTab(subpath);
+  const [retained, setRetained] = useState(resolved);
+  useEffect(() => {
+    let current = true;
+    if (active) queueMicrotask(() => { if (current) setRetained(resolved); });
+    return () => { current = false; };
+  }, [active, resolved]);
+  return active ? resolved : retained;
+}
+
+function useVisitedSubtabs<T extends string>(active: T) {
+  const [visited, setVisited] = useState<T[]>([active]);
+  useEffect(() => {
+    let current = true;
+    queueMicrotask(() => { if (current) setVisited(tabs => tabs.includes(active) ? tabs : [...tabs, active]); });
+    return () => { current = false; };
+  }, [active]);
+  return visited.includes(active) ? visited : [...visited, active];
 }
 
 export function AdminFeaturesContent() {
-  const activeTab = useResolvedSettingsCenterSubtab(resolveAdminFeatureTab);
+  const activeTab = useResolvedSettingsCenterSubtab('admin-features', resolveAdminFeatureTab);
+  const visited = useVisitedSubtabs(activeTab);
 
   const switchTab = (nextTab: AdminFeatureTab) => {
     openSettingsCenter('admin-features', {
-      replace: true,
-      subpath: nextTab === 'toggles' ? null : nextTab,
+      subpath: nextTab,
     });
   };
 
@@ -140,8 +159,7 @@ export function AdminFeaturesContent() {
 
       <Suspense fallback={<PanelFallback />}>
         <div className="rounded-lg border border-border bg-background p-4">
-          {activeTab === 'toggles' && <LazyFeatureTogglePanel />}
-          {activeTab === 'keys' && <LazyKeyManagementPanel />}
+          {visited.map(tab => <div key={tab} hidden={tab !== activeTab} inert={tab !== activeTab}>{tab === 'toggles' ? <LazyFeatureTogglePanel /> : <LazyKeyManagementPanel />}</div>)}
         </div>
       </Suspense>
     </Section>
@@ -149,12 +167,12 @@ export function AdminFeaturesContent() {
 }
 
 export function AdminAIServicesContent() {
-  const activeTab = useResolvedSettingsCenterSubtab(resolveAdminAITab);
+  const activeTab = useResolvedSettingsCenterSubtab('admin-ai-services', resolveAdminAITab);
+  const visited = useVisitedSubtabs(activeTab);
 
   const switchTab = (nextTab: AdminAITab) => {
     openSettingsCenter('admin-ai-services', {
-      replace: true,
-      subpath: nextTab === 'models' ? null : nextTab,
+      subpath: nextTab,
     });
   };
 
@@ -167,8 +185,7 @@ export function AdminAIServicesContent() {
 
       <Suspense fallback={<PanelFallback />}>
         <div className="rounded-lg border border-border bg-background p-4">
-          {activeTab === 'models' && <LazyAIModelPanel />}
-          {activeTab === 'gateways' && <LazyAIGatewayPanel />}
+          {visited.map(tab => <div key={tab} hidden={tab !== activeTab} inert={tab !== activeTab}>{tab === 'models' ? <LazyAIModelPanel /> : <LazyAIGatewayPanel />}</div>)}
         </div>
       </Suspense>
     </Section>

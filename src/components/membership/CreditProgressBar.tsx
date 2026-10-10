@@ -23,16 +23,16 @@ export function CreditProgressBar({
   const limitMarkerPercentage = Math.min((limit / scaleMax) * 100, 100);
 
   return (
-    <section className="overflow-hidden rounded-lg border border-[#ebe8e2] bg-[#f7f6f3]">
-      <div className="flex items-center justify-between gap-4 border-b border-[#ebe8e2] px-4 py-3">
+    <section className="overflow-hidden rounded-lg border border-border bg-background">
+      <div className="flex items-center justify-between gap-4 border-b border-border px-4 py-3">
         <div className="min-w-0">
-          <div className="flex items-center gap-2 text-sm font-medium text-[#37352f]">
-            <BotMessageSquare className="h-4 w-4 text-[#37352f]/45" />
+          <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+            <BotMessageSquare className="h-4 w-4 text-foreground-secondary" />
             <span>当前积分</span>
           </div>
         </div>
         <div className="text-right">
-          <div className="text-xl font-semibold tracking-tight text-[#37352f]">{credits}/{limit}</div>
+          <div className="text-xl font-semibold tracking-tight text-foreground">{credits}/{limit}</div>
         </div>
       </div>
 
@@ -46,7 +46,7 @@ export function CreditProgressBar({
             className="absolute top-1/2 -translate-y-1/2"
             style={{ left: `clamp(0%, calc(${limitMarkerPercentage}% - 5px), calc(100% - 10px))` }}
           >
-            <span className="block h-2.5 w-2.5 rounded-full border border-[#1f9d6d] bg-[#f7f6f3]" />
+            <span className="block h-2.5 w-2.5 rounded-full border border-[#1f9d6d] bg-background" />
           </div>
         </div>
       </div>

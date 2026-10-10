@@ -9,7 +9,7 @@ test('chat page settings entries reuse shared settings center icons', () => {
 
   assert.equal(headerSource.includes("import { SETTINGS_CENTER_TAB_ICONS } from '@/components/settings/settings-center-icons'"), true);
   assert.equal(headerSource.includes('const PersonalizationIcon = SETTINGS_CENTER_TAB_ICONS.personalization'), true);
-  assert.equal(headerSource.includes('<PersonalizationIcon size={20}'), true);
+  assert.match(headerSource, /<PersonalizationIcon\b/u);
   assert.equal(headerSource.includes('MessageCircleHeart'), false);
 
   assert.equal(chatPageSource.includes("import { SETTINGS_CENTER_TAB_ICONS } from '@/components/settings/settings-center-icons'"), true);

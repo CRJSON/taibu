@@ -6,7 +6,7 @@
 'use client';
 
 import { useState } from 'react';
-import type { BaziCanonicalJSON } from 'taibu-core/bazi';
+import type { BaziCanonicalJSON, BaziCellJSON } from 'taibu-core/bazi';
 import {
     type DaYunInfo,
     type LiuNianInfo,
@@ -39,12 +39,12 @@ const XIONG_SHA = new Set([
 // 获取神煞的吉凶颜色样式
 function getShenShaStyle(sha: string): { text: string; bg: string } {
     if (JI_SHEN.has(sha)) {
-        return { text: 'text-[#0f7b6c]', bg: 'bg-[#0f7b6c]/5' };
+        return { text: 'text-success', bg: 'bg-success/5' };
     }
     if (XIONG_SHA.has(sha)) {
-        return { text: 'text-[#eb5757]', bg: 'bg-[#eb5757]/5' };
+        return { text: 'text-danger', bg: 'bg-danger/5' };
     }
-    return { text: 'text-foreground/40', bg: 'bg-background-secondary/50' };
+    return { text: 'text-foreground-secondary', bg: 'bg-background-secondary/50' };
 }
 
 interface FortuneColumn {
@@ -67,6 +67,8 @@ export function ProfessionalTable({
     activeLiuNian,
     activeLiuYue,
     activeLiuRi,
+    highlightedCells,
+    onCellSelect,
 }: {
     canonicalChart: BaziCanonicalJSON;
     isUnknownTime?: boolean;
@@ -74,6 +76,8 @@ export function ProfessionalTable({
     activeLiuNian?: LiuNianInfo;
     activeLiuYue?: LiuYueInfo;
     activeLiuRi?: LiuRiInfo;
+    highlightedCells?: BaziCellJSON[];
+    onCellSelect?: (cell: BaziCellJSON) => void;
 }) {
     const [shenShaExpanded, setShenShaExpanded] = useState(false);
 
@@ -168,6 +172,16 @@ export function ProfessionalTable({
     };
 
     const columnCount = fortuneColumns.length + columns.length;
+    const character = (col: typeof columns[number], part: BaziCellJSON['部位'], index: number) => {
+        const char = part === '天干' ? col.stem : col.branch;
+        const style = { color: col.hidden ? undefined : part === '天干' ? getStemColor(char) : getBranchColor(char) };
+        if (!onCellSelect || col.hidden) return <span className="text-xl sm:text-2xl font-bold" style={style}>{col.hidden ? '*' : char}</span>;
+        const cell: BaziCellJSON = { 柱: col.label as BaziCellJSON['柱'], 部位: part, 字: char };
+        const highlighted = highlightedCells?.some(item => item.柱 === cell.柱 && item.部位 === cell.部位 && item.字 === char) ?? false;
+        return <button type="button" className="chart-cell-button text-xl sm:text-2xl font-bold" style={style}
+            data-chart-target={'bazi:cell:' + index + ':' + (part === '天干' ? 0 : 1)}
+            aria-label={col.label + part + char} aria-pressed={highlighted} onClick={() => onCellSelect(cell)}>{char}</button>;
+    };
 
     return (
         <div className="overflow-x-auto -mx-2 px-1">
@@ -180,16 +194,16 @@ export function ProfessionalTable({
                 </colgroup>
                 <thead>
                     <tr className="border-b border-border">
-                        <th className="py-2.5 px-2 text-center text-[10px] font-bold text-foreground/30 uppercase tracking-widest sticky left-0 z-20 bg-background border-r border-border/60"></th>
+                        <th className="py-2.5 px-2 text-center text-[10px] font-bold text-foreground-secondary uppercase tracking-widest sticky left-0 z-20 bg-background border-r border-border/60"></th>
                         {fortuneColumns.map((col) => (
-                            <th key={col.key} className="py-2.5 px-1 text-center font-bold text-[11px] text-[#2eaadc] uppercase tracking-wider bg-blue-50/30">
+                            <th key={col.key} className="py-2.5 px-1 text-center font-bold text-[11px] text-accent uppercase tracking-wider bg-blue-50/30">
                                 {col.label}
                             </th>
                         ))}
                         {columns.map((col, idx) => (
-                            <th key={col.key} className={`py-2.5 px-1 text-center font-bold text-[11px] text-foreground/60 uppercase tracking-wider ${idx === 0 && hasFortuneColumns ? 'border-l border-border/60' : ''}`}>
+                            <th key={col.key} className={`py-2.5 px-1 text-center font-bold text-[11px] text-foreground-secondary uppercase tracking-wider ${idx === 0 && hasFortuneColumns ? 'border-l border-border/60' : ''}`}>
                                 {col.label}
-                                {col.hidden && <span className="text-[#dfab01] ml-0.5">*</span>}
+                                {col.hidden && <span className="text-warning ml-0.5">*</span>}
                             </th>
                         ))}
                     </tr>
@@ -197,7 +211,7 @@ export function ProfessionalTable({
                 <tbody className="divide-y divide-gray-50">
                     {/* 主星行 */}
                     <tr>
-                        <td className="py-3 px-2 text-center text-[10px] font-bold text-foreground/30 uppercase tracking-widest sticky left-0 z-20 bg-background border-r border-border/60">主星</td>
+                        <td className="py-3 px-2 text-center text-[10px] font-bold text-foreground-secondary uppercase tracking-widest sticky left-0 z-20 bg-background border-r border-border/60">主星</td>
                         {fortuneColumns.map((col) => (
                             <td key={col.key} className="py-3 px-1 text-center text-xs font-semibold text-foreground/70 bg-blue-50/10">
                                 {col.shiShen || '-'}
@@ -211,7 +225,7 @@ export function ProfessionalTable({
                     </tr>
                     {/* 天干行 */}
                     <tr>
-                        <td className="py-4 px-2 text-center text-[10px] font-bold text-foreground/30 uppercase tracking-widest sticky left-0 z-20 bg-background border-r border-border/60">天干</td>
+                        <td className="py-4 px-2 text-center text-[10px] font-bold text-foreground-secondary uppercase tracking-widest sticky left-0 z-20 bg-background border-r border-border/60">天干</td>
                         {fortuneColumns.map((col) => (
                             <td key={col.key} className="py-4 px-1 text-center bg-blue-50/10">
                                 <span className="text-xl sm:text-2xl font-bold" style={{ color: getStemColor(col.stem) }}>
@@ -221,15 +235,13 @@ export function ProfessionalTable({
                         ))}
                         {columns.map((col, idx) => (
                             <td key={col.key} className={`py-4 px-1 text-center ${col.hidden ? 'opacity-30' : ''} ${idx === 0 && hasFortuneColumns ? 'border-l border-border/60' : ''}`}>
-                                <span className="text-xl sm:text-2xl font-bold" style={{ color: col.hidden ? undefined : getStemColor(col.stem) }}>
-                                    {col.hidden ? '*' : col.stem}
-                                </span>
+                                {character(col, '天干', idx)}
                             </td>
                         ))}
                     </tr>
                     {/* 地支行 */}
                     <tr>
-                        <td className="py-4 px-2 text-center text-[10px] font-bold text-foreground/30 uppercase tracking-widest sticky left-0 z-20 bg-background border-r border-border/60">地支</td>
+                        <td className="py-4 px-2 text-center text-[10px] font-bold text-foreground-secondary uppercase tracking-widest sticky left-0 z-20 bg-background border-r border-border/60">地支</td>
                         {fortuneColumns.map((col) => (
                             <td key={col.key} className="py-4 px-1 text-center bg-blue-50/10">
                                 <span className="text-xl sm:text-2xl font-bold" style={{ color: getBranchColor(col.branch) }}>
@@ -239,22 +251,20 @@ export function ProfessionalTable({
                         ))}
                         {columns.map((col, idx) => (
                             <td key={col.key} className={`py-4 px-1 text-center ${col.hidden ? 'opacity-30' : ''} ${idx === 0 && hasFortuneColumns ? 'border-l border-border/60' : ''}`}>
-                                <span className="text-xl sm:text-2xl font-bold" style={{ color: col.hidden ? undefined : getBranchColor(col.branch) }}>
-                                    {col.hidden ? '*' : col.branch}
-                                </span>
+                                {character(col, '地支', idx)}
                             </td>
                         ))}
                     </tr>
                     {/* 藏干行 */}
                     <tr>
-                        <td className="py-3 px-2 text-center text-[10px] font-bold text-foreground/30 uppercase tracking-widest sticky left-0 z-20 bg-background border-r border-border/60">藏干</td>
+                        <td className="py-3 px-2 text-center text-[10px] font-bold text-foreground-secondary uppercase tracking-widest sticky left-0 z-20 bg-background border-r border-border/60">藏干</td>
                         {fortuneColumns.map((col) => (
                             <td key={col.key} className="py-3 px-1 bg-blue-50/10">
                                 <div className="flex flex-col items-center gap-1">
                                     {col.hiddenStems.map((stem, idx) => (
                                         <div key={idx} className="flex items-center gap-1">
                                             <span className="text-[11px] font-bold" style={{ color: getStemColor(stem.stem) }}>{stem.stem}</span>
-                                            <span className="text-[10px] font-medium text-foreground/40">{stem.tenGod}</span>
+                                            <span className="text-[10px] font-medium text-foreground-secondary">{stem.tenGod}</span>
                                         </div>
                                     ))}
                                 </div>
@@ -267,7 +277,7 @@ export function ProfessionalTable({
                                         {(col.pillar.藏干 || []).map((stem, idx) => (
                                             <div key={idx} className="flex items-center gap-1">
                                                 <span className="text-[11px] font-bold" style={{ color: getStemColor(stem.天干) }}>{stem.天干}</span>
-                                                <span className="text-[10px] font-medium text-foreground/40">{stem.十神}</span>
+                                                <span className="text-[10px] font-medium text-foreground-secondary">{stem.十神}</span>
                                             </div>
                                         ))}
                                     </div>
@@ -277,23 +287,23 @@ export function ProfessionalTable({
                     </tr>
                     {/* 辅助行：星运、纳音 */}
                     <tr>
-                        <td className="py-2.5 px-2 text-center text-[10px] font-bold text-foreground/30 uppercase tracking-widest sticky left-0 z-20 bg-background border-r border-border/60">星运</td>
+                        <td className="py-2.5 px-2 text-center text-[10px] font-bold text-foreground-secondary uppercase tracking-widest sticky left-0 z-20 bg-background border-r border-border/60">星运</td>
                         {fortuneColumns.map((col) => (
-                            <td key={col.key} className="py-2.5 px-1 text-center text-[11px] font-medium text-foreground/50 bg-blue-50/10">{col.diShi}</td>
+                            <td key={col.key} className="py-2.5 px-1 text-center text-[11px] font-medium text-foreground-secondary bg-blue-50/10">{col.diShi}</td>
                         ))}
                         {columns.map((col, idx) => (
-                            <td key={col.key} className={`py-2.5 px-1 text-center text-[11px] font-medium text-foreground/50 ${col.hidden ? 'opacity-30' : ''} ${idx === 0 && hasFortuneColumns ? 'border-l border-border/60' : ''}`}>
+                            <td key={col.key} className={`py-2.5 px-1 text-center text-[11px] font-medium text-foreground-secondary ${col.hidden ? 'opacity-30' : ''} ${idx === 0 && hasFortuneColumns ? 'border-l border-border/60' : ''}`}>
                                 {col.hidden ? '?' : col.pillar.地势}
                             </td>
                         ))}
                     </tr>
                     <tr>
-                        <td className="py-2.5 px-2 text-center text-[10px] font-bold text-foreground/30 uppercase tracking-widest sticky left-0 z-20 bg-background border-r border-border/60">纳音</td>
+                        <td className="py-2.5 px-2 text-center text-[10px] font-bold text-foreground-secondary uppercase tracking-widest sticky left-0 z-20 bg-background border-r border-border/60">纳音</td>
                         {fortuneColumns.map((col) => (
-                            <td key={col.key} className="py-2.5 px-1 text-center text-[11px] font-medium text-foreground/50 bg-blue-50/10">{col.naYin}</td>
+                            <td key={col.key} className="py-2.5 px-1 text-center text-[11px] font-medium text-foreground-secondary bg-blue-50/10">{col.naYin}</td>
                         ))}
                         {columns.map((col, idx) => (
-                            <td key={col.key} className={`py-2.5 px-1 text-center text-[11px] font-medium text-foreground/50 ${col.hidden ? 'opacity-30' : ''} ${idx === 0 && hasFortuneColumns ? 'border-l border-border/60' : ''}`}>
+                            <td key={col.key} className={`py-2.5 px-1 text-center text-[11px] font-medium text-foreground-secondary ${col.hidden ? 'opacity-30' : ''} ${idx === 0 && hasFortuneColumns ? 'border-l border-border/60' : ''}`}>
                                 {col.hidden ? '?' : col.pillar.纳音}
                             </td>
                         ))}
@@ -301,12 +311,12 @@ export function ProfessionalTable({
                     {/* 神煞星行 */}
                     {hasShenSha && (
                         <tr>
-                            <td className="py-3 px-2 text-center text-[10px] font-bold text-foreground/30 uppercase tracking-widest sticky left-0 z-20 bg-background border-r border-border/60">
+                            <td className="py-3 px-2 text-center text-[10px] font-bold text-foreground-secondary uppercase tracking-widest sticky left-0 z-20 bg-background border-r border-border/60">
                                 <button
                                     onClick={() => setShenShaExpanded(!shenShaExpanded)}
                                     className="inline-flex items-center justify-center gap-1 group"
                                 >
-                                    <span className="group-hover:text-foreground/60 transition-colors">神煞</span>
+                                    <span className="group-hover:text-foreground-secondary transition-colors">神煞</span>
                                     {shenShaExpanded ? <ChevronUp className="w-3 h-3 text-foreground/20" /> : <ChevronDown className="w-3 h-3 text-foreground/20" />}
                                 </button>
                             </td>
@@ -338,7 +348,7 @@ export function ProfessionalTable({
                     )}
                 </tbody>
             </table>
-            {isUnknownTime && <p className="mt-4 px-2 text-[11px] font-medium text-[#dfab01] italic opacity-80">* 时辰未知，时柱数据仅供逻辑参考</p>}
+            {isUnknownTime && <p className="mt-4 px-2 text-[11px] font-medium text-warning italic opacity-80">* 时辰未知，时柱数据仅供逻辑参考</p>}
         </div>
     );
 }

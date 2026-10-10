@@ -2,6 +2,8 @@ import { NineStar, Solar } from 'lunar-javascript';
 
 import { DEFAULT_DIVINATION_TIMEZONE, zonedWallClockToSystemDate } from '../../shared/timezone-utils.js';
 import { GAN_WUXING, getElementRelation } from '../../shared/utils.js';
+import { CoreInputError, parseCivilDate, resolveEnum } from '../../shared/validation.js';
+import { calculateTraditionalTaiyi } from './traditional.js';
 
 import type {
   TaiyiDatetimeContext,
@@ -47,25 +49,6 @@ const ELEMENT_RELATION_LABELS: Record<string, string> = {
   control: '主星五行克制日干',
   controlled: '主星五行受日干所克',
 };
-
-function parseDate(input: string): { year: number; month: number; day: number; } {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(input)) {
-    throw new Error('date 格式无效，请使用 YYYY-MM-DD');
-  }
-
-  const [year, month, day] = input.split('-').map(Number);
-  const parsed = new Date(year, month - 1, day);
-  if (
-    Number.isNaN(parsed.getTime()) ||
-    parsed.getFullYear() !== year ||
-    parsed.getMonth() !== month - 1 ||
-    parsed.getDate() !== day
-  ) {
-    throw new Error('date 日期无效，请检查日期是否存在');
-  }
-
-  return { year, month, day };
-}
 
 function ensureHour(hour: number | undefined, mode: TaiyiMode): number {
   if (mode === 'hour' || mode === 'minute') {
@@ -221,14 +204,33 @@ function buildJudgementAnchors(
 }
 
 export function calculateTaiyi(input: TaiyiInput): TaiyiOutput {
-  const { mode, question, timezone = DEFAULT_DIVINATION_TIMEZONE } = input;
-  const { year, month, day } = parseDate(input.date);
+  const { question, timezone = DEFAULT_DIVINATION_TIMEZONE } = input;
+  const mode = resolveEnum(input.mode, ['year', 'month', 'day', 'hour', 'minute'] as const, 'hour', 'mode');
+  const system = resolveEnum(input.system, ['nine-star', 'traditional'] as const, 'nine-star', 'system');
+  if (system === 'nine-star' && [input.tradition, input.accumulatedNumber, input.dunType].some(value => value !== undefined)) throw new CoreInputError('system', '传统参数需选择 traditional');
+  const { year, month, day } = parseCivilDate(input.date);
   const hour = ensureHour(input.hour, mode);
   const minute = ensureMinute(input.minute, mode);
 
   const systemDate = zonedWallClockToSystemDate({ year, month, day, hour, minute }, timezone);
   const solar = Solar.fromDate(systemDate);
   const lunar = solar.getLunar();
+
+  const datetimeContext = buildDatetimeContext(lunar, year, month, day, hour, minute);
+  if (system === 'traditional') {
+    const traditionalBoard = calculateTraditionalTaiyi({ ...input, mode }, solar);
+    return {
+      ...(question ? { question } : {}),
+      boardMeta: { system: 'taiyi_traditional', systemLabel: '太乙七十二局', mode, modeLabel: MODE_LABELS[mode], timezone, ruleVersion: traditionalBoard.ruleVersion },
+      datetimeContext, traditionalBoard,
+      derivedIndicators: { favorableSignals: [], cautionSignals: [], elementRelation: '', directionalHint: traditionalBoard.taiyi.position },
+      judgementAnchors: {
+        summary: [`${traditionalBoard.dun === 'yang' ? '阳' : '阴'}遁${traditionalBoard.bureau}局，太乙在${traditionalBoard.taiyi.position}。`, `文昌${traditionalBoard.wenChang}，始击${traditionalBoard.shiJi}，计神${traditionalBoard.jiShen}。`, `主算${traditionalBoard.home.count}，客算${traditionalBoard.away.count}。`],
+        primarySong: '',
+        modeNotes: ['七十二局立成采用《太乙金镜式经》四库本；自动积数采用现代公历日差和农历月序适配，闰月复用本月。可输入积数复核其他历书。'],
+      },
+    };
+  }
 
   const yearStar = buildTaiyiStarSnapshot(lunar.getYearNineStar(), 'year', MODE_LABELS.year);
   const monthStar = buildTaiyiStarSnapshot(lunar.getMonthNineStar(), 'month', MODE_LABELS.month);
@@ -246,7 +248,6 @@ export function calculateTaiyi(input: TaiyiInput): TaiyiOutput {
           ? hourStar
           : minuteRefinement!.refinedStar;
 
-  const datetimeContext = buildDatetimeContext(lunar, year, month, day, hour, minute);
   const derivedIndicators = buildDerivedIndicators(primaryStar, datetimeContext);
   const judgementAnchors = buildJudgementAnchors(primaryStar, datetimeContext, mode, minuteRefinement);
 
@@ -257,6 +258,8 @@ export function calculateTaiyi(input: TaiyiInput): TaiyiOutput {
       systemLabel: '太乙九星推演',
       mode,
       modeLabel: MODE_LABELS[mode],
+      timezone,
+      ruleVersion: 'taiyi-nine-star-2026.10',
       ...(minuteRefinement ? { minuteSlot: minuteRefinement.slot, minuteStrategy: minuteRefinement.note } : {}),
     },
     datetimeContext,

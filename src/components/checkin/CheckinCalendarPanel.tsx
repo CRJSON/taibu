@@ -98,7 +98,7 @@ export function CheckinCalendarPanel({ active = true }: CheckinCalendarPanelProp
               ? 'bg-amber-500 text-white'
               : isToday
                 ? 'border border-amber-500/50 bg-amber-500/10 font-semibold text-amber-600'
-                : 'bg-[#f7f6f3] text-[#37352f]/55'
+                : 'bg-background text-foreground-secondary'
           }`}
         >
           {isCheckedIn ? <CheckCircle2 className="h-4 w-4" /> : day}
@@ -115,30 +115,30 @@ export function CheckinCalendarPanel({ active = true }: CheckinCalendarPanelProp
   }, [calendar, currentMonth]);
 
   return (
-    <div className="rounded-lg border border-[#ebe8e2] bg-[#fbfaf7] p-4">
+    <div className="rounded-lg border border-border bg-surface p-4">
       <div className="mb-3 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={prevMonth}
-            className="flex h-7 w-7 items-center justify-center rounded-md text-[#37352f]/55 transition-colors duration-150 hover:bg-[#efedea] hover:text-[#37352f]"
+            className="flex h-7 w-7 items-center justify-center rounded-md text-foreground-secondary transition-colors duration-150 hover:bg-background-secondary hover:text-foreground"
             aria-label="查看上个月"
           >
             <ChevronLeft className="h-4 w-4" />
           </button>
-          <div className="text-sm font-medium text-[#37352f]">
+          <div className="text-sm font-medium text-foreground">
             {currentMonth.year} 年 {currentMonth.month} 月
           </div>
           <button
             type="button"
             onClick={nextMonth}
-            className="flex h-7 w-7 items-center justify-center rounded-md text-[#37352f]/55 transition-colors duration-150 hover:bg-[#efedea] hover:text-[#37352f]"
+            className="flex h-7 w-7 items-center justify-center rounded-md text-foreground-secondary transition-colors duration-150 hover:bg-background-secondary hover:text-foreground"
             aria-label="查看下个月"
           >
             <ChevronRight className="h-4 w-4" />
           </button>
         </div>
-        <div className="text-xs text-[#37352f]/50">
+        <div className="text-xs text-foreground-secondary">
           本月 {checkedInThisMonth} 天
         </div>
       </div>
@@ -164,13 +164,13 @@ export function CheckinCalendarPanel({ active = true }: CheckinCalendarPanelProp
           <div className="grid grid-cols-7 gap-2">
             {Array.from({ length: 7 }).map((_, index) => (
               <div key={index} className="flex h-8 items-center justify-center">
-                <div className="h-3 w-4 rounded bg-[#37352f]/10 animate-pulse" />
+                <div className="h-3 w-4 rounded bg-foreground/10 animate-pulse" />
               </div>
             ))}
           </div>
           <div className="grid grid-cols-7 gap-2">
             {Array.from({ length: 35 }).map((_, index) => (
-              <div key={index} className="h-9 rounded-lg bg-[#37352f]/8 animate-pulse" />
+              <div key={index} className="h-9 rounded-lg bg-foreground/8 animate-pulse" />
             ))}
           </div>
         </div>
@@ -178,7 +178,7 @@ export function CheckinCalendarPanel({ active = true }: CheckinCalendarPanelProp
         <>
           <div className="mb-2 grid grid-cols-7 gap-2">
             {['日', '一', '二', '三', '四', '五', '六'].map((day) => (
-              <div key={day} className="flex h-8 items-center justify-center text-xs text-[#37352f]/40">
+              <div key={day} className="flex h-8 items-center justify-center text-xs text-foreground-secondary">
                 {day}
               </div>
             ))}

@@ -4,7 +4,8 @@ import { buildPromptWithSources, calculatePromptBudget, resolvePersonalities } f
 import { getSystemAdminClient } from '@/lib/api-utils';
 import { buildKnowledgeHits } from '@/lib/knowledge-base/hits';
 import { parseMentions, resolveMention, stripMentionTokens } from '@/lib/mentions';
-import type { AIMessageMetadata, AIPersonality, ChatMessage } from '@/types';
+import type { ChatMessage } from '@/types';
+import type { ChatPromptContext } from '@/lib/server/chat/contracts';
 import type { Mention } from '@/types/mentions';
 import { buildDreamContextPayload } from '@/lib/chat/chat-context';
 import { extractUserQuestion } from '@/lib/chat/message-utils';
@@ -32,6 +33,7 @@ function injectToLastUserMessage(messages: ChatMessage[], prefix: string): ChatM
 }
 
 type UserSettingsContext = {
+  memoryEnabled?: boolean;
   expressionStyle: 'direct' | 'gentle';
   chartPromptDetailLevel: 'default' | 'more' | 'full';
   userProfile: UserIdentityProfile | null;
@@ -40,25 +42,7 @@ type UserSettingsContext = {
   visualizationSettings?: VisualizationSettings;
 };
 
-type ChatPromptContextResult = {
-  sanitizedMessages: ChatMessage[];
-  metadata: AIMessageMetadata & {
-    sources?: unknown;
-    kbSearchEnabled: boolean;
-    kbHitCount: number;
-    promptDiagnostics: {
-      modelId: string;
-      layers: unknown;
-      totalTokens: number;
-      budgetTotal: number;
-      userMessageTokens: number;
-    };
-    dreamContext?: { baziChartName?: string; dailyFortune?: string };
-  };
-  fallbackPersonality: AIPersonality;
-  systemPrompt: string;
-  promptKnowledgeBases: Array<{ id: string; name: string }>;
-};
+type ChatPromptContextResult = ChatPromptContext;
 
 type ResolvedMention = Mention & { resolvedContent: string };
 
@@ -77,13 +61,11 @@ async function resolveMentionsForPrompt(
   chartPromptDetailLevel: 'default' | 'more' | 'full',
 ): Promise<ResolvedMention[]> {
   return await Promise.all(mentions.map(async (mention) => {
-    console.log(`[mention-resolve] type=${mention.type} id=${mention.id ?? 'MISSING'} name=${mention.name}`);
     const resolvedContent = await resolveMention(mention, userId, {
       client: supabase,
       maxTokens,
       chartPromptDetailLevel,
     });
-    console.log(`[mention-resolve] result: type=${mention.type} contentLen=${resolvedContent?.length ?? 0}`);
     return { ...mention, resolvedContent };
   }));
 }
@@ -101,6 +83,7 @@ async function loadUserSettingsContext(
 
   return {
     expressionStyle: settings.expressionStyle,
+    memoryEnabled: settings.chatPreferences.memoryEnabled === true,
     chartPromptDetailLevel: settings.chartPromptDetailLevel,
     userProfile: settings.userProfile,
     customInstructions: settings.customInstructions,
@@ -118,6 +101,7 @@ function applyUserSettingsOverrides(
       overrides.expressionStyle === 'direct' ? 'direct' : settings.expressionStyle
     ),
     chartPromptDetailLevel: settings.chartPromptDetailLevel,
+    memoryEnabled: settings.memoryEnabled,
     customInstructions: overrides.customInstructions === null
       ? ''
       : typeof overrides.customInstructions === 'string'
@@ -131,6 +115,7 @@ function applyUserSettingsOverrides(
 
 export async function buildChatPromptContext(
   resolvedRequest: ResolvedChatRequest,
+  options?: { deferKnowledgeSearch?: boolean },
 ): Promise<ChatPromptContextResult> {
   const { body, userId, accessTokenForKB, requestedModelId, reasoningEnabled, membershipType } = resolvedRequest;
 
@@ -176,12 +161,16 @@ export async function buildChatPromptContext(
 
   const promptKnowledgeBases = userId && canUsePromptKnowledgeBase && effectiveUserSettings.promptKbIds.length > 0
     ? await (async () => {
-      const { data: kbRows } = await supabase
+      const { data: kbRows, error } = await supabase
         .from('knowledge_bases')
         .select('id, name')
         .eq('user_id', userId)
         .in('id', effectiveUserSettings.promptKbIds);
 
+      if (error) {
+        console.warn('[knowledge-base] enrichment failed', { stage: 'prompt-names' });
+        return [];
+      }
       const kbMap = new Map<string, { id: string; name: string }>();
       ((kbRows || []) as Array<{ id: string; name: string }>).forEach((kb) => {
         kbMap.set(kb.id, kb);
@@ -190,10 +179,13 @@ export async function buildChatPromptContext(
       return effectiveUserSettings.promptKbIds
         .map((kbId) => kbMap.get(kbId))
         .filter((kb): kb is { id: string; name: string } => !!kb);
-    })()
+    })().catch(() => {
+      console.warn('[knowledge-base] enrichment failed', { stage: 'prompt-names' });
+      return [];
+    })
     : [];
 
-  const knowledgeHits = userId && canUsePromptKnowledgeBase
+  const knowledgeHits = userId && canUsePromptKnowledgeBase && !options?.deferKnowledgeSearch
     ? await buildKnowledgeHits({
         query: userQuestionForSearch,
         userId,
@@ -201,6 +193,7 @@ export async function buildChatPromptContext(
         accessToken: accessTokenForKB,
         promptKbIds: effectiveUserSettings.promptKbIds,
         supabase,
+        knownNames: { userId, names: new Map(promptKnowledgeBases.map(kb => [kb.id, kb.name])) },
       })
     : [];
 
@@ -215,6 +208,12 @@ export async function buildChatPromptContext(
       }
     : undefined;
 
+  const personalityResolution = resolvePersonalities({
+    chartContext: promptChartContext,
+    dreamMode: promptDreamMode,
+    mentions: resolvedMentions,
+  });
+
   const promptBuild = await buildPromptWithSources({
     modelId: requestedModelId,
     reasoningEnabled,
@@ -225,7 +224,7 @@ export async function buildChatPromptContext(
     chartContext: promptChartContext,
     dreamMode: promptDreamMode,
     difyContext: body.difyContext,
-  });
+  }, { budget: mentionBudget, personalityResolution });
 
   const processedMessages = promptBuild.userMessagePrefix
     ? injectToLastUserMessage(body.messages, promptBuild.userMessagePrefix)
@@ -252,15 +251,11 @@ export async function buildChatPromptContext(
     return message;
   });
 
-  const personalityResolution = resolvePersonalities({
-    chartContext: promptChartContext,
-    dreamMode: promptDreamMode,
-    mentions: resolvedMentions,
-  });
   const fallbackPersonality = personalityResolution.personalities[0] ?? 'general';
 
   return {
     sanitizedMessages,
+    agentMemoryEnabled: effectiveUserSettings.memoryEnabled === true,
     metadata,
     fallbackPersonality,
     systemPrompt: promptBuild.systemPrompt,

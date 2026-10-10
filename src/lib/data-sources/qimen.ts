@@ -7,7 +7,8 @@ import {
     type QimenInput,
 } from '@/lib/divination/qimen';
 import { resolveChartTextDetailLevel } from '@/lib/divination/detail-level';
-import type { DataSourceProvider, DataSourceQueryContext, DataSourceSummary } from '@/lib/data-sources/types';
+import type { DataSourceSummary } from '@/lib/data-sources/types';
+import type { DataSourceProvider, DataSourceQueryContext } from '@/lib/data-sources/provider.server';
 
 type QimenRow = {
     id: string;
@@ -28,6 +29,16 @@ type QimenRow = {
 };
 
 const DUN_LABEL: Record<string, string> = { yang: '阳遁', yin: '阴遁' };
+
+export function qimenInputFromRecord(r: QimenRow): QimenInput {
+    return {
+        year: r.year, month: r.month, day: r.day, hour: r.hour, minute: r.minute,
+        timezone: r.timezone || DEFAULT_DIVINATION_TIMEZONE, question: r.question ?? undefined,
+        panType: r.pan_type, juMethod: r.ju_method,
+        zhiFuJiGong: fromStoredQimenZhiFuJiGong(r.zhi_fu_ji_gong),
+        juNumber: r.ju_number, dunType: r.dun_type === 'yin' || r.dun_type === 'yang' ? r.dun_type : undefined,
+    };
+}
 
 export const qimenProvider: DataSourceProvider<QimenRow> = {
     type: 'qimen_chart',
@@ -69,18 +80,7 @@ export const qimenProvider: DataSourceProvider<QimenRow> = {
     },
 
     async formatForAI(r: QimenRow, ctx?: DataSourceQueryContext): Promise<string> {
-        const { output } = await calculateQimenBundle({
-            year: r.year,
-            month: r.month,
-            day: r.day,
-            hour: r.hour,
-            minute: r.minute,
-            timezone: r.timezone || DEFAULT_DIVINATION_TIMEZONE,
-            question: r.question ?? undefined,
-            panType: r.pan_type,
-            juMethod: r.ju_method,
-            zhiFuJiGong: fromStoredQimenZhiFuJiGong(r.zhi_fu_ji_gong),
-        });
+        const { output } = await calculateQimenBundle(qimenInputFromRecord(r));
 
         return toQimenText(r.question ? { ...output, question: r.question } : output, {
             detailLevel: resolveChartTextDetailLevel('qimen', ctx?.chartPromptDetailLevel),

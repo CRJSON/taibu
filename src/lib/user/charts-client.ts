@@ -1,10 +1,12 @@
-import { requestBrowserJson } from '@/lib/browser-api';
+import { requestBrowserJson, type BrowserRequestInit } from '@/lib/browser-api';
+import { mutationEffects } from '@/lib/query/invalidation';
 import type { BaziOutput as CoreBaziOutput } from 'taibu-core/bazi';
 import { calculateBaziOutputFromStoredFields } from '@/lib/divination/bazi-record';
+import { resolveBirthTimeOptions, type BirthTimeResolution } from '@/lib/divination/birth-time';
 
 export type UserChartType = 'bazi' | 'ziwei';
 
-export type UserChartRecord = {
+export type UserChartRecord = BirthTimeResolution & {
   id: string;
   name: string;
   gender: 'male' | 'female' | null;
@@ -50,9 +52,24 @@ export type SavedBaziChart = {
   output: CoreBaziOutput;
 };
 
+export type ChartRequestScope = {
+  expectedUserId?: string;
+  signal?: AbortSignal;
+};
+
+function chartRequestInit(scope: ChartRequestScope, write = false): BrowserRequestInit {
+  return {
+    signal: scope.signal,
+    headers: scope.expectedUserId
+      ? { 'Content-Type': 'application/json', 'X-Expected-User-Id': scope.expectedUserId }
+      : undefined,
+    mutationEffects: write && scope.expectedUserId ? mutationEffects.userCharts(scope.expectedUserId) : undefined,
+  };
+}
+
 async function requestChartsJson<T>(
   url = '/api/user/charts',
-  init?: RequestInit,
+  init?: BrowserRequestInit,
   fallbackMessage = '请求失败',
 ): Promise<T> {
   const result = await requestBrowserJson<T>(url, init);
@@ -92,6 +109,7 @@ function toChartRecord(row: Record<string, unknown> | null | undefined): UserCha
     calendar_type: typeof row.calendar_type === 'string' ? row.calendar_type : null,
     is_leap_month: typeof row.is_leap_month === 'boolean' ? row.is_leap_month : null,
     created_at: row.created_at,
+    ...resolveBirthTimeOptions(row),
   };
 }
 
@@ -110,7 +128,7 @@ function normalizeUserChartBundle(bundle: RawUserChartBundle | null | undefined)
   };
 }
 
-export function toSavedBaziChart(row: Record<string, unknown> | null | undefined): SavedBaziChart | null {
+export function toSavedBaziChart(row: UserChartRecord | Record<string, unknown> | null | undefined): SavedBaziChart | null {
   if (!row || typeof row !== 'object') {
     return null;
   }
@@ -123,6 +141,8 @@ export function toSavedBaziChart(row: Record<string, unknown> | null | undefined
     longitude: row.longitude as number | string | null | undefined,
     calendar_type: row.calendar_type as string | null | undefined,
     is_leap_month: row.is_leap_month as boolean | null | undefined,
+    timezone: row.timezone,
+    disambiguation: row.disambiguation,
   });
 
   if (typeof row.id !== 'string' || typeof row.name !== 'string' || !output) {
@@ -136,8 +156,8 @@ export function toSavedBaziChart(row: Record<string, unknown> | null | undefined
   };
 }
 
-export async function getUserCharts(): Promise<UserChartBundle> {
-  const data = await requestChartsJson<RawUserChartBundle>('/api/user/charts', { method: 'GET' }, '获取命盘列表失败');
+export async function getUserCharts(scope: ChartRequestScope = {}): Promise<UserChartBundle> {
+  const data = await requestChartsJson<RawUserChartBundle>('/api/user/charts', { ...chartRequestInit(scope), method: 'GET' }, '获取命盘列表失败');
   return normalizeUserChartBundle(data);
 }
 
@@ -171,8 +191,9 @@ export async function loadPrimarySavedBaziChart(): Promise<SavedBaziChart | null
   return selectPrimarySavedBaziChart(bundle);
 }
 
-export async function loadSavedChart(type: UserChartType, id: string) {
-  const result = await requestBrowserJson<{ chart?: Record<string, unknown> | null }>(`/api/${type}/charts?id=${id}`, {
+export async function loadSavedChart(type: UserChartType, id: string, scope: ChartRequestScope = {}) {
+  const result = await requestBrowserJson<{ chart?: Record<string, unknown> | null }>(`/api/${type}/charts?id=${encodeURIComponent(id)}`, {
+    ...chartRequestInit(scope),
     method: 'GET',
   });
 
@@ -188,10 +209,11 @@ export async function loadSavedBaziChart(id: string) {
   return toSavedBaziChart(chart);
 }
 
-export async function createSavedChart(type: UserChartType, payload: Record<string, unknown>) {
+export async function createSavedChart(type: UserChartType, payload: Record<string, unknown>, scope: ChartRequestScope = {}) {
   const data = await requestChartsJson<{ id?: string | null }>(
     `/api/${type}/charts`,
     {
+      ...chartRequestInit(scope, true),
       method: 'POST',
       body: JSON.stringify({ payload }),
     },
@@ -205,10 +227,23 @@ export async function createSavedChart(type: UserChartType, payload: Record<stri
   return data.id;
 }
 
-export async function setDefaultUserChart(type: UserChartType, id: string) {
+export async function updateSavedChart(type: UserChartType, id: string, payload: Record<string, unknown>, scope: ChartRequestScope = {}): Promise<void> {
+  await requestChartsJson<{ success?: boolean }>(
+    `/api/${type}/charts/update`,
+    {
+      ...chartRequestInit(scope, true),
+      method: 'POST',
+      body: JSON.stringify({ chartId: id, payload }),
+    },
+    '更新命盘失败',
+  );
+}
+
+export async function setDefaultUserChart(type: UserChartType, id: string, scope: ChartRequestScope = {}) {
   const data = await requestChartsJson<RawUserChartBundle>(
     '/api/user/charts',
     {
+      ...chartRequestInit(scope, true),
       method: 'PATCH',
       body: JSON.stringify({ type, id }),
     },
@@ -217,11 +252,12 @@ export async function setDefaultUserChart(type: UserChartType, id: string) {
   return normalizeUserChartBundle(data).defaultChartIds;
 }
 
-export async function deleteUserChart(type: UserChartType, id: string) {
+export async function deleteUserChart(type: UserChartType, id: string, scope: ChartRequestScope = {}) {
   const params = new URLSearchParams({ type, id });
   await requestChartsJson<{ success?: boolean }>(
     `/api/user/charts?${params.toString()}`,
     {
+      ...chartRequestInit(scope, true),
       method: 'DELETE',
       body: undefined,
     },

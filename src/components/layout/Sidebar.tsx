@@ -41,20 +41,20 @@ function SidebarSkeleton() {
     return (
         <aside className="
             hidden lg:flex flex-col h-screen sticky top-0 z-20
-            bg-[#f7f6f3] dark:bg-[#181715] border-r border-gray-200 dark:border-white/10
+            bg-background-secondary border-r border-border
             transition-all duration-150 ease-in-out
             w-[var(--sidebar-width)]
         ">
-            <div className="flex items-center h-16 px-4 border-b border-gray-200 dark:border-white/10 justify-between">
+            <div className="flex items-center h-16 px-4 border-b border-border justify-between">
                 <Link href="/" className="flex items-center gap-2 min-w-0">
                     <Image src="/Logo.svg" alt="太卜 Logo" width={28} height={28} className="rounded-md flex-shrink-0 dark:invert" />
-                    <span className="font-bold text-base text-[#37352f] dark:text-[#f5f3ee] whitespace-nowrap">太卜</span>
+                    <span className="font-bold text-base text-foreground dark:text-foreground whitespace-nowrap">太卜</span>
                 </Link>
-                <div className="w-8 h-8 rounded-md bg-[#efedea] dark:bg-white/10 animate-pulse" />
+                <div className="w-8 h-8 rounded-md bg-background-secondary dark:bg-white/10 animate-pulse" />
             </div>
             <div className="flex-1 py-4 px-2 space-y-3">
                 {Array.from({ length: 9 }).map((_, index) => (
-                    <div key={index} className="rounded-md bg-[#efedea] dark:bg-white/10 animate-pulse h-10 w-full" />
+                    <div key={index} className="rounded-md bg-background-secondary dark:bg-white/10 animate-pulse h-10 w-full" />
                 ))}
             </div>
         </aside>
@@ -65,21 +65,21 @@ function SidebarLoadError({ onRetry }: { onRetry: () => void }) {
     return (
         <aside className="
             hidden lg:flex flex-col h-screen sticky top-0 z-20
-            bg-[#f7f6f3] dark:bg-[#181715] border-r border-gray-200 dark:border-white/10
+            bg-background-secondary border-r border-border
             w-[var(--sidebar-width)]
         ">
-            <div className="flex items-center h-16 px-4 border-b border-gray-200 dark:border-white/10">
+            <div className="flex items-center h-16 px-4 border-b border-border">
                 <Link href="/" className="flex items-center gap-2 min-w-0">
                     <Image src="/Logo.svg" alt="太卜 Logo" width={28} height={28} className="rounded-md flex-shrink-0 dark:invert" />
-                    <span className="font-bold text-base text-[#37352f] dark:text-[#f5f3ee] whitespace-nowrap">太卜</span>
+                    <span className="font-bold text-base text-foreground dark:text-foreground whitespace-nowrap">太卜</span>
                 </Link>
             </div>
             <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 text-center">
-                <p className="text-sm text-[#37352f]/60 dark:text-[#f5f3ee]/60">导航状态加载失败</p>
+                <p className="text-sm text-foreground-secondary dark:text-foreground-secondary">导航状态加载失败</p>
                 <button
                     type="button"
                     onClick={onRetry}
-                    className="rounded-md bg-[#37352f] px-3 py-2 text-sm text-white transition-colors hover:bg-[#2b2925] dark:bg-[#f5f3ee] dark:text-[#181715] dark:hover:bg-[#e8e4dd]"
+                    className="rounded-md bg-accent px-3 py-2 text-sm text-on-accent transition-colors hover:bg-accent-hover"
                 >
                     重试
                 </button>
@@ -140,12 +140,12 @@ function SidebarInner() {
             <aside
                 className="
                     hidden lg:flex flex-col h-screen sticky top-0 z-20
-                    bg-[#f7f6f3] dark:bg-[#181715] border-r border-gray-200 dark:border-white/10
+                    bg-background-secondary border-r border-border
                     transition-all duration-150 ease-in-out
                     w-[var(--sidebar-width)]
                 "
             >
-                <div className="flex items-center h-16 px-4 border-b border-gray-200 dark:border-white/10 justify-between transition-all duration-150 flex-shrink-0">
+                <div className="flex items-center h-16 px-4 border-b border-border justify-between transition-all duration-150 flex-shrink-0">
                     <Link href="/" className="flex items-center gap-2 min-w-0">
                         <Image
                             src="/Logo.svg"
@@ -154,18 +154,18 @@ function SidebarInner() {
                             height={28}
                             className="rounded-md flex-shrink-0 dark:invert"
                         />
-                        <span className="font-bold text-base text-[#37352f] dark:text-[#f5f3ee] whitespace-nowrap">
+                        <span className="font-bold text-base text-foreground dark:text-foreground whitespace-nowrap">
                             太卜
                         </span>
                     </Link>
                     <button
                         onClick={toggleAnnouncementCenter}
-                        className="relative p-1.5 rounded-md flex-shrink-0 transition-all duration-150 text-[#37352f]/60 dark:text-[#f5f3ee]/60 hover:bg-[#efedea] dark:hover:bg-white/8 hover:text-[#37352f] dark:hover:text-[#f5f3ee]"
+                        className="relative p-1.5 rounded-md flex-shrink-0 transition-all duration-150 text-foreground-secondary dark:text-foreground-secondary hover:bg-background-secondary dark:hover:bg-white/8 hover:text-foreground dark:hover:text-foreground"
                         aria-label="打开公告中心"
                     >
                         <Bell className="w-5 h-5" />
                         {badgeCount > 0 ? (
-                            <span className="absolute -right-0.5 -top-0.5 min-w-[14px] h-[14px] px-1 rounded-full bg-[#2383e2] text-white text-[10px] font-bold leading-none flex items-center justify-center">
+                            <span className="absolute -right-0.5 -top-0.5 min-w-[14px] h-[14px] px-1 rounded-full bg-accent text-on-accent text-[10px] font-bold leading-none flex items-center justify-center">
                                 {badgeCount > 99 ? '99+' : badgeCount}
                             </span>
                         ) : null}
@@ -173,8 +173,8 @@ function SidebarInner() {
                 </div>
 
                 <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-                    <div className="pt-4 px-2 flex-shrink-0 border-b border-gray-100/50 dark:border-white/6">
-                        <div className="px-3 text-[11px] font-semibold text-[#37352f]/50 dark:text-[#f5f3ee]/45 uppercase tracking-wider mb-1">
+                    <div className="pt-4 px-2 flex-shrink-0 border-b border-border/60">
+                        <div className="px-3 text-[11px] font-semibold text-foreground-secondary dark:text-foreground-secondary uppercase tracking-wider mb-1">
                             命理体系
                         </div>
                         <ul className="space-y-0.5">
@@ -190,12 +190,12 @@ function SidebarInner() {
                                                 flex items-center px-3 gap-2 py-1.5 rounded-md
                                                 transition-colors duration-150
                                                 ${isActive
-                                                    ? 'bg-[#e3e1db] dark:bg-white/8 text-[#37352f] dark:text-[#f5f3ee]'
-                                                    : 'text-[#37352f] dark:text-[#f5f3ee] hover:bg-[#efedea] dark:hover:bg-white/6'
+                                                    ? 'bg-accent-light text-accent'
+                                                    : 'text-foreground-secondary hover:bg-background-tertiary'
                                                 }
                                             `}
                                         >
-                                            <Icon className={`w-4.5 h-4.5 flex-shrink-0 ${isActive ? 'text-[#37352f] dark:text-[#f5f3ee]' : 'text-[#37352f]/70 dark:text-[#f5f3ee]/70'}`} />
+                                            <Icon className={`w-4.5 h-4.5 flex-shrink-0 ${isActive ? 'text-foreground dark:text-foreground' : 'text-foreground/70 dark:text-foreground/70'}`} />
                                             <div className="min-w-0 flex-1">
                                                 <div className="text-sm font-medium truncate">{item.label}</div>
                                             </div>
@@ -209,20 +209,20 @@ function SidebarInner() {
                     <nav className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-200 dark:scrollbar-thumb-white/10 px-2">
                         {chatItem && (
                             <div>
-                                <div className="sticky top-0 z-30 bg-[#f7f6f3] dark:bg-[#181715] px-3 pt-3 pb-1.5 text-[11px] font-semibold text-[#37352f]/50 dark:text-[#f5f3ee]/45 uppercase tracking-wider">
+                                <div className="sticky top-0 z-30 bg-background-secondary px-3 pt-3 pb-1.5 text-[11px] font-semibold text-foreground-secondary dark:text-foreground-secondary uppercase tracking-wider">
                                     AI
                                 </div>
                                 <ul className="space-y-0.5">
                                     <li>
                                         <Link
                                             href={chatItem.href}
-                                            className={`flex items-center px-3 gap-2 py-1.5 rounded-md transition-colors duration-150 ${pathname === chatItem.href && !activeConvId ? 'bg-[#e3e1db] dark:bg-white/8 text-[#37352f] dark:text-[#f5f3ee]' : 'text-[#37352f] dark:text-[#f5f3ee] hover:bg-[#efedea] dark:hover:bg-white/6'}`}
+                                            className={`flex items-center px-3 gap-2 py-1.5 rounded-md transition-colors duration-150 ${pathname === chatItem.href && !activeConvId ? 'bg-accent-light text-accent' : 'text-foreground-secondary hover:bg-background-tertiary'}`}
                                             onClick={(event) => {
                                                 event.preventDefault();
                                                 handleNewChat().then(() => router.push('/chat'));
                                             }}
                                         >
-                                            <chatItem.icon className="w-4.5 h-4.5 flex-shrink-0 text-[#37352f]/70 dark:text-[#f5f3ee]/70" />
+                                            <chatItem.icon className="w-4.5 h-4.5 flex-shrink-0 text-foreground/70 dark:text-foreground/70" />
                                             <span className="text-sm font-medium whitespace-nowrap">{chatItem.label}</span>
                                         </Link>
                                         {user ? <SidebarConversations /> : null}
@@ -231,7 +231,7 @@ function SidebarInner() {
                             </div>
                         )}
 
-                        {filteredToolItems.length > 0 && <div className="sticky top-0 z-20 bg-[#f7f6f3] dark:bg-[#181715] px-3 pt-3 pb-1.5 text-[11px] font-semibold text-[#37352f]/50 dark:text-[#f5f3ee]/45 uppercase tracking-wider">工具</div>}
+                        {filteredToolItems.length > 0 && <div className="sticky top-0 z-20 bg-background-secondary px-3 pt-3 pb-1.5 text-[11px] font-semibold text-foreground-secondary dark:text-foreground-secondary uppercase tracking-wider">工具</div>}
                         <ul className="space-y-0.5">
                             {filteredToolItems.map((item) => {
                                 const isActive = pathname === item.href;
@@ -245,12 +245,12 @@ function SidebarInner() {
                                                 flex items-center px-3 gap-2 py-1.5 rounded-md
                                                 transition-colors duration-150
                                                 ${isActive
-                                                    ? 'bg-[#e3e1db] dark:bg-white/8 text-[#37352f] dark:text-[#f5f3ee]'
-                                                    : 'text-[#37352f] dark:text-[#f5f3ee] hover:bg-[#efedea] dark:hover:bg-white/6'
+                                                    ? 'bg-accent-light text-accent'
+                                                    : 'text-foreground-secondary hover:bg-background-tertiary'
                                                 }
                                             `}
                                         >
-                                            <Icon className={`w-4.5 h-4.5 flex-shrink-0 ${isActive ? 'text-[#37352f] dark:text-[#f5f3ee]' : 'text-[#37352f]/70 dark:text-[#f5f3ee]/70'}`} />
+                                            <Icon className={`w-4.5 h-4.5 flex-shrink-0 ${isActive ? 'text-foreground dark:text-foreground' : 'text-foreground/70 dark:text-foreground/70'}`} />
                                             <span className="text-sm font-medium whitespace-nowrap">
                                                 {item.label}
                                             </span>
@@ -262,7 +262,7 @@ function SidebarInner() {
                     </nav>
                 </div>
 
-                <div className="border-t border-gray-200 dark:border-white/10 p-2 flex-shrink-0">
+                <div className="border-t border-border p-2 flex-shrink-0">
                     {user ? (
                         <SidebarUserCard user={user} />
                     ) : (
@@ -271,8 +271,8 @@ function SidebarInner() {
                             className="
                                 flex items-center gap-1.5 px-3 py-2 justify-center rounded-md w-full
                                 text-sm font-medium
-                                bg-[#2383e2] text-white
-                                hover:bg-[#2383e2]/90 active:bg-[#1a65b0]
+                                bg-accent text-on-accent
+                                hover:bg-accent/90 active:bg-accent-hover
                                 transition-colors duration-150
                             "
                         >

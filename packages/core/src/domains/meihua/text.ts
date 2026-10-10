@@ -1,3 +1,4 @@
+import { withRulesText } from '../../shared/calculation-rules.js';
 import {
   traditionalYaoName
 } from '../liuyao/calculate.js';
@@ -110,7 +111,8 @@ function buildStageExpressions(result: MeihuaOutput): string[] {
   return lines;
 }
 
-export function renderMeihuaCanonicalText(result: MeihuaOutput, options: MeihuaCanonicalTextOptions = {}): string {
+export const renderMeihuaCanonicalText = withRulesText(renderMeihuaCanonicalTextBase);
+function renderMeihuaCanonicalTextBase(result: MeihuaOutput, options: MeihuaCanonicalTextOptions = {}): string {
   const detailLevel = normalizeDetailLevelBinary(options.detailLevel);
   const lines: string[] = ['# 梅花易数主证据', '', '## 起卦与环境'];
   const showResolvedMode = !!(result.castMeta.resolvedMode && (

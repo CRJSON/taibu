@@ -1,5 +1,6 @@
 import type { ListedToolDefinition, RenderOptions } from './contract.js';
 import { getToolContract, listToolDefinitions } from './execute.js';
+import { validateOutput } from './output-validator.js';
 
 export type ToolContentItem = {
   type: 'text';
@@ -41,6 +42,8 @@ export function renderToolResult(
       ? tool.mergeRuntimeExtras(canonicalJSON, result)
       : canonicalJSON)
     : undefined;
+
+  if (structuredContent !== undefined) validateOutput(toolName, structuredContent, tool.outputSchema);
 
   return {
     content: [{ type: 'text', text: textContent || stringifyResult(result) }],

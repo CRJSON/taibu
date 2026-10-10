@@ -346,8 +346,8 @@ export function SidebarAnnouncementCenter({
                                     onClick={() => setActiveTab('notifications')}
                                     className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded transition-all ${
                                         activeTab === 'notifications'
-                                            ? 'bg-background shadow-sm text-[#2eaadc]'
-                                            : 'text-foreground/40 hover:text-foreground'
+                                            ? 'bg-background shadow-sm text-accent'
+                                            : 'text-foreground-secondary hover:text-foreground'
                                     }`}
                                 >
                                     <Bell className="w-3.5 h-3.5" />
@@ -358,8 +358,8 @@ export function SidebarAnnouncementCenter({
                                 onClick={() => setActiveTab('announcements')}
                                 className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded transition-all ${
                                     activeTab === 'announcements'
-                                        ? 'bg-background shadow-sm text-[#2eaadc]'
-                                        : 'text-foreground/40 hover:text-foreground'
+                                        ? 'bg-background shadow-sm text-accent'
+                                        : 'text-foreground-secondary hover:text-foreground'
                                 }`}
                             >
                                 <Megaphone className="w-3.5 h-3.5" />
@@ -370,7 +370,7 @@ export function SidebarAnnouncementCenter({
                             onClick={() => onClose({
                                 dismissAnnouncementForToday: activeTab === 'announcements',
                             })}
-                            className="p-1.5 rounded-md hover:bg-background-secondary transition-colors text-foreground/30 hover:text-foreground"
+                            className="p-1.5 rounded-md hover:bg-background-secondary transition-colors text-foreground-secondary hover:text-foreground"
                         >
                             <X className="w-5 h-5" />
                         </button>
@@ -394,12 +394,12 @@ export function SidebarAnnouncementCenter({
                         ) : notifications.length === 0 ? (
                             <div className="text-center py-20">
                                 <div className="text-foreground/10 text-sm font-bold uppercase tracking-[0.2em] mb-2">No Notifications</div>
-                                <p className="text-xs text-foreground/30">最近 3 天没有任何通知</p>
+                                <p className="text-xs text-foreground-secondary">最近 3 天没有任何通知</p>
                             </div>
                         ) : (
                             <div className="space-y-6">
                                 <div className="flex items-center justify-between gap-4">
-                                    <div className="text-xs text-foreground/40">
+                                    <div className="text-xs text-foreground-secondary">
                                         最近 3 天通知
                                     </div>
                                     <button
@@ -426,18 +426,18 @@ export function SidebarAnnouncementCenter({
                                             <div className="flex items-center justify-between gap-3 w-full">
                                                 <div className="flex items-center gap-2 min-w-0">
                                                     {!notification.is_read ? (
-                                                        <span className="w-1.5 h-1.5 rounded-full bg-[#2eaadc] flex-shrink-0" />
+                                                        <span className="w-1.5 h-1.5 rounded-full bg-accent flex-shrink-0" />
                                                     ) : (
                                                         <span className="w-1.5 h-1.5 flex-shrink-0" />
                                                     )}
-                                                    <span className="text-[10px] font-bold uppercase tracking-wider text-foreground/30 flex-shrink-0">
+                                                    <span className="text-[10px] font-bold uppercase tracking-wider text-foreground-secondary flex-shrink-0">
                                                         {notificationTypeLabels[notification.type]}
                                                     </span>
-                                                    <h3 className={`truncate text-sm font-medium ${notification.is_read ? 'text-foreground/60' : 'text-foreground'}`}>
+                                                    <h3 className={`truncate text-sm font-medium ${notification.is_read ? 'text-foreground-secondary' : 'text-foreground'}`}>
                                                         {notification.title}
                                                     </h3>
                                                 </div>
-                                                <div className="text-[11px] font-medium text-foreground/30 whitespace-nowrap flex-shrink-0">
+                                                <div className="text-[11px] font-medium text-foreground-secondary whitespace-nowrap flex-shrink-0">
                                                     {markingId === notification.id ? '处理中' : getRelativeTime(notification.created_at)}
                                                 </div>
                                             </div>
@@ -445,13 +445,13 @@ export function SidebarAnnouncementCenter({
                                             {(notification.content || notification.link) && (
                                                 <div className="flex items-end justify-between gap-4 pl-[14px] w-full">
                                                     {notification.content ? (
-                                                        <p className="text-[13px] leading-relaxed text-foreground/60 line-clamp-2 break-all text-left">
+                                                        <p className="text-[13px] leading-relaxed text-foreground-secondary line-clamp-2 break-all text-left">
                                                             {notification.content}
                                                         </p>
                                                     ) : <div />}
                                                     
                                                     {notification.link ? (
-                                                        <div className="inline-flex items-center gap-1 text-[11px] font-bold text-[#2eaadc] whitespace-nowrap flex-shrink-0">
+                                                        <div className="inline-flex items-center gap-1 text-[11px] font-bold text-accent whitespace-nowrap flex-shrink-0">
                                                             查看详情
                                                             <ExternalLink className="w-3 h-3" />
                                                         </div>
@@ -463,11 +463,11 @@ export function SidebarAnnouncementCenter({
                                     {notificationHasMore && (
                                         <div ref={notificationSentinelRef} className="py-3 flex justify-center">
                                             {notificationLoadingMore ? (
-                                                <div className="flex items-center gap-2 text-xs text-foreground/50">
+                                                <div className="flex items-center gap-2 text-xs text-foreground-secondary">
                                                     <SoundWaveLoader variant="inline" />
                                                 </div>
                                             ) : (
-                                                <div className="text-xs text-foreground/35">继续下滑加载更多通知</div>
+                                                <div className="text-xs text-foreground-secondary">继续下滑加载更多通知</div>
                                             )}
                                         </div>
                                     )}
@@ -481,7 +481,7 @@ export function SidebarAnnouncementCenter({
                     ) : announcements.length === 0 ? (
                         <div className="text-center py-20">
                             <div className="text-foreground/10 text-sm font-bold uppercase tracking-[0.2em] mb-2">No Records</div>
-                            <p className="text-xs text-foreground/30">当前没有任何公告历史</p>
+                            <p className="text-xs text-foreground-secondary">当前没有任何公告历史</p>
                         </div>
                     ) : (
                         <div className="relative pl-6">
@@ -490,14 +490,14 @@ export function SidebarAnnouncementCenter({
                             <div className="space-y-10">
                                 {announcements.map((announcement) => (
                                     <div key={announcement.id} className="relative group">
-                                        <div className="absolute left-[-20px] top-[6px] w-3 h-3 rounded-full z-10 border-2 border-background transition-colors duration-200 bg-background-tertiary group-hover:bg-[#2eaadc]" />
+                                        <div className="absolute left-[-20px] top-[6px] w-3 h-3 rounded-full z-10 border-2 border-background transition-colors duration-200 bg-background-tertiary group-hover:bg-accent" />
 
                                         <div className="space-y-2">
                                             <MarkdownContent
                                                 content={announcement.content}
                                                 className="text-[14px] leading-relaxed text-foreground/80"
                                             />
-                                            <div className="text-[11px] font-medium text-foreground/30 font-mono uppercase tracking-tight">
+                                            <div className="text-[11px] font-medium text-foreground-secondary font-mono uppercase tracking-tight">
                                                 {getRelativeTime(announcement.publishedAt)} {formatAnnouncementDate(announcement.publishedAt)}
                                             </div>
                                         </div>
@@ -506,11 +506,11 @@ export function SidebarAnnouncementCenter({
                                 {announcementHasMore && (
                                     <div ref={announcementSentinelRef} className="py-3 flex justify-center">
                                         {announcementLoadingMore ? (
-                                            <div className="flex items-center gap-2 text-xs text-foreground/50">
+                                            <div className="flex items-center gap-2 text-xs text-foreground-secondary">
                                                 <SoundWaveLoader variant="inline" />
                                             </div>
                                         ) : (
-                                            <div className="text-xs text-foreground/35">继续下滑加载更多公告</div>
+                                            <div className="text-xs text-foreground-secondary">继续下滑加载更多公告</div>
                                         )}
                                     </div>
                                 )}
@@ -523,7 +523,7 @@ export function SidebarAnnouncementCenter({
                     {activeTab === 'announcements' ? (
                         <button
                             onClick={() => onClose({ dismissAnnouncementForToday: true })}
-                            className="px-4 py-1.5 text-xs font-bold rounded-md bg-background-secondary text-foreground/60 hover:bg-background-tertiary transition-colors"
+                            className="px-4 py-1.5 text-xs font-bold rounded-md bg-background-secondary text-foreground-secondary hover:bg-background-tertiary transition-colors"
                         >
                             今日关闭
                         </button>
@@ -532,7 +532,7 @@ export function SidebarAnnouncementCenter({
                         onClick={() => onClose({
                             dismissAnnouncementForToday: activeTab === 'announcements',
                         })}
-                        className="px-4 py-1.5 text-xs font-bold rounded-md bg-background-secondary text-foreground/60 hover:bg-background-tertiary transition-colors"
+                        className="px-4 py-1.5 text-xs font-bold rounded-md bg-background-secondary text-foreground-secondary hover:bg-background-tertiary transition-colors"
                     >
                         关闭
                     </button>

@@ -4,6 +4,7 @@ import type {
 } from '../shared/json-types.js';
 
 export interface ZiweiCanonicalJSON {
+  计算规则?: Record<string, unknown>;
   基本信息: {
     性别?: string;
     阳历: string;

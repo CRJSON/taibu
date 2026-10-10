@@ -40,13 +40,13 @@ export function ProfileSummaryCard({
                     </span>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-foreground/60 lg:justify-end lg:min-w-0 lg:pl-6 lg:border-l lg:border-border/60">
+                <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-foreground-secondary lg:justify-end lg:min-w-0 lg:pl-6 lg:border-l lg:border-border/60">
                     {summaryItems.map((item) => (
                         <div key={item.label} className="flex items-center gap-1.5 min-w-0">
-                            <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-foreground/30 shrink-0">
+                            <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-foreground-secondary shrink-0">
                                 {item.label}
                             </span>
-                            {item.label === '出生地点' ? <MapPinned className="w-3.5 h-3.5 text-foreground/35 shrink-0" /> : null}
+                            {item.label === '出生地点' ? <MapPinned className="w-3.5 h-3.5 text-foreground-secondary shrink-0" /> : null}
                             <span className="font-medium text-foreground/80 truncate">{item.value}</span>
                         </div>
                     ))}

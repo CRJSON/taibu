@@ -8,6 +8,7 @@
 import type { Mention } from '@/types/mentions';
 import type { ConversationSourceType } from '@/lib/source-contracts';
 import type { InjectedSource } from '@/lib/source-tracker';
+import type { BirthTimeResolution } from '@/lib/divination/birth-time';
 import type {
     DiZhi,
     HiddenStemInfo,
@@ -50,7 +51,7 @@ export interface PillarData {
 export type HiddenStemDetail = HiddenStemInfo;
 
 /** 八字输入表单数据 */
-export interface BaziFormData {
+export interface BaziFormData extends BirthTimeResolution {
     name: string;
     gender: Gender;
     birthYear: number;
@@ -96,16 +97,20 @@ export type MessageRole = 'user' | 'assistant' | 'system';
 
 /** 消息版本（用于编辑历史） */
 export interface MessageVersion {
+    attachments?: MessageAttachment;
     userContent: string;
     mentions?: Mention[];
     aiContent: string;
     createdAt: string;
     // 编辑时被截断的后续消息（用于保留分支历史）
     subsequentMessages?: ChatMessage[];
+    aiAgent?: import('@/lib/agent/types').AgentMessageData;
+    aiMetadata?: Record<string, unknown>;
 }
 
 /** 消息附件信息（仅用户消息） */
 export interface MessageAttachment {
+    ids?: string[];
     fileName: string;              // 文件名（含后缀）
     webSearchEnabled?: boolean;    // 是否启用了网络搜索
 }
@@ -132,6 +137,7 @@ export interface ChatMessage {
     reasoningStartTime?: number;      // 推理开始时间戳（ms）（仅AI消息，流式时使用）
     reasoningDuration?: number;       // 推理用时（秒）（仅AI消息，流式结束后设置）
     metadata?: Record<string, unknown>;
+    agent?: import('@/lib/agent/types').AgentMessageData;
     // 版本支持（仅用户消息有效）
     versions?: MessageVersion[];      // 所有版本历史
     currentVersionIndex?: number;     // 当前显示的版本索引
@@ -322,7 +328,7 @@ export interface AIModelConfig {
     // 来源信息（用于统计）
     sourceKey?: string;  // 当前活跃来源 key
     transport?: AITransport; // 来源传输协议
-    sources?: AIModelSourceConfig[]; // 运行时可用来源列表（已排序）
+    sources?: AIModelSourceConfig[]; // 非空来源清单为权威配置，可含禁用项；空清单兼容旧顶层配置
 }
 
 /** 自定义Provider (BYOK) 请求配置 */
@@ -353,9 +359,11 @@ export type DifyMode = 'file' | 'web' | 'all';
 
 /** 附件选择状态（前端使用） */
 export interface AttachmentState {
+    uploaded?: PrivateAttachment[];
     file?: File;
     webSearchEnabled: boolean;
 }
+export interface PrivateAttachment { id: string; name: string; kind: 'image' | 'text'; mimeType: string; size: number; sha256: string; width?: number; height?: number }
 
 /** Dify API 响应数据 */
 export interface DifyResponse {

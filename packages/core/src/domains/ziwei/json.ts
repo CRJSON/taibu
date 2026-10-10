@@ -1,3 +1,4 @@
+import { withRulesJSON } from '../../shared/calculation-rules.js';
 import type {
   ZiweiStarJSON
 } from '../shared/json-types.js';
@@ -68,7 +69,9 @@ function buildZiweiBirthYearMutagensJSON(result: ZiweiOutput): ZiweiCanonicalJSO
   };
 }
 
-export function renderZiweiCanonicalJSON(
+export const renderZiweiCanonicalJSON = withRulesJSON(renderZiweiCanonicalJSONBase);
+
+function renderZiweiCanonicalJSONBase(
   result: ZiweiOutput,
   options: ZiweiCanonicalTextOptions = {},
 ): ZiweiCanonicalJSON {

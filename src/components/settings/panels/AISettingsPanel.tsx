@@ -7,7 +7,7 @@
  */
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Save, X } from 'lucide-react';
 import {
@@ -24,6 +24,8 @@ import { SettingsLoginRequired } from '@/components/settings/SettingsLoginRequir
 import { getCurrentUserSettings, type UserIdentityProfile, updateCurrentUserSettings } from '@/lib/user/settings';
 import { syncVisualizationPreferencesAfterSave } from '@/lib/user/ai-settings-local-sync';
 import { CHART_TEXT_DETAIL_OPTIONS, type ChartTextDetailLevel } from '@/lib/divination/detail-level';
+import { useUnsavedSettingsGuard } from '@/lib/hooks/useUnsavedSettingsGuard';
+import { AgentPreferencesPanel } from './AgentPreferencesPanel';
 
 type ExpressionStyle = 'direct' | 'gentle';
 type UserProfileDraft = UserIdentityProfile | null;
@@ -92,11 +94,18 @@ function SectionDescription({ children }: { children: ReactNode }) {
 }
 
 function FieldLabel({ children }: { children: ReactNode }) {
-  return <label className="text-xs font-medium text-foreground/60">{children}</label>;
+  return <label className="text-xs font-medium text-foreground-secondary">{children}</label>;
 }
 
 export default function AISettingsPanel() {
+  const { user } = useSessionSafe();
+  return <><AccountAISettingsPanel key={user?.id ?? 'visitor'} />{user && <AgentPreferencesPanel key={`agent:${user.id}`} userId={user.id} />}</>;
+}
+
+function AccountAISettingsPanel() {
   const { user, loading: sessionLoading } = useSessionSafe();
+  const userId = user?.id;
+  const lifecycle = useRef<AbortController | null>(null);
   const { showToast } = useToast();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -125,15 +134,18 @@ export default function AISettingsPanel() {
   };
 
   useEffect(() => {
+    const controller = new AbortController();
+    lifecycle.current = controller;
     const init = async () => {
       if (sessionLoading) return;
-      if (!user) {
+      if (!userId) {
         setSavedSnapshot(null);
         setLoading(false);
         return;
       }
 
-      const { settings, error: loadError } = await getCurrentUserSettings();
+      const { settings, error: loadError } = await getCurrentUserSettings({ expectedUserId: userId, signal: controller.signal });
+      if (controller.signal.aborted) return;
       if (loadError) {
         setSavedSnapshot(null);
         setError(loadError.message || '加载个性化设置失败');
@@ -181,8 +193,14 @@ export default function AISettingsPanel() {
       setLoading(false);
     };
 
-    void init();
-  }, [sessionLoading, user]);
+    void init().catch(() => {
+      if (controller.signal.aborted) return;
+      setError('加载个性化设置失败');
+      setSettingsLoadFailed(true);
+      setLoading(false);
+    });
+    return () => controller.abort();
+  }, [sessionLoading, userId]);
 
   const allDimensions = useMemo(
     () => [...CORE_DIMENSIONS, ...ADVANCED_DIMENSIONS],
@@ -200,6 +218,7 @@ export default function AISettingsPanel() {
   const isDirty = useMemo(() => (
     savedSnapshot ? JSON.stringify(draftSnapshot) !== JSON.stringify(savedSnapshot) : false
   ), [draftSnapshot, savedSnapshot]);
+  useUnsavedSettingsGuard(isDirty);
 
   const handleToggleDimension = (key: FortuneDimensionKey) => {
     const alreadySelected = selectedDimensions.includes(key);
@@ -222,7 +241,8 @@ export default function AISettingsPanel() {
   };
 
   const handleSave = async () => {
-    if (!user || settingsLoadFailed) return;
+    const controller = lifecycle.current;
+    if (!userId || settingsLoadFailed || saving || loading || !controller || controller.signal.aborted) return;
 
     setError(null);
     setSaving(true);
@@ -240,7 +260,8 @@ export default function AISettingsPanel() {
         dayunDisplayCount: nextSavedSnapshot.dayunPeriods,
         chartStyle: nextSavedSnapshot.chartStyle,
       },
-    });
+    }, undefined, { expectedUserId: userId, signal: controller.signal }).catch(() => null);
+    if (controller.signal.aborted) return;
 
     setSaving(false);
 
@@ -260,7 +281,7 @@ export default function AISettingsPanel() {
       return;
     }
 
-    applyDraftSnapshot(nextSavedSnapshot);
+    // Advance the saved baseline only; edits made during the request remain dirty.
     setSavedSnapshot(nextSavedSnapshot);
     showToast('success', '个性化设置已保存');
   };
@@ -301,7 +322,7 @@ export default function AISettingsPanel() {
                 const identity = event.target.value.slice(0, USER_PROFILE_LIMIT).trim();
                 setUserProfile(identity ? { identity } : null);
               }}
-              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none transition-colors duration-150 focus:ring-2 focus:ring-blue-500/30"
+              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none transition-colors duration-150 focus:ring-2 focus:ring-accent/30"
               placeholder="例如：创业者"
             />
           </div>
@@ -311,7 +332,7 @@ export default function AISettingsPanel() {
             <select
               value={expressionStyle}
               onChange={(event) => setExpressionStyle(event.target.value as ExpressionStyle)}
-              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none transition-colors duration-150 focus:ring-2 focus:ring-blue-500/30"
+              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none transition-colors duration-150 focus:ring-2 focus:ring-accent/30"
             >
               {EXPRESSION_STYLE_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>{option.label}</option>
@@ -338,14 +359,14 @@ export default function AISettingsPanel() {
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-3">
               <FieldLabel>自定义指令</FieldLabel>
-              <span className="text-xs text-foreground/50">
+              <span className="text-xs text-foreground-secondary">
                 {customInstructions.length}/{CUSTOM_INSTRUCTIONS_LIMIT}
               </span>
             </div>
             <textarea
               value={customInstructions}
               onChange={(event) => setCustomInstructions(event.target.value.slice(0, CUSTOM_INSTRUCTIONS_LIMIT))}
-              className="min-h-[100px] w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none transition-colors duration-150 focus:ring-2 focus:ring-blue-500/30"
+              className="min-h-[100px] w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none transition-colors duration-150 focus:ring-2 focus:ring-accent/30"
               placeholder="例如：先给结论，再给依据；避免空话和术语堆叠。"
             />
           </div>
@@ -369,15 +390,15 @@ export default function AISettingsPanel() {
                     onClick={() => handleToggleDimension(dimension.key)}
                     className={`flex items-center justify-between rounded-md border px-3 py-2 text-sm transition-colors duration-150 ${
                       active
-                        ? 'border-[#cfe3f7] bg-blue-50 text-[#2383e2]'
-                        : 'border-border bg-background text-foreground-secondary hover:bg-[#efedea] dark:hover:bg-background-secondary'
+                        ? 'border-[#cfe3f7] bg-blue-50 text-accent'
+                        : 'border-border bg-background text-foreground-secondary hover:bg-background-secondary dark:hover:bg-background-secondary'
                     }`}
                   >
                     <span className="flex items-center gap-2">
                       <span>{dimension.icon}</span>
                       <span>{dimension.label}</span>
                     </span>
-                    {/* <span className="text-xs text-foreground/40">{active ? '已选' : '未选'}</span> */}
+                    {/* <span className="text-xs text-foreground-secondary">{active ? '已选' : '未选'}</span> */}
                   </button>
                 );
               })}
@@ -390,7 +411,7 @@ export default function AISettingsPanel() {
               <select
                 value={dayunPeriods}
                 onChange={(event) => setDayunPeriods(Number(event.target.value))}
-                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none transition-colors duration-150 focus:ring-2 focus:ring-blue-500/30"
+                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none transition-colors duration-150 focus:ring-2 focus:ring-accent/30"
               >
                 {[3, 4, 5, 6, 7, 8, 9, 10].map((count) => (
                   <option key={count} value={count}>{count} 期</option>
@@ -403,7 +424,7 @@ export default function AISettingsPanel() {
               <select
                 value={chartStyle}
                 onChange={(event) => setChartStyle(event.target.value as VisualizationChartStyle)}
-                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none transition-colors duration-150 focus:ring-2 focus:ring-blue-500/30"
+                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none transition-colors duration-150 focus:ring-2 focus:ring-accent/30"
               >
                 {CHART_STYLE_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>{option.label}</option>
@@ -424,7 +445,7 @@ export default function AISettingsPanel() {
                 type="button"
                 onClick={handleCancel}
                 disabled={saving}
-                className="inline-flex items-center justify-center gap-2 rounded-md border border-border bg-transparent px-3 py-2 text-sm font-medium text-foreground-secondary transition-colors duration-150 hover:bg-[#efedea] hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-background-secondary"
+                className="inline-flex items-center justify-center gap-2 rounded-md border border-border bg-transparent px-3 py-2 text-sm font-medium text-foreground-secondary transition-colors duration-150 hover:bg-background-secondary hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-background-secondary"
               >
                 <X className="h-4 w-4" />
                 取消
@@ -433,7 +454,7 @@ export default function AISettingsPanel() {
                 type="button"
                 onClick={handleSave}
                 disabled={saving || settingsLoadFailed}
-                className="inline-flex items-center justify-center gap-2 rounded-md border border-[#2383e2] bg-[#2383e2] px-3 py-2 text-sm font-medium text-white transition-colors duration-150 hover:bg-[#1d74c9] hover:border-[#1d74c9] disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex items-center justify-center gap-2 rounded-md border border-accent bg-accent px-3 py-2 text-sm font-medium text-on-accent transition-colors duration-150 hover:bg-accent-hover hover:border-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {saving ? <SoundWaveLoader variant="inline" /> : <Save className="h-4 w-4" />}
                 保存

@@ -19,6 +19,7 @@ import {
     setCustomProvider,
 } from '@/lib/chat/custom-provider';
 import { useByokModelCatalog } from '@/lib/hooks/useByokModelCatalog';
+import { useUnsavedSettingsGuard } from '@/lib/hooks/useUnsavedSettingsGuard';
 import { validateCustomProviderInput } from '@/lib/ai/custom-provider-url';
 
 type CustomProviderDraft = {
@@ -85,9 +86,9 @@ function maskSecret(value?: string | null) {
 
 function SummaryField({ label, value }: { label: string; value: string }) {
     return (
-        <div className="min-w-0 rounded-xl border border-[#e7e2d9] bg-white/85 px-3 py-2">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#37352f]/35">{label}</p>
-            <p className="mt-1 break-all text-[12px] leading-5 text-[#37352f]" title={value}>{value}</p>
+        <div className="min-w-0 rounded-xl border border-border bg-surface/85 px-3 py-2">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-foreground-secondary">{label}</p>
+            <p className="mt-1 break-all text-[12px] leading-5 text-foreground-secondary" title={value}>{value}</p>
         </div>
     );
 }
@@ -111,13 +112,13 @@ function SelectField({
 }) {
     return (
         <div className="space-y-1">
-            <label className="text-[11px] font-bold text-[#37352f]/40 uppercase tracking-wider">{label}</label>
+            <label className="text-[11px] font-bold text-foreground-secondary uppercase tracking-wider">{label}</label>
             <div className="relative">
                 <select
                     value={value}
                     onChange={(event) => onChange(event.target.value)}
                     disabled={disabled}
-                    className="w-full appearance-none rounded-xl border border-[#e7e2d9] bg-white px-3 py-2 pr-10 text-[13px] outline-none transition-all duration-150 focus:border-[#cdbb8b] focus:bg-white disabled:cursor-not-allowed disabled:bg-[#f7f3eb] disabled:text-[#37352f]/35"
+                    className="w-full appearance-none rounded-xl border border-border bg-surface px-3 py-2 pr-10 text-[13px] outline-none transition-all duration-150 focus:border-accent focus:bg-surface disabled:cursor-not-allowed disabled:bg-background-secondary disabled:text-foreground-secondary"
                 >
                     <option value="">{placeholder}</option>
                     {options.map((option) => (
@@ -126,7 +127,7 @@ function SelectField({
                         </option>
                     ))}
                 </select>
-                <ChevronDown className="pointer-events-none absolute inset-y-0 right-3 my-auto h-4 w-4 text-[#37352f]/35" />
+                <ChevronDown className="pointer-events-none absolute inset-y-0 right-3 my-auto h-4 w-4 text-foreground-secondary" />
             </div>
             <InputError message={error} />
         </div>
@@ -219,7 +220,7 @@ export function CustomProviderPanel({
     onClose,
     onChange,
     title = '自定义模型',
-    description = 'Key不会保存到服务器，不消耗本站积分，关闭页面自动失效',
+    description = '普通对话仅当前标签页使用；Agent任务会临时加密保存Key，结束后清除。均不消耗本站积分。',
     showByokBadge = true,
 }: CustomProviderPanelProps) {
     const { showToast } = useToast();
@@ -234,6 +235,7 @@ export function CustomProviderPanel({
     const [isEditing, setIsEditing] = useState(() => !getCustomProvider());
     const [showApiKey, setShowApiKey] = useState(false);
     const [submitted, setSubmitted] = useState(false);
+    useUnsavedSettingsGuard(isEditing && JSON.stringify(draft) !== JSON.stringify(draftFromConfig(activeConfig)));
 
     useEffect(() => {
         if (typeof window === 'undefined') return;
@@ -402,25 +404,25 @@ export function CustomProviderPanel({
 
     return (
         <div className={embedded
-            ? 'rounded-xl border border-[#e7e2d9] bg-[#fcfbf8] px-4 py-4 shadow-[0_1px_2px_rgba(0,0,0,0.06)]'
-            : 'rounded-xl border border-[#e7e2d9] bg-[#fcfbf8] p-4 shadow-[0_10px_30px_rgba(34,30,20,0.12)] md:w-[392px]'
+            ? 'rounded-xl border border-border bg-surface px-4 py-4 shadow-[0_1px_2px_rgba(0,0,0,0.06)]'
+            : 'rounded-xl border border-border bg-surface p-4 shadow-[0_10px_30px_rgba(34,30,20,0.12)] md:w-[392px]'
         }>
             <div className="space-y-3.5">
                 <div className="space-y-2">
                     <div className="flex items-start justify-between gap-3">
                         <div className="space-y-1">
                             <div className="flex flex-wrap items-center gap-2">
-                                <h3 id={embedded ? undefined : 'custom-provider-panel-title'} className="text-[14px] font-semibold text-[#37352f]">
+                                <h3 id={embedded ? undefined : 'custom-provider-panel-title'} className="text-[14px] font-semibold text-foreground-secondary">
                                     {title}
                                 </h3>
                                 {showByokBadge ? (
-                                    <span className="rounded-full border border-[#e8dcc0] bg-[#f4efe2] px-2 py-0.5 text-[10px] font-semibold tracking-[0.08em] text-[#8a6b00]">
+                                    <span className="rounded-full border border-border bg-warning/10 px-2 py-0.5 text-[10px] font-semibold tracking-[0.08em] text-warning">
                                         BYOK
                                     </span>
                                 ) : null}
                             </div>
                             {description ? (
-                                <p className="text-[12px] leading-tight text-[#37352f]/60">
+                                <p className="text-[12px] leading-tight text-foreground-secondary">
                                     {description}
                                 </p>
                             ) : null}
@@ -430,25 +432,25 @@ export function CustomProviderPanel({
 
                 {activeConfig && !isEditing ? (
                     <div className="space-y-2.5">
-                        <div className="rounded-xl border border-[#e7e2d9] bg-[#f7f3eb] p-3">
+                        <div className="rounded-xl border border-border bg-background-secondary p-3">
                             <div className="grid grid-cols-2 gap-2">
                                 <SummaryField label="PROVIDER" value={activeProviderLabel} />
                                 <SummaryField label="URL" value={activeUrl} />
                                 <SummaryField label="MODEL" value={activeConfig.modelId} />
-                                <div className="min-w-0 rounded-xl border border-[#e7e2d9] bg-white/85 px-3 py-2">
+                                <div className="min-w-0 rounded-xl border border-border bg-surface/85 px-3 py-2">
                                     <div className="flex items-center justify-between gap-2">
-                                        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#37352f]/35">KEY</p>
+                                        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-foreground-secondary">KEY</p>
                                         <button
                                             type="button"
                                             onClick={() => setShowApiKey((prev) => !prev)}
-                                            className="flex h-5 w-5 items-center justify-center rounded-md text-[#37352f]/35 transition-colors duration-150 hover:bg-[#f3f0ea] hover:text-[#37352f]"
+                                            className="flex h-5 w-5 items-center justify-center rounded-md text-foreground-secondary transition-colors duration-150 hover:bg-background-secondary hover:text-foreground-secondary"
                                             title={showApiKey ? '隐藏 API Key' : '查看 API Key'}
                                         >
                                             {showApiKey ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
                                         </button>
                                     </div>
                                     <p
-                                        className="mt-1 break-all text-[12px] leading-5 text-[#37352f]"
+                                        className="mt-1 break-all text-[12px] leading-5 text-foreground-secondary"
                                         title={showApiKey ? activeConfig.apiKey : maskSecret(activeConfig.apiKey)}
                                     >
                                         {showApiKey ? activeConfig.apiKey : maskSecret(activeConfig.apiKey)}
@@ -464,7 +466,7 @@ export function CustomProviderPanel({
                             <button
                                 type="button"
                                 onClick={handleStartEdit}
-                                className="flex h-9 flex-1 items-center justify-center gap-1.5 rounded-xl bg-[#37352f] text-[12px] font-medium text-white transition-colors duration-150 hover:bg-[#2b2925]"
+                                className="flex h-9 flex-1 items-center justify-center gap-1.5 rounded-xl bg-accent text-[12px] font-medium text-on-accent transition-colors duration-150 hover:bg-accent-hover"
                             >
                                 <PencilLine className="h-3.5 w-3.5" />
                                 编辑
@@ -472,7 +474,7 @@ export function CustomProviderPanel({
                             <button
                                 type="button"
                                 onClick={handleDeactivate}
-                                className="flex h-9 items-center justify-center rounded-xl border border-[#e7e2d9] bg-white px-3 text-[12px] font-medium text-[#37352f]/65 transition-colors duration-150 hover:bg-[#f3f0ea] hover:text-[#37352f]"
+                                className="flex h-9 items-center justify-center rounded-xl border border-border bg-surface px-3 text-[12px] font-medium text-foreground-secondary transition-colors duration-150 hover:bg-background-secondary hover:text-foreground-secondary"
                             >
                                 停用
                             </button>
@@ -503,20 +505,20 @@ export function CustomProviderPanel({
 
                             <div className={isOtherProvider ? '' : 'md:col-span-2'}>
                                 <div className="space-y-1">
-                                    <label className="text-[11px] font-bold text-[#37352f]/40 uppercase tracking-wider">API Key</label>
+                                    <label className="text-[11px] font-bold text-foreground-secondary uppercase tracking-wider">API Key</label>
                                     <div className="relative">
                                         <input
                                             value={draft.apiKey}
                                             onChange={(event) => handleFieldChange('apiKey', event.target.value)}
                                             type={showApiKey ? 'text' : 'password'}
-                                            className="w-full rounded-xl border border-[#e7e2d9] bg-white px-3 py-2 pr-10 text-[13px] outline-none transition-all duration-150 focus:border-[#cdbb8b] focus:bg-white"
+                                            className="w-full rounded-xl border border-border bg-surface px-3 py-2 pr-10 text-[13px] outline-none transition-all duration-150 focus:border-accent focus:bg-surface"
                                             placeholder="sk-..."
                                             autoComplete="off"
                                         />
                                         <button
                                             type="button"
                                             onClick={() => setShowApiKey((prev) => !prev)}
-                                            className="absolute inset-y-0 right-0 flex items-center px-3 text-[#37352f]/30 hover:text-[#37352f]"
+                                            className="absolute inset-y-0 right-0 flex items-center px-3 text-foreground-secondary hover:text-foreground-secondary"
                                         >
                                             {showApiKey ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
                                         </button>
@@ -528,11 +530,11 @@ export function CustomProviderPanel({
                             {isOtherProvider ? (
                                 <>
                                     <div className="space-y-1">
-                                        <label className="text-[11px] font-bold text-[#37352f]/40 uppercase tracking-wider">API URL</label>
+                                        <label className="text-[11px] font-bold text-foreground-secondary uppercase tracking-wider">API URL</label>
                                         <input
                                             value={draft.apiUrl}
                                             onChange={(event) => handleFieldChange('apiUrl', event.target.value)}
-                                            className="w-full rounded-xl border border-[#e7e2d9] bg-white px-3 py-2 text-[13px] outline-none transition-all duration-150 focus:border-[#cdbb8b] focus:bg-white"
+                                            className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-[13px] outline-none transition-all duration-150 focus:border-accent focus:bg-surface"
                                             placeholder="https://api.example.com/v1"
                                             autoComplete="off"
                                         />
@@ -540,11 +542,11 @@ export function CustomProviderPanel({
                                     </div>
 
                                     <div className="space-y-1">
-                                        <label className="text-[11px] font-bold text-[#37352f]/40 uppercase tracking-wider">Model ID</label>
+                                        <label className="text-[11px] font-bold text-foreground-secondary uppercase tracking-wider">Model ID</label>
                                         <input
                                             value={draft.modelId}
                                             onChange={(event) => handleFieldChange('modelId', event.target.value)}
-                                            className="w-full rounded-xl border border-[#e7e2d9] bg-white px-3 py-2 text-[13px] outline-none transition-all duration-150 focus:border-[#cdbb8b] focus:bg-white"
+                                            className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-[13px] outline-none transition-all duration-150 focus:border-accent focus:bg-surface"
                                             placeholder="gpt-4.1-mini"
                                             autoComplete="off"
                                         />
@@ -552,11 +554,11 @@ export function CustomProviderPanel({
                                     </div>
 
                                     <div className="space-y-1 md:col-span-2">
-                                        <label className="text-[11px] font-bold text-[#37352f]/40 uppercase tracking-wider">显示名称</label>
+                                        <label className="text-[11px] font-bold text-foreground-secondary uppercase tracking-wider">显示名称</label>
                                         <input
                                             value={draft.modelName}
                                             onChange={(event) => handleFieldChange('modelName', event.target.value)}
-                                            className="w-full rounded-xl border border-[#e7e2d9] bg-white px-3 py-2 text-[13px] outline-none transition-all duration-150 focus:border-[#cdbb8b] focus:bg-white"
+                                            className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-[13px] outline-none transition-all duration-150 focus:border-accent focus:bg-surface"
                                             placeholder="显示名称 (可选)"
                                             autoComplete="off"
                                         />
@@ -564,11 +566,11 @@ export function CustomProviderPanel({
                                 </>
                             ) : (
                                 <div className="space-y-1 md:col-span-2">
-                                    <label className="text-[11px] font-bold text-[#37352f]/40 uppercase tracking-wider">Model ID</label>
+                                    <label className="text-[11px] font-bold text-foreground-secondary uppercase tracking-wider">Model ID</label>
                                     <input
                                         value={draft.modelId}
                                         onChange={(event) => handleManualModelIdChange(event.target.value)}
-                                        className="w-full rounded-xl border border-[#e7e2d9] bg-white px-3 py-2 text-[13px] outline-none transition-all duration-150 focus:border-[#cdbb8b] focus:bg-white"
+                                        className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-[13px] outline-none transition-all duration-150 focus:border-accent focus:bg-surface"
                                         placeholder={selectedProvider?.models[0]?.id ?? '输入自定义 Model ID'}
                                         autoComplete="off"
                                     />
@@ -581,7 +583,7 @@ export function CustomProviderPanel({
                             <button
                                 type="button"
                                 onClick={handleActivate}
-                                className="flex h-9 flex-1 items-center justify-center rounded-xl bg-[#37352f] text-[12px] font-semibold text-white transition-colors duration-150 hover:bg-[#2b2925]"
+                                className="flex h-9 flex-1 items-center justify-center rounded-xl bg-accent text-[12px] font-semibold text-on-accent transition-colors duration-150 hover:bg-accent-hover"
                             >
                                 {activeConfig ? '保存并启用' : '启用服务'}
                             </button>
@@ -589,7 +591,7 @@ export function CustomProviderPanel({
                                 <button
                                     type="button"
                                     onClick={handleCancelEdit}
-                                    className="flex h-9 items-center justify-center rounded-xl border border-[#e7e2d9] bg-white px-3 text-[12px] font-medium text-[#37352f]/55 transition-colors duration-150 hover:bg-[#f3f0ea] hover:text-[#37352f]"
+                                    className="flex h-9 items-center justify-center rounded-xl border border-border bg-surface px-3 text-[12px] font-medium text-foreground-secondary transition-colors duration-150 hover:bg-background-secondary hover:text-foreground-secondary"
                                 >
                                     取消
                                 </button>
@@ -597,7 +599,7 @@ export function CustomProviderPanel({
                                 <button
                                     type="button"
                                     onClick={handleReactivateLastConfig}
-                                    className="flex h-9 flex-1 items-center justify-center rounded-xl border border-[#e7e2d9] bg-white px-3 text-[12px] font-medium text-[#37352f]/65 transition-colors duration-150 hover:bg-[#f3f0ea] hover:text-[#37352f]"
+                                    className="flex h-9 flex-1 items-center justify-center rounded-xl border border-border bg-surface px-3 text-[12px] font-medium text-foreground-secondary transition-colors duration-150 hover:bg-background-secondary hover:text-foreground-secondary"
                                 >
                                     上次启用
                                 </button>

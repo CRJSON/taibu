@@ -95,19 +95,9 @@ ${conflictsSummary}
             : {
                 type: input.result.type,
                 person1_name: input.result.person1.name,
-                person1_birth: {
-                    year: input.result.person1.year,
-                    month: input.result.person1.month,
-                    day: input.result.person1.day,
-                    hour: input.result.person1.hour,
-                },
+                person1_birth: input.result.person1,
                 person2_name: input.result.person2.name,
-                person2_birth: {
-                    year: input.result.person2.year,
-                    month: input.result.person2.month,
-                    day: input.result.person2.day,
-                    hour: input.result.person2.hour,
-                },
+                person2_birth: input.result.person2,
                 compatibility_score: input.result.overallScore,
                 result_data: input.result,
             },
@@ -138,9 +128,9 @@ export async function POST(request: NextRequest) {
                         user_id: userId,
                         type: result.type,
                         person1_name: result.person1.name,
-                        person1_birth: { year: result.person1.year, month: result.person1.month, day: result.person1.day, hour: result.person1.hour },
+                        person1_birth: result.person1,
                         person2_name: result.person2.name,
-                        person2_birth: { year: result.person2.year, month: result.person2.month, day: result.person2.day, hour: result.person2.hour },
+                        person2_birth: result.person2,
                         compatibility_score: result.overallScore,
                         result_data: result,
                     };

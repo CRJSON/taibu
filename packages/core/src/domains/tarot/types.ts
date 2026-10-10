@@ -37,6 +37,10 @@ export interface TarotInput {
   spreadType?: string;
   question?: string;
   allowReversed?: boolean;
+  reversedProbability?: number;
+  deck?: 'all' | 'major' | 'minor';
+  customPositions?: string[];
+  referenceYear?: number;
   seed?: string;
   seedScope?: string;
   birthYear?: number;
@@ -68,4 +72,5 @@ export interface TarotOutput {
   birthDate?: string;
   cards: TarotCardResult[];
   numerology?: TarotNumerology;
+  drawOptions?: { deck: 'all' | 'major' | 'minor'; reversedProbability: number; referenceYear: number; ruleVersion?: string; };
 }

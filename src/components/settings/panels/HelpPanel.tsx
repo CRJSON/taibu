@@ -43,7 +43,7 @@ export default function HelpPanel() {
   return (
     <div className="space-y-8">
       <section className="space-y-3">
-        <h2 className="px-1 text-xs font-semibold uppercase tracking-wider text-foreground/50">常见问题</h2>
+        <h2 className="px-1 text-xs font-semibold uppercase tracking-wider text-foreground-secondary">常见问题</h2>
         <div className="overflow-hidden rounded-md border border-border bg-background divide-y divide-border/60">
           {FAQ_LIST.map((faq, index) => {
             const expanded = expandedFAQ === index;
@@ -52,9 +52,9 @@ export default function HelpPanel() {
                 <button
                   type="button"
                   onClick={() => setExpandedFAQ(expanded ? null : index)}
-                  className="flex w-full items-center gap-3 px-4 py-4 text-left transition-colors duration-150 hover:bg-[#efedea] dark:hover:bg-background-secondary"
+                  className="flex w-full items-center gap-3 px-4 py-4 text-left transition-colors duration-150 hover:bg-background-secondary dark:hover:bg-background-secondary"
                 >
-                  <ChevronDown className={`h-4 w-4 text-foreground/30 transition-transform duration-150 ${expanded ? 'rotate-0' : '-rotate-90'}`} />
+                  <ChevronDown className={`h-4 w-4 text-foreground-secondary transition-transform duration-150 ${expanded ? 'rotate-0' : '-rotate-90'}`} />
                   <span className={`text-sm font-medium ${expanded ? 'text-accent' : 'text-foreground'}`}>
                     {faq.question}
                   </span>
@@ -70,7 +70,7 @@ export default function HelpPanel() {
       </section>
 
       <section className="space-y-3">
-        <h2 className="px-1 text-xs font-semibold uppercase tracking-wider text-foreground/50">联系我们</h2>
+        <h2 className="px-1 text-xs font-semibold uppercase tracking-wider text-foreground-secondary">联系我们</h2>
         <div className="flex flex-col items-start justify-between gap-4 rounded-md border border-border bg-background p-4">
           <div className="space-y-1">
             <h3 className="text-sm font-medium text-foreground">需要更多帮助？</h3>
@@ -95,7 +95,7 @@ export default function HelpPanel() {
       </section>
 
       <footer className="border-t border-border/60 pt-4">
-        <div className="flex items-center justify-center gap-6 text-xs text-foreground/40">
+        <div className="flex items-center justify-center gap-6 text-xs text-foreground-secondary">
           <Link href="/privacy" className="hover:text-foreground hover:underline underline-offset-4">隐私政策</Link>
           <span className="h-1 w-1 rounded-full bg-background-secondary" />
           <Link href="/terms" className="hover:text-foreground hover:underline underline-offset-4">服务条款</Link>

@@ -20,6 +20,7 @@ import { normalizeBirthDateForCalendarSwitch, parseNumberParam } from '@/lib/div
 import { buildPlaceResolutionFallbackMessage, parseLongitude } from '@/lib/divination/place-resolution';
 import { useToast } from '@/components/ui/Toast';
 import { clampDay } from '@/lib/date-utils';
+import { readBirthTimeOptions, writeBirthTimeOptions } from '@/lib/divination/birth-time';
 
 const getInitialFormData = (searchParams: { get: (key: string) => string | null }): BaziFormData => {
     const name = searchParams.get('name');
@@ -35,7 +36,7 @@ const getInitialFormData = (searchParams: { get: (key: string) => string | null 
     const longitude = searchParams.get('longitude');
 
     if (!name && !year) {
-        return { ...DEFAULT_BAZI_FORM_DATA };
+        return { ...DEFAULT_BAZI_FORM_DATA, ...readBirthTimeOptions(searchParams) };
     }
 
     const isUnknownTime = hour === '-1';
@@ -58,6 +59,7 @@ const getInitialFormData = (searchParams: { get: (key: string) => string | null 
         isLeapMonth: isLeapRequested && leapMonthOfYear === birthMonth,
         birthPlace: place || '',
         longitude: parseLongitude(longitude),
+        ...readBirthTimeOptions(searchParams),
     };
 };
 
@@ -226,6 +228,7 @@ function BaziPageContent() {
             }
 
             const params = new URLSearchParams();
+            writeBirthTimeOptions(params, formData);
             const chartId = searchParams.get('chart');
 
             // 四柱模式
@@ -281,6 +284,7 @@ function BaziPageContent() {
             router.push(`/bazi/result?${params.toString()}`);
         } catch (error) {
             console.error('提交失败:', error);
+            showToast('error', error instanceof Error ? error.message : '提交失败');
             setIsSubmitting(false);
         }
     };
@@ -313,7 +317,7 @@ function BaziPageContent() {
                 {/* 页面标题 - 移动端隐藏（顶栏已显示） */}
                 <div className="hidden md:block text-center mb-8">
                     <h1 className="text-2xl lg:text-3xl font-bold text-foreground">八字排盘</h1>
-                    <p className="text-foreground/60 mt-2">
+                    <p className="text-foreground-secondary mt-2">
                         请填写您的出生信息，我们将为您生成八字命盘
                     </p>
                 </div>

@@ -65,7 +65,7 @@ export function InterpretationModeToggle({
                             onClick={() => onModeChange(m)}
                             className={`flex items-center gap-1 px-2 py-1 text-xs rounded-md transition-all ${
                                 isActive
-                                    ? 'bg-accent text-white shadow-sm'
+                                    ? 'bg-accent text-on-accent shadow-sm'
                                     : 'text-foreground-secondary hover:text-foreground'
                             }`}
                             title={config.description}
@@ -94,7 +94,7 @@ export function InterpretationModeToggle({
                             onClick={() => onModeChange(m)}
                             className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all ${
                                 isActive
-                                    ? 'bg-accent text-white shadow-md'
+                                    ? 'bg-accent text-on-accent shadow-md'
                                     : 'bg-background-secondary text-foreground-secondary hover:bg-background-tertiary hover:text-foreground'
                             }`}
                         >

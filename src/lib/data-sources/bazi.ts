@@ -1,10 +1,12 @@
 import { getSystemAdminClient } from '@/lib/api-utils';
-import type { DataSourceProvider, DataSourceQueryContext, DataSourceSummary } from '@/lib/data-sources/types';
+import type { DataSourceSummary } from '@/lib/data-sources/types';
+import type { DataSourceProvider, DataSourceQueryContext } from '@/lib/data-sources/provider.server';
 import { type BaziCaseProfile } from '@/lib/bazi-case-profile';
 import { formatBaziPromptText } from '@/lib/bazi-prompt';
 import { getBaziCaseProfileByChartId } from '@/lib/server/bazi-case-profile';
+import type { BirthTimeResolution } from '@/lib/divination/birth-time';
 
-type BaziRow = {
+type BaziRow = BirthTimeResolution & {
     id: string;
     user_id: string | null;
     name: string;
@@ -72,6 +74,8 @@ export const baziProvider: DataSourceProvider<BaziRow> = {
             longitude: chart.longitude ?? undefined,
             calendarType: (chart.calendar_type as 'solar' | 'lunar' | undefined) || 'solar',
             isLeapMonth: chart.is_leap_month ?? undefined,
+            timezone: chart.timezone,
+            disambiguation: chart.disambiguation,
         }, chart.caseProfile || null, ctx?.chartPromptDetailLevel);
     },
 

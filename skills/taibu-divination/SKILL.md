@@ -36,14 +36,14 @@ echo '{"gender":"male","birthYear":1990,"birthMonth":5,"birthDay":20,"birthHour"
 | --- | --- | --- | --- | --- |
 | `astrology` | 西方占星命盘 | 根据出生信息计算本命盘与流运盘，输出基础坐标、命盘锚点、本命主星与流运触发 | [references/astrology.md](references/astrology.md) | [interpretation/astrology.md](interpretation/astrology.md) |
 | `bazi` | 八字命盘 | 根据出生信息计算四柱命盘，输出天干地支、十神、藏干、神煞、关系格局等信息 | [references/bazi.md](references/bazi.md) | [interpretation/bazi.md](interpretation/bazi.md) |
-| `bazi_pillars_resolve` | 四柱反推 | 根据年柱、月柱、日柱、时柱反推出生时间候选列表 | [references/bazi_pillars_resolve.md](references/bazi_pillars_resolve.md) | [interpretation/bazi.md](interpretation/bazi.md) |
+| `bazi_pillars_resolve` | 四柱反推 | 根据四柱搜索分钟级出生时间区间，默认1900-2100，单次最多1200年 | [references/bazi_pillars_resolve.md](references/bazi_pillars_resolve.md) | [interpretation/bazi.md](interpretation/bazi.md) |
 | `ziwei` | 紫微斗数命盘 | 根据出生信息计算紫微命盘，输出十二宫位、星曜分布、四化、大限等信息 | [references/ziwei.md](references/ziwei.md) | [interpretation/ziwei.md](interpretation/ziwei.md) |
 | `ziwei_horoscope` | 紫微斗数运限 | 根据出生信息与目标日期计算大限、小限、流年、流月、流日、流时等运限信息 | [references/ziwei_horoscope.md](references/ziwei_horoscope.md) | [interpretation/ziwei.md](interpretation/ziwei.md) |
 | `ziwei_flying_star` | 紫微斗数飞星 | 分析命盘中的四化飞布、自化、落宫与三方四正关系 | [references/ziwei_flying_star.md](references/ziwei_flying_star.md) | [interpretation/ziwei.md](interpretation/ziwei.md) |
 | `liuyao` | 六爻排卦 | 根据问题与起卦信息排出六爻盘面，输出卦象、爻位、用神体系、关系判断与时机提示 | [references/liuyao.md](references/liuyao.md) | [interpretation/liuyao.md](interpretation/liuyao.md) |
 | `meihua` | 梅花易数起卦 | 根据时间、字占、物数、报数等方式起卦，输出起卦信息、卦盘与体用推演 | [references/meihua.md](references/meihua.md) | [interpretation/meihua.md](interpretation/meihua.md) |
 | `tarot` | 塔罗抽牌 | 根据问题与牌阵抽取塔罗牌，输出牌面结果及占卜参考信息 | [references/tarot.md](references/tarot.md) | [interpretation/tarot.md](interpretation/tarot.md) |
-| `taiyi` | 太乙九星观测 | 根据问卜时间生成时空底盘、九星阵列与核心关系 | [references/taiyi.md](references/taiyi.md) | [interpretation/taiyi.md](interpretation/taiyi.md) |
+| `taiyi` | 太乙排盘 | 支持九星观测，以及采用四库本金镜七十二局立成的现代历法适配年/月/日/时计 | [references/taiyi.md](references/taiyi.md) | [interpretation/taiyi.md](interpretation/taiyi.md) |
 | `almanac` | 黄历查询 | 查询指定日期的黄历、宜忌、冲煞、值星、方位与时辰吉凶等信息 | [references/almanac.md](references/almanac.md) | [interpretation/almanac.md](interpretation/almanac.md) |
 | `bazi_dayun` | 八字大运 | 根据出生信息计算起运时间、大运列表、小运与流年链路 | [references/bazi_dayun.md](references/bazi_dayun.md) | [interpretation/bazi.md](interpretation/bazi.md) |
 | `qimen` | 奇门遁甲排盘 | 根据指定时间排出奇门盘，输出九宫、九星、八门、八神、格局等信息 | [references/qimen.md](references/qimen.md) | [interpretation/qimen.md](interpretation/qimen.md) |
@@ -67,7 +67,7 @@ echo '{"gender":"male","birthYear":1990,"birthMonth":5,"birthDay":20,"birthHour"
 - **历法**：生辰类工具默认公历（`calendarType: "solar"`）；用户给的是农历生日时改传 `"lunar"`，闰月再加 `isLeapMonth: true`。`xiaoliuren` 例外，直接接收农历月、日。
 - **时间**：`birthHour` 传 0-23 的钟表小时，早晚子时由引擎处理，不要自行折算时辰。`xiaoliuren` 的 `hour` 可传时辰序号 1-12（子=1），也可传 0-23 小时。用户未提供的出生信息应当询问，而非代为假设。
 - **占当下**：`qimen`、`daliuren`、`liuyao` 与 `meihua` 的时间起卦需要当前时间时，先取系统时间（如 `date +"%Y-%m-%dT%H:%M:%S"`）再填入参数。
-- **日期核实**：用户说「今天/现在」并同时报出农历日期时，先取系统时间、用 `almanac` 核对公农历对应——农历与公历的映射是查历数据，不能凭记忆换算。口述与核实不符时，指出差异并以核实结果起盘，必要时附口述日期的对照结果。
+- **日期核实**：用户说「今天/现在」并同时报出农历日期时，先取系统时间、用 `almanac` 核对公农历对应——农历与公历的映射是查历数据，不能凭记忆换算。口述与核实不符时，指出差异并以核实结果起盘，必要时附口述日期的对照结果。出生生肖、未来日期干支也以 Core 对相应日期的计算为准，不能从公历年份或单日盘面补算。
 - **随机性**：`tarot` 可传 `seed` 复现抽牌；`liuyao` 的 `method: "auto"` 每次结果随机，需要复现时改用 `select`（指定卦名）或 `number`（数字起卦）。
 - **六爻用神**：`yongShenTargets` 必填，按占问主题选择，可多选：事业官职、官司、疾病忧患取 `官鬼`；财运、男问感情取 `妻财`；文书合同、长辈、房产车辆取 `父母`；子女晚辈、健康平安取 `子孙`；合作竞争、朋友取 `兄弟`。
 - **detailLevel**：默认输出已够解读；需要完整盘面时在参数中加 `"detailLevel": "full"`（部分工具另有 `"more"`）。

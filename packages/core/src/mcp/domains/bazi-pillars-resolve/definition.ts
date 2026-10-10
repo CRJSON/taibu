@@ -1,15 +1,19 @@
 import type { ToolDefinition } from '../../contract.js';
+import { baziRuleInputs } from '../../rule-input-schemas.js';
 
 export const baziPillarsResolveDefinition: ToolDefinition = {
   name: 'bazi_pillars_resolve',
-  description: '四柱反推 - 根据年、月、日、时四柱干支，在 1900-2100 年范围内反推可能的出生时间，输出候选列表。',
+  description: '四柱反推 - 根据四柱搜索分钟级出生时间区间，默认1900-2100，单次最多1200年。',
   inputSchema: {
     type: 'object',
     properties: {
-      yearPillar: { type: 'string', description: '年柱干支（两个字，如“甲子”）' },
-      monthPillar: { type: 'string', description: '月柱干支（两个字，如“乙丑”）' },
-      dayPillar: { type: 'string', description: '日柱干支（两个字，如“丙寅”）' },
-      hourPillar: { type: 'string', description: '时柱干支（两个字，如“丁卯”）' },
+      ...baziRuleInputs,
+      startYear: { type: 'integer', minimum: 1, maximum: 9998, default: 1900 },
+      endYear: { type: 'integer', minimum: 1, maximum: 9998, default: 2100 },
+      yearPillar: { type: 'string', description: "年柱干支（两个字，如“甲子”）" },
+      monthPillar: { type: 'string', description: "月柱干支（两个字，如“乙丑”）" },
+      dayPillar: { type: 'string', description: "日柱干支（两个字，如“丙寅”）" },
+      hourPillar: { type: 'string', description: "时柱干支（两个字，如“丁卯”）" },
     },
     required: ['yearPillar', 'monthPillar', 'dayPillar', 'hourPillar'],
     examples: [
