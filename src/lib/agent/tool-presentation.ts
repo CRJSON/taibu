@@ -9,6 +9,11 @@ import type { TarotCanonicalJSON } from 'taibu-core/tarot';
 import type { TaiyiCanonicalJSON } from 'taibu-core/taiyi';
 import type { AstrologyCanonicalJSON } from 'taibu-core/astrology';
 import type { AlmanacCanonicalJSON } from 'taibu-core/almanac';
+import type { DayunCanonicalJSON } from 'taibu-core/bazi-dayun';
+import type { BaziPillarsResolveCanonicalJSON } from 'taibu-core/bazi-pillars-resolve';
+import type { ZiweiHoroscopeCanonicalJSON } from 'taibu-core/ziwei-horoscope';
+import type { ZiweiFlyingStarCanonicalJSON } from 'taibu-core/ziwei-flying-star';
+import { normalizeQuestions, type AgentQuestion } from './questions';
 import type { AgentPart } from './types';
 import { AGENT_CHART_NAMES, isAgentChartTool, type AgentChartKind } from './tool-catalog';
 
@@ -157,4 +162,114 @@ export function getAgentDataResults(tool: AgentToolPart) {
     const row = record(item);
     return { id: String(row.id), name: String(row.name), type: String(row.type), preview: String(row.preview) };
   }), errors: Array.isArray(output.errors) ? output.errors.filter(item => strings(item, ['message'])).map(item => String(record(item).message)) : [] };
+}
+
+export type AgentCalculation =
+  | { kind: 'bazi_dayun'; data: DayunCanonicalJSON }
+  | { kind: 'bazi_pillars_resolve'; data: BaziPillarsResolveCanonicalJSON }
+  | { kind: 'ziwei_horoscope'; data: ZiweiHoroscopeCanonicalJSON }
+  | { kind: 'ziwei_flying_star'; data: ZiweiFlyingStarCanonicalJSON };
+
+/** Core calculation results; anything incomplete falls back to the projected canonical text. */
+export function getAgentCalculation(tool: AgentToolPart): AgentCalculation | null {
+  if (tool.status !== 'completed') return null;
+  const output = record(tool.output);
+  const data = record(Object.hasOwn(output, 'result') ? output.result : output);
+  switch (tool.name) {
+    case 'bazi_dayun': {
+      const start = record(data.起运信息);
+      if (typeof start.起运年龄 !== 'number' || typeof start.起运详情 !== 'string' || !Array.isArray(data.大运列表) || !data.大运列表.length) return null;
+      if (!data.大运列表.every(item => strings(item, ['干支', '十神']) && Number.isInteger(record(item).起运年份) && arrayRows(record(item).藏干, ['天干', '十神']))) return null;
+      return { kind: 'bazi_dayun', data: data as unknown as DayunCanonicalJSON };
+    }
+    case 'bazi_pillars_resolve':
+      if (!strings(data.原始四柱, ['年柱', '月柱', '日柱', '时柱']) || !arrayRows(data.候选列表, ['农历', '公历', '出生时间', '是否闰月'])) return null;
+      return { kind: 'bazi_pillars_resolve', data: data as unknown as BaziPillarsResolveCanonicalJSON };
+    case 'ziwei_horoscope':
+      if (!strings(data.基本信息, ['目标日期', '五行局']) || !arrayRows(data.运限叠宫, ['层次', '时间段备注', '干支', '落入本命宫位']) || !(data.运限叠宫 as unknown[]).every(row => stringArray(record(row).运限四化))) return null;
+      return { kind: 'ziwei_horoscope', data: data as unknown as ZiweiHoroscopeCanonicalJSON };
+    case 'ziwei_flying_star':
+      if (!arrayRows(data.查询结果, ['查询类型']) || !(data.查询结果 as unknown[]).every(row => typeof record(row).查询序号 === 'number')) return null;
+      return { kind: 'ziwei_flying_star', data: data as unknown as ZiweiFlyingStarCanonicalJSON };
+    default:
+      return null;
+  }
+}
+
+export interface AgentMethodGuide { id: string; title: string; version: string; whenToUse: string | null; tools: string[]; instructions: string }
+
+/** load_analysis_method returns a versioned, read-only guide; it never grants tools or membership. */
+export function getAgentMethod(tool: AgentToolPart): AgentMethodGuide | null {
+  if (tool.status !== 'completed' || tool.name !== 'load_analysis_method') return null;
+  const output = record(tool.output);
+  if (!strings(output, ['id', 'title', 'version', 'instructions'])) return null;
+  return {
+    id: String(output.id), title: String(output.title), version: String(output.version),
+    whenToUse: typeof output.whenToUse === 'string' ? output.whenToUse : null,
+    tools: stringArray(output.tools) ? output.tools as string[] : [],
+    instructions: String(output.instructions),
+  };
+}
+
+export function getAgentMethodCatalog(tool: AgentToolPart) {
+  if (tool.status !== 'completed' || tool.name !== 'list_analysis_methods' || !arrayRows(tool.output, ['id', 'title', 'version'])) return null;
+  return (tool.output as unknown[]).map(item => {
+    const row = record(item);
+    return { id: String(row.id), title: String(row.title), version: String(row.version), description: typeof row.description === 'string' ? row.description : typeof row.whenToUse === 'string' ? row.whenToUse : '' };
+  });
+}
+
+export function getAgentProfile(tool: AgentToolPart) {
+  if (tool.status !== 'completed' || tool.name !== 'read_user_profile') return null;
+  const output = record(tool.output);
+  const profile = record(output.profile);
+  return {
+    identity: typeof profile.identity === 'string' && profile.identity.trim() ? profile.identity : null,
+    defaultBaziChartId: typeof output.defaultBaziChartId === 'string' ? output.defaultBaziChartId : null,
+    defaultZiweiChartId: typeof output.defaultZiweiChartId === 'string' ? output.defaultZiweiChartId : null,
+  };
+}
+
+/** Private attachments are read in 8000-character pages; record how far the Agent has read. */
+export function getAgentAttachmentRead(tool: AgentToolPart) {
+  if (tool.status !== 'completed' || tool.name !== 'read_attachment') return null;
+  const output = record(tool.output);
+  if (!strings(output, ['id', 'name', 'kind'])) return null;
+  const count = (value: unknown) => typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : null;
+  const text = typeof output.text === 'string' ? output.text : null;
+  const offset = count(output.offset), total = count(output.total);
+  return {
+    id: String(output.id), name: String(output.name), kind: String(output.kind),
+    offset, total, readUntil: offset !== null && text !== null ? offset + text.length : null,
+    nextOffset: count(output.nextOffset), note: typeof output.note === 'string' ? output.note : null,
+  };
+}
+
+export interface AgentMemoryEntry { id: string; title: string; content: string; kind: 'preference' | 'context' }
+
+/** Memories read or written by the Agent; ownership columns of older cached results are ignored. */
+export function getAgentMemories(tool: AgentToolPart): AgentMemoryEntry[] | null {
+  if (tool.status !== 'completed' || !['read_user_memory', 'remember_user_fact'].includes(tool.name)) return null;
+  const rows = tool.name === 'remember_user_fact' ? [tool.output] : tool.output;
+  if (!Array.isArray(rows)) return null;
+  return rows.flatMap(item => {
+    const row = record(item);
+    return strings(row, ['id', 'title', 'content']) && (row.kind === 'preference' || row.kind === 'context')
+      ? [{ id: String(row.id), title: String(row.title), content: String(row.content), kind: row.kind }] : [];
+  });
+}
+
+/** ask_user persists normalized questions; older calls fall back to their arguments. */
+export function getAgentToolQuestions(tool: AgentToolPart): AgentQuestion[] {
+  for (const source of [tool.output, tool.input]) {
+    const value = record(source);
+    try { return normalizeQuestions(value.questions, typeof value.question === 'string' ? value.question : undefined); } catch { /* try the next source */ }
+  }
+  return [];
+}
+
+export function getAgentFinalSelection(tool: AgentToolPart): string[] | null {
+  if (tool.status !== 'completed' || tool.name !== 'select_final_artifacts') return null;
+  const ids = record(tool.output).artifactIds;
+  return stringArray(ids) ? ids as string[] : null;
 }
