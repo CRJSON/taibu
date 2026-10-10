@@ -54,6 +54,12 @@ export async function verifyAgentCollaboration({ page, newChat, send, waitForRun
     await dialog.getByLabel(`Agent ${index + 1} 分工`, { exact: true }).fill(index ? '独立核对干支关系与不确定性' : '分析八字天干与日支');
   }
   await page.setViewportSize({ width: 320, height: 740 });
+  await page.waitForFunction(() => {
+    const dialog = document.querySelector('.chat-model-settings');
+    if (!dialog) return false;
+    const bounds = dialog.getBoundingClientRect();
+    return bounds.left >= 0 && bounds.right <= window.innerWidth && bounds.top >= 0 && bounds.bottom <= window.innerHeight;
+  });
   const bounds = await dialog.boundingBox();
   assert.ok(bounds && bounds.x >= 0 && bounds.x + bounds.width <= 320 && bounds.y >= 0 && bounds.y + bounds.height <= 740, 'combined collaboration settings fit a 320px viewport');
   await page.screenshot({ path: path.join(output, 'agent-collaboration-mobile.png'), fullPage: true });
