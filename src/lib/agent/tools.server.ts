@@ -269,6 +269,40 @@ export async function createAgentTools(
       }),
     );
   };
+  // Checkpoint state is derived from a tool's persisted details only. Fresh
+  // results apply it after agent_cache_tool succeeds and cached results replay
+  // the same reducer, so a failed cache write cannot leave a phantom question,
+  // a task-list revision the model never saw, or a stale final selection.
+  const checkpointEffects = new Map<string, (details: unknown, callId: string) => void>([
+    ["ask_user", (details, callId) => {
+      const question = (details as { question: string }).question;
+      checkpoint.question = question;
+      checkpoint.questions = normalizeQuestions((details as { questions?: unknown }).questions, question);
+      checkpoint.questionId = callId;
+      putPart({ type: "question", id: callId, question, questions: checkpoint.questions });
+    }],
+    ["todo_write", (details) => {
+      checkpoint.todos = details as AgentCheckpoint["todos"];
+      putPart({ type: "todo", id: "task-list", ...checkpoint.todos! });
+    }],
+    ["web_search", (details, callId) =>
+      putSources(callId, details as Array<{ title: string; url: string; content: string }>)],
+    ["select_final_artifacts", (details) => {
+      checkpoint.finalArtifacts = (details as { artifactIds: string[] }).artifactIds;
+      checkpoint.finalSelectionMade = true;
+    }],
+    ["search_knowledge", (details, callId) => {
+      checkpoint.knowledgeQueries = {
+        ...checkpoint.knowledgeQueries,
+        [callId]: (details as unknown[]).length,
+      };
+    }],
+  ]);
+  const applyResult = (name: string, kind: AgentArtifactRow["kind"], details: unknown, callId: string) => {
+    // A new or replayed calculation requires the final selection to be confirmed again.
+    if (kind === "calculation") checkpoint.finalSelectionMade = false;
+    checkpointEffects.get(name)?.(details, callId);
+  };
   const checkMember = async () =>
     getUserCreditInfo(run.user_id, { client: store.db });
   const wrap = <T extends TSchema>(
@@ -295,44 +329,7 @@ export async function createAgentTools(
       if (cached) {
         if (cached.tool_name !== name || !isDeepStrictEqual(cached.args, args))
           throw new Error("工具调用标识对应了不同参数");
-        if (kind === "calculation") checkpoint.finalSelectionMade = false;
-        if (name === "ask_user") {
-          checkpoint.question = (
-            cached.result.details as { question: string }
-          ).question;
-          checkpoint.questions = normalizeQuestions((cached.result.details as { questions?: unknown }).questions, checkpoint.question);
-          checkpoint.questionId = callId;
-          putPart({
-            type: "question",
-            id: callId,
-            question: checkpoint.question,
-            questions: checkpoint.questions,
-          });
-        }
-        if (name === 'todo_write') {
-          checkpoint.todos = cached.result.details as AgentCheckpoint['todos'];
-          putPart({ type: 'todo', id: 'task-list', ...checkpoint.todos! });
-        }
-        if (name === "web_search")
-          putSources(
-            callId,
-            cached.result.details as Array<{
-              title: string;
-              url: string;
-              content: string;
-            }>,
-          );
-        if (name === "select_final_artifacts") {
-          checkpoint.finalArtifacts = (
-            cached.result.details as { artifactIds: string[] }
-          ).artifactIds;
-          checkpoint.finalSelectionMade = true;
-        }
-        if (name === "search_knowledge")
-          checkpoint.knowledgeQueries = {
-            ...checkpoint.knowledgeQueries,
-            [callId]: (cached.result.details as unknown[]).length,
-          };
+        applyResult(name, kind, cached.result.details, callId);
         return kind === "calculation"
           ? {
               ...cached.result,
@@ -364,7 +361,7 @@ export async function createAgentTools(
               )
             : null,
       });
-      if (kind === "calculation") checkpoint.finalSelectionMade = false;
+      applyResult(name, kind, result.details, callId);
       return kind === "calculation"
         ? {
             ...result,
@@ -502,7 +499,7 @@ export async function createAgentTools(
         query: Type.String({ minLength: 1 }),
         kbIds: Type.Optional(Type.Array(Type.String({ format: "uuid" }))),
       }),
-      async (args, callId) => {
+      async (args) => {
         const account = await checkMember();
         const results = await searchKnowledgeWithPersistence(
           args.query,
@@ -518,10 +515,6 @@ export async function createAgentTools(
             topK: 5,
           },
         );
-        checkpoint.knowledgeQueries = {
-          ...checkpoint.knowledgeQueries,
-          [callId]: results.length,
-        };
         return textResult(results);
       },
     ),
@@ -536,11 +529,8 @@ export async function createAgentTools(
         "web_search",
         "联网检索公开资料，返回可引用来源；仅发送完成检索必要的信息",
         Type.Object({ query: Type.String({ minLength: 1 }) }),
-        async (args, callId, signal) => {
-          const results = await searchAgentWeb(args.query, signal);
-          putSources(callId, results);
-          return textResult(results);
-        },
+        async (args, _callId, signal) =>
+          textResult(await searchAgentWeb(args.query, signal)),
       ),
     );
   }
@@ -549,27 +539,15 @@ export async function createAgentTools(
       "ask_user",
       "缺少必要信息时向用户提出问题并暂停任务；不能猜测出生数据",
       Type.Object({ question: Type.Optional(Type.String({ minLength: 1 })), questions: Type.Optional(Type.Array(Type.Object({ id: Type.String(), question: Type.String(), options: Type.Optional(Type.Array(Type.Object({ id: Type.String(), label: Type.String() }))), multiple: Type.Optional(Type.Boolean()), allowCustom: Type.Optional(Type.Boolean()), allowSkip: Type.Optional(Type.Boolean()) }), { minItems: 1, maxItems: 10 })) }),
-      async (args, callId) => {
+      async (args) => {
         const questions = normalizeQuestions(args.questions, args.question);
-        checkpoint.question = questions.map(item => item.question).join('\n\n');
-        checkpoint.questions = questions;
-        checkpoint.questionId = callId;
-        putPart({
-          type: "question",
-          id: callId,
-          question: checkpoint.question,
-          questions,
-        });
-        return textResult({ question: checkpoint.question, questions, awaitingUser: true });
+        return textResult({ question: questions.map(item => item.question).join('\n\n'), questions, awaitingUser: true });
       },
     ),
   );
   tools.push(wrap('todo_write', '复杂任务维护真实步骤；稳定 ID，revision 必须匹配；简单问答无需清单', Type.Object({ revision: Type.Integer({ minimum: 0 }), items: Type.Array(Type.Object({ id: Type.String(), title: Type.String(), status: Type.Union([Type.Literal('pending'), Type.Literal('in_progress'), Type.Literal('completed')]) }), { maxItems: 50 }) }), async args => {
     if (args.revision !== (checkpoint.todos?.revision ?? 0)) throw new Error('任务清单版本冲突，请使用当前 revision');
-    const items = validateTodos(args.items);
-    checkpoint.todos = { revision: args.revision + 1, items };
-    putPart({ type: 'todo', id: 'task-list', ...checkpoint.todos });
-    return textResult(checkpoint.todos);
+    return textResult({ revision: args.revision + 1, items: validateTodos(args.items) });
   }));
   tools.push(wrap('list_analysis_methods', '列出可信、版本化分析方法目录；按问题需要加载', Type.Object({}), async () => textResult(ANALYSIS_METHODS)));
   tools.push(wrap('load_analysis_method', '按需加载分析方法；计算仍使用 Core，执行权限会重新核验', Type.Object({ id: Type.String(), version: Type.Optional(Type.String()) }), async args => textResult(loadAnalysisMethod(args.id, args.version))));
@@ -593,9 +571,7 @@ export async function createAgentTools(
         );
         if (args.artifactIds.some((id) => !available.has(id)))
           throw new Error("最终成果不存在");
-        checkpoint.finalArtifacts = [...new Set(args.artifactIds)];
-        checkpoint.finalSelectionMade = true;
-        return textResult({ artifactIds: checkpoint.finalArtifacts });
+        return textResult({ artifactIds: [...new Set(args.artifactIds)] });
       },
     ),
   );
