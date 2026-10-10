@@ -46,6 +46,14 @@ const ROUTE_LABELS: Record<string, string> = {
     '/palm/history': '手相历史',
     '/mbti/result': 'MBTI 结果',
     '/mbti/history': 'MBTI 历史',
+    '/qimen/result': '奇门结果',
+    '/qimen/history': '奇门历史',
+    '/daliuren/result': '大六壬结果',
+    '/daliuren/history': '大六壬历史',
+    '/meihua/result': '梅花结果',
+    '/meihua/history': '梅花历史',
+    '/xiaoliuren/result': '小六壬结果',
+    '/xiaoliuren/history': '小六壬历史',
     // 功能主页面
     '/bazi': '八字排盘',
     '/ziwei': '紫微斗数',
@@ -55,7 +63,11 @@ const ROUTE_LABELS: Record<string, string> = {
     '/face': '面相分析',
     '/palm': '手相分析',
     '/mbti': 'MBTI',
-    '/daily': '每日运势',
+    '/qimen': '奇门遁甲',
+    '/daliuren': '大六壬',
+    '/meihua': '梅花易数',
+    '/xiaoliuren': '小六壬',
+    '/daily': '日运 · 黄历',
     '/monthly': '每月运势',
     '/records': '命理记录',
     '/community': '命理社区',
@@ -98,6 +110,14 @@ const SUB_PAGE_PATTERNS = [
     '/palm/history',
     '/mbti/result',
     '/mbti/history',
+    '/qimen/result',
+    '/qimen/history',
+    '/daliuren/result',
+    '/daliuren/history',
+    '/meihua/result',
+    '/meihua/history',
+    '/xiaoliuren/result',
+    '/xiaoliuren/history',
     '/privacy',
     '/terms',
 ];
@@ -191,7 +211,7 @@ export function Header() {
                     <div className="w-9 lg:hidden" />
                 )}
 
-                <h1 className="text-base font-semibold text-foreground truncate max-w-[60%] lg:hidden">
+                <h1 className="font-display text-[17px] text-foreground truncate max-w-[60%] lg:hidden">
                     {pageTitle}
                 </h1>
 

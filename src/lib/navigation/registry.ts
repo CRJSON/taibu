@@ -62,6 +62,9 @@ export type { LucideIcon };
 
 export type NavCategory = 'divination' | 'tool' | 'user';
 
+/** Sub-grouping used by the "全部占术" panel and the mobile drawer. */
+export type DivinationGroup = 'chart' | 'divine' | 'sanshi' | 'xiang' | 'fortune';
+
 export interface NavItemDef {
   /** Unique identifier — matches route segment or user-settings key */
   id: string;
@@ -82,6 +85,8 @@ export interface NavItemDef {
   featureId?: string;
   /** Logical grouping */
   category: NavCategory;
+  /** Divination sub-group; required for `category: 'divination'` items. */
+  group?: DivinationGroup;
 }
 
 // ---------------------------------------------------------------------------
@@ -90,21 +95,21 @@ export interface NavItemDef {
 
 export const NAV_REGISTRY: readonly NavItemDef[] = [
   // ── Divination ──────────────────────────────────────────────────────────
-  { id: 'bazi', href: '/bazi', label: '八字', icon: PYinYang, emoji: '🔮', description: '四柱八字精批', category: 'divination' },
-  { id: 'hepan', href: '/hepan', label: '八字合盘', icon: HeartHandshake, emoji: '💑', description: '八字合盘', category: 'divination' },
-  { id: 'ziwei', href: '/ziwei', label: '紫微斗数', icon: PCompassRose, emoji: '⭐', description: '紫微命盘', category: 'divination' },
-  { id: 'tarot', href: '/tarot', label: '塔罗', icon: PStarOfDavid, emoji: '🃏', description: '塔罗占卜', category: 'divination' },
-  { id: 'liuyao', href: '/liuyao', label: '六爻', icon: Dices, emoji: '☯️', description: '六爻占卜', category: 'divination' },
-  { id: 'qimen', href: '/qimen', label: '奇门遁甲', icon: PCheckerboard, emoji: '🧭', description: '奇门遁甲', category: 'divination' },
-  { id: 'daliuren', href: '/daliuren', label: '大六壬', icon: Telescope, emoji: '📜', description: '大六壬', category: 'divination' },
-  { id: 'meihua', href: '/meihua', label: '梅花易数', icon: FlowerLotusIcon, description: '梅花易数', category: 'divination' },
-  { id: 'xiaoliuren', href: '/xiaoliuren', label: '小六壬', icon: Waypoints, description: '小六壬', category: 'divination' },
-  { id: 'face', href: '/face', label: '面相', icon: ScanFace, emoji: '👤', description: '面相分析', category: 'divination' },
-  { id: 'palm', href: '/palm', label: '手相', icon: Hand, emoji: '🖐️', description: '手相分析', category: 'divination' },
-  { id: 'mbti', href: '/mbti', label: 'MBTI', icon: Brain, emoji: '🧩', description: '性格测试', category: 'divination' },
+  { id: 'bazi', href: '/bazi', label: '八字', icon: PYinYang, emoji: '🔮', description: '四柱八字精批', category: 'divination', group: 'chart' },
+  { id: 'hepan', href: '/hepan', label: '八字合盘', icon: HeartHandshake, emoji: '💑', description: '八字合盘', category: 'divination', group: 'chart' },
+  { id: 'ziwei', href: '/ziwei', label: '紫微斗数', icon: PCompassRose, emoji: '⭐', description: '紫微命盘', category: 'divination', group: 'chart' },
+  { id: 'tarot', href: '/tarot', label: '塔罗', icon: PStarOfDavid, emoji: '🃏', description: '塔罗占卜', category: 'divination', group: 'divine' },
+  { id: 'liuyao', href: '/liuyao', label: '六爻', icon: Dices, emoji: '☯️', description: '六爻占卜', category: 'divination', group: 'divine' },
+  { id: 'qimen', href: '/qimen', label: '奇门遁甲', icon: PCheckerboard, emoji: '🧭', description: '奇门遁甲', category: 'divination', group: 'sanshi' },
+  { id: 'daliuren', href: '/daliuren', label: '大六壬', icon: Telescope, emoji: '📜', description: '大六壬', category: 'divination', group: 'sanshi' },
+  { id: 'meihua', href: '/meihua', label: '梅花易数', icon: FlowerLotusIcon, description: '梅花易数', category: 'divination', group: 'divine' },
+  { id: 'xiaoliuren', href: '/xiaoliuren', label: '小六壬', icon: Waypoints, description: '小六壬', category: 'divination', group: 'divine' },
+  { id: 'face', href: '/face', label: '面相', icon: ScanFace, emoji: '👤', description: '面相分析', category: 'divination', group: 'xiang' },
+  { id: 'palm', href: '/palm', label: '手相', icon: Hand, emoji: '🖐️', description: '手相分析', category: 'divination', group: 'xiang' },
+  { id: 'mbti', href: '/mbti', label: 'MBTI', icon: Brain, emoji: '🧩', description: '性格测试', category: 'divination', group: 'xiang' },
 
-  { id: 'daily', href: '/daily', label: '日运', icon: Sun, category: 'divination' },
-  { id: 'monthly', href: '/monthly', label: '月运', icon: CalendarRange, category: 'divination' },
+  { id: 'daily', href: '/daily', label: '日运', icon: Sun, description: '日运 · 黄历', category: 'divination', group: 'fortune' },
+  { id: 'monthly', href: '/monthly', label: '月运', icon: CalendarRange, description: '月运', category: 'divination', group: 'fortune' },
 
   // ── Tools ───────────────────────────────────────────────────────────────
   { id: 'chat', href: '/chat', label: '新聊天', icon: BotMessageSquare, category: 'tool' },
@@ -140,6 +145,22 @@ export function toFeatureId(navId: string): string {
 /** Sidebar "命理体系" items (divination category). */
 export function getSidebarNavItems() {
   return NAV_REGISTRY.filter(n => n.category === 'divination');
+}
+
+/** Display order and labels of the divination sub-groups. */
+export const DIVINATION_GROUPS: readonly { id: DivinationGroup; label: string }[] = [
+  { id: 'chart', label: '命盘' },
+  { id: 'divine', label: '卜卦' },
+  { id: 'sanshi', label: '三式' },
+  { id: 'xiang', label: '相学与性格' },
+  { id: 'fortune', label: '运势' },
+];
+
+/** Divination items bucketed by sub-group, in `DIVINATION_GROUPS` order; empty groups are dropped. */
+export function groupDivinationItems(items: readonly NavItemDef[]): { id: DivinationGroup; label: string; items: NavItemDef[] }[] {
+  return DIVINATION_GROUPS
+    .map(group => ({ ...group, items: items.filter(item => item.group === group.id) }))
+    .filter(group => group.items.length > 0);
 }
 
 /** Sidebar "工具" items (tool category). */

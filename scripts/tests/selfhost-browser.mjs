@@ -102,7 +102,9 @@ async function verifyChartSynchronization(page, context, config) {
       await closeCharts();
     }
     // Change the default through the overlay while the monthly page remains mounted.
-    await sidebar.getByRole('link', { name: '月运', exact: true }).click();
+    // 月运 is not pinned by default; it lives in the sidebar's "全部占术" flyout.
+    await sidebar.getByRole('button', { name: /全部占术/ }).click();
+    await page.getByRole('dialog', { name: '全部占术' }).getByRole('link', { name: '月运', exact: true }).click();
     await page.getByRole('heading', { name: /月/ }).first().waitFor();
     for (const chart of [first, second]) {
       await openCharts();
