@@ -58,7 +58,7 @@ export const ANALYSIS_METHODS = [
     "guide": "bazi",
     "tool": "bazi",
     "title": "八字命盘",
-    "whenToUse": "根据出生信息计算四柱命盘，输出天干地支、十神、藏干、神煞、关系格局等信息"
+    "whenToUse": "根据出生信息排四柱命盘，输出四柱干支、十神、藏干、地势、空亡与干支关系，可选输出纳音、神煞等扩展信息"
   },
   {
     "id": "bazi_pillars_resolve",
@@ -86,7 +86,7 @@ export const ANALYSIS_METHODS = [
     "guide": "ziwei",
     "tool": "ziwei_flying_star",
     "title": "紫微斗数飞星",
-    "whenToUse": "分析命盘中的四化飞布、自化、落宫与三方四正关系"
+    "whenToUse": "按查询逐条分析命盘宫位的四化飞入、自化、四化落宫与三方四正"
   },
   {
     "id": "liuyao",
@@ -107,7 +107,7 @@ export const ANALYSIS_METHODS = [
     "guide": "tarot",
     "tool": "tarot",
     "title": "塔罗抽牌",
-    "whenToUse": "根据问题与牌阵抽取塔罗牌，输出牌面结果及占卜参考信息"
+    "whenToUse": "按牌阵抽取塔罗牌，输出各牌位的牌面、正逆位、核心基调、元素与星象"
   },
   {
     "id": "taiyi",
@@ -128,7 +128,7 @@ export const ANALYSIS_METHODS = [
     "guide": "bazi",
     "tool": "bazi_dayun",
     "title": "八字大运",
-    "whenToUse": "根据出生信息计算起运时间、大运列表、小运与流年链路"
+    "whenToUse": "根据出生信息计算起运时间与大运列表，可选输出起运前小运及各步大运的流年"
   },
   {
     "id": "qimen",
