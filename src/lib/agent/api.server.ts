@@ -572,17 +572,20 @@ export async function streamAgentTask(request: NextRequest, id: string) {
         while (!closed && !request.signal.aborted) {
           const run = await store.getRun(id, auth.user.id);
           if (!run) break;
-          const view = { ...await store.view(run), epoch: run.fence ?? 0 };
-          let resetReason: AgentResync['reason'] | undefined;
-          const resync = (reason: AgentResync['reason']) => {
-            resetReason = reason;
-            cursor = view.cursor;
-            epoch = view.epoch;
-          };
-          let reset = false;
-          if (epoch !== undefined && epoch !== view.epoch) { resync('epoch'); reset = true; }
-          else if (cursor > view.cursor) { resync('cursor'); reset = true; }
-          if (reset || view.cursor > cursor || isAgentRunTerminal(view.status)) {
+          // The run row decides whether a frame is due. The public view also
+          // reads the command queue, so idle heartbeats never build it.
+          const runCursor = Number(run.event_cursor);
+          const runEpoch = run.fence ?? 0;
+          let resetReason: AgentResync['reason'] | undefined =
+            epoch !== undefined && epoch !== runEpoch ? 'epoch' : cursor > runCursor ? 'cursor' : undefined;
+          if (resetReason || runCursor > cursor || isAgentRunTerminal(run.status)) {
+            const view = { ...await store.view(run), epoch: runEpoch };
+            const resync = (reason: AgentResync['reason']) => {
+              resetReason = reason;
+              cursor = view.cursor;
+              epoch = view.epoch;
+            };
+            if (resetReason) resync(resetReason);
             while (cursor < view.cursor && !closed && !request.signal.aborted) {
               const events = await store.events(id, cursor, view.cursor);
               if (!events.length) { resync('gap'); break; }
@@ -597,7 +600,7 @@ export async function streamAgentTask(request: NextRequest, id: string) {
             if (!send(`${resetFrame}event: snapshot\nid: ${cursor}\ndata: ${JSON.stringify(view)}\n\n`)) break;
             epoch = view.epoch;
           } else if (!send(': heartbeat\n\n')) break;
-          if (isAgentRunTerminal(view.status))
+          if (isAgentRunTerminal(run.status))
             break;
           await new Promise((resolve) => setTimeout(resolve, 1000));
         }

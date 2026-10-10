@@ -487,3 +487,33 @@ test("Agent SSE stays open while awaiting input and observes another tab's resum
   assert.match(decoder.decode(completed.value), /completed/);
   assert.equal((await reader.read()).done, true);
 });
+
+test("idle SSE heartbeats read only the run row; the public view is built when a frame is due", async (t) => {
+  const fixture = setup(t), id = randomUUID();
+  const run = {
+    id, user_id: fixture.owner, conversation_id: fixture.conversation, status: "running", fence: 1, event_cursor: 1,
+    created_at: "2026-01-01", public_message: {
+      id: `agent:${id}`, role: "assistant", content: "", createdAt: "2026-01-01",
+      agent: { version: 1, runId: id, status: "running", parts: [] },
+    },
+  } as unknown as AgentRunRow;
+  t.mock.method(AgentStore.prototype, "getRun", async () => run);
+  t.mock.method(AgentStore.prototype, "events", async () => [{ sequence: 2, type: "tool_execution_end", payload: {} }]);
+  const view = t.mock.method(AgentStore.prototype, "view", async (row: AgentRunRow) => ({
+    id: row.id, conversationId: row.conversation_id, status: row.status, message: row.public_message,
+    cursor: Number(row.event_cursor), createdAt: row.created_at,
+  }));
+  const controller = new AbortController();
+  const response = await streamAgentTask(new NextRequest(`http://localhost/api/agent/runs/${id}/events?after=1&epoch=1`, { signal: controller.signal }), id);
+  const reader = response.body!.getReader();
+  t.after(() => { controller.abort(); void reader.cancel(); });
+  const decoder = new TextDecoder();
+  assert.equal(decoder.decode((await reader.read()).value), ": heartbeat\n\n");
+  assert.equal(view.mock.callCount(), 0, "an unchanged cursor never reads the command queue");
+  run.event_cursor = 2;
+  let frames = "";
+  while (!frames.includes("event: snapshot")) frames += decoder.decode((await reader.read()).value);
+  assert.match(frames, /event: history\nid: 2/);
+  assert.match(frames, /event: snapshot\nid: 2/);
+  assert.equal(view.mock.callCount(), 1);
+});
