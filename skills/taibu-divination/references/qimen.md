@@ -6,12 +6,12 @@
 
 | 参数 | 类型 | 必填 | 默认 | 说明 |
 | --- | --- | --- | --- | --- |
-| `year` | integer | 是 | — | 年 (1900-2100) |
-| `month` | integer | 是 | — | 月 (1-12) |
-| `day` | integer | 是 | — | 日 (1-31) |
-| `hour` | integer | 是 | — | 时 (0-23) |
-| `minute` | integer | 否 | `0` | 分 (0-59) |
-| `timezone` | string | 否 | `"Asia/Shanghai"` | IANA 时区 |
+| `year` | integer | 是 | — | 公历年（1900-2100） |
+| `month` | integer | 是 | — | 月（1-12） |
+| `day` | integer | 是 | — | 日（1-31） |
+| `hour` | integer | 是 | — | 时（0-23） |
+| `minute` | integer | 否 | `0` | 分（0-59） |
+| `timezone` | string | 否 | `"Asia/Shanghai"` | IANA 时区名（如 Asia/Shanghai） |
 | `question` | string | 否 | — | 占问事项 |
 | `panType` | enum | 否 | `"zhuan"` | 盘式（zhuan=时家转盘，fei=洛书飞盘，八门含虚中位）；可选值: `zhuan` / `fei` |
 | `juMethod` | enum | 否 | `"chaibu"` | 定局法（chaibu=拆补，maoshan=交节后每五日一元，equal=节气区间等时三分，现代扩展）；可选值: `chaibu` / `maoshan` / `equal` |
@@ -19,7 +19,7 @@
 | `juNumber` | integer | 否 | — | 手工局数，必须与 dunType 同时提供 |
 | `dunType` | enum | 否 | — | 手工阴阳遁，必须与 juNumber 同时提供；可选值: `yang` / `yin` |
 | `zhiFuJiGong` | enum | 否 | `"ji_liuyi"` | 直符寄宫方式（ji_liuyi=寄六仪，ji_wugong=寄戊宫）；可选值: `ji_liuyi` / `ji_wugong` |
-| `detailLevel` | enum | 否 | `"default"` | 输出细节级别。；可选值: `default` / `full` |
+| `detailLevel` | enum | 否 | `"default"` | 输出详略（default=核心盘面；full=追加历法信息、宫位旺衰与格局、空亡、驿马、十干旺衰及全局格局）；可选值: `default` / `full` |
 
 ## 调用示例
 
@@ -29,11 +29,11 @@ echo '{"year":2026,"month":3,"day":15,"hour":16,"minute":51,"timezone":"Asia/Sha
 
 ## 输出结构（structuredContent 顶层键）
 
-- `基本信息`
-- `九宫盘`
-- `空亡信息`
-- `驿马`
-- `十干月令旺衰`：十天干在月令中的旺衰
-- `全局格局`：全局格局列表
+- `基本信息`：起局基本信息
+- `九宫盘`：九宫盘详细信息
+- `空亡信息`：日空与时空信息
+- `驿马`：驿马信息
+- `十干月令旺衰`：十天干在当月月令的旺衰（甲→旺、乙→相等，键为天干，值为旺衰）
+- `全局格局`：全局层级的格局（如"伏吟局"、"反吟局"等）
 - `计算规则`
 

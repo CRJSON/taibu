@@ -6,13 +6,13 @@
 
 | 参数 | 类型 | 必填 | 默认 | 说明 |
 | --- | --- | --- | --- | --- |
-| `birthYear` | integer | 是 | — | 出生年 (> 0) |
-| `birthMonth` | integer | 是 | — | 出生月 (1-12) |
-| `birthDay` | integer | 是 | — | 出生日 (1-31) |
-| `birthHour` | integer | 是 | — | 出生时 (0-23) |
-| `birthMinute` | integer | 否 | `0` | 出生分 (0-59) |
-| `latitude` | number | 否 | — | 出生地纬度 (-90 到 90) |
-| `longitude` | number | 否 | — | 出生地经度 (-180 到 180) |
+| `birthYear` | integer | 是 | — | 出生年（1-9999） |
+| `birthMonth` | integer | 是 | — | 出生月（1-12） |
+| `birthDay` | integer | 是 | — | 出生日（1-31） |
+| `birthHour` | integer | 是 | — | 出生时（0-23） |
+| `birthMinute` | integer | 否 | `0` | 出生分（0-59） |
+| `latitude` | number | 否 | — | 出生地纬度（-90 到 90；须与 longitude 同时提供，用于确定当地时区、上升、天顶与宫位） |
+| `longitude` | number | 否 | — | 出生地经度（-180 到 180；须与 latitude 同时提供） |
 | `birthPlace` | string | 否 | — | 出生地点文本 |
 | `timezone` | string | 否 | — | 显式 IANA 时区；省略时按经纬度推导，零坐标为 Etc/GMT |
 | `disambiguation` | enum | 否 | `"reject"` | 可选值: `reject` / `earlier` / `later` / `compatible` |
@@ -24,9 +24,9 @@
 | `aspectOrbs.trine` | number | 否 | — | — |
 | `aspectOrbs.square` | number | 否 | — | — |
 | `aspectOrbs.sextile` | number | 否 | — | — |
-| `transitDateTime` | string | 否 | — | 流运时刻（YYYY-MM-DDTHH:mm[:ss] 或带时区偏移的 ISO 时间；省略时取当前时刻） |
+| `transitDateTime` | string | 否 | — | 流运时刻（YYYY-MM-DDTHH:mm[:ss] 按出生地时区解释，也可用带时区偏移的 ISO 时间；省略时取当前时刻） |
 | `houseSystem` | enum | 否 | `"placidus"` | 宫制；高纬度使用等宫或整宫；可选值: `placidus` / `equal-house` / `whole-sign` / `koch` / `campanus` / `regiomontanus` / `topocentric` |
-| `detailLevel` | enum | 否 | `"default"` | 输出细节级别。；可选值: `default` / `more` / `full` |
+| `detailLevel` | enum | 否 | `"default"` | 输出详略（default=核心盘面；more=追加附加点与交点、宫位宫头；full=再追加完整相位矩阵与黄道分界，需出生地坐标）；可选值: `default` / `more` / `full` |
 
 ## 调用示例
 
@@ -36,10 +36,10 @@ echo '{"birthYear":1990,"birthMonth":1,"birthDay":1,"birthHour":12,"birthMinute"
 
 ## 输出结构（structuredContent 顶层键）
 
-- `基础坐标`
-- `命盘锚点`
-- `本命主星`：本命主要因素列表
-- `当前流运触发`：当前流运触发列表
-- `扩展信息`
+- `基础坐标`：计算模式、坐标、时区与时刻
+- `命盘锚点`：太阳、月亮、上升与天顶的位置
+- `本命主星`：本命主要星体及其关键相位
+- `当前流运触发`：与本命形成紧密相位的流运慢行星
+- `扩展信息`：附加点、宫头、完整相位矩阵与黄道分界
 - `计算规则`
 

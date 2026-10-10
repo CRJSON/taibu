@@ -1,6 +1,6 @@
 # 八字大运（`bazi_dayun`）
 
-八字大运 - 根据出生信息计算起运时间、大运列表、小运与流年链路。
+八字大运 - 根据出生信息计算起运时间与大运列表，可选输出起运前小运及各步大运的流年。
 
 ## 参数
 
@@ -13,13 +13,13 @@
 | `yunSect` | enum | 否 | `1` | 起运换算法1或2；可选值: `1` / `2` |
 | `gender` | enum | 是 | — | 性别；可选值: `male` / `female` |
 | `birthYear` | integer | 是 | — | 出生年 (1-9999) |
-| `birthMonth` | integer | 是 | — | 出生月 (1-12) |
-| `birthDay` | integer | 是 | — | 出生日 (1-31) |
-| `birthHour` | integer | 是 | — | 出生时 (0-23) |
-| `birthMinute` | integer | 否 | `0` | 出生分 (0-59) |
-| `calendarType` | enum | 否 | `"solar"` | 历法类型（solar=公历，lunar=农历）；可选值: `solar` / `lunar` |
-| `isLeapMonth` | boolean | 否 | `false` | 农历闰月标记 |
-| `detailLevel` | enum | 否 | `"default"` | 输出细节级别。；可选值: `default` / `full` |
+| `birthMonth` | integer | 是 | — | 出生月（1-12） |
+| `birthDay` | integer | 是 | — | 出生日（公历 1-31，农历 1-30） |
+| `birthHour` | integer | 是 | — | 出生时（0-23） |
+| `birthMinute` | integer | 否 | `0` | 出生分（0-59） |
+| `calendarType` | enum | 否 | `"solar"` | 出生日期的历法（solar=公历，lunar=农历）；可选值: `solar` / `lunar` |
+| `isLeapMonth` | boolean | 否 | `false` | 是否农历闰月（仅 calendarType=lunar 时有效） |
+| `detailLevel` | enum | 否 | `"default"` | 输出详略（default=起运信息与大运概要；full=追加起运前小运，以及各步大运的纳音、神煞、原局关系与流年列表）；可选值: `default` / `full` |
 
 ## 调用示例
 
@@ -33,8 +33,8 @@ echo '{"gender":"female","birthYear":1995,"birthMonth":6,"birthDay":20,"birthHou
 
 ## 输出结构（structuredContent 顶层键）
 
-- `起运信息`
-- `小运`：小运列表
-- `大运列表`：大运列表
+- `起运信息`：起运年龄与起运详情
+- `小运`：小运列表（逐年）
+- `大运列表`：大运列表（每十年一步）
 - `计算规则`
 
