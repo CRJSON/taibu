@@ -27,15 +27,15 @@
 | `calculationOptions.mutagens.壬` | string[] | 否 | — | — |
 | `calculationOptions.mutagens.癸` | string[] | 否 | — | — |
 | `gender` | enum | 是 | — | 性别；可选值: `male` / `female` |
-| `birthYear` | integer | 是 | — | 出生年 (1900-2100) |
-| `birthMonth` | integer | 是 | — | 出生月 (1-12) |
-| `birthDay` | integer | 是 | — | 出生日 (1-31) |
-| `birthHour` | integer | 是 | — | 出生时 (0-23) |
-| `birthMinute` | integer | 否 | `0` | 出生分 (0-59) |
-| `calendarType` | enum | 否 | `"solar"` | 历法类型（solar=公历，lunar=农历）；可选值: `solar` / `lunar` |
-| `isLeapMonth` | boolean | 否 | `false` | 农历闰月标记 |
-| `longitude` | number | 否 | — | 出生地经度 |
-| `detailLevel` | enum | 否 | `"default"` | 输出细节级别。；可选值: `default` / `full` |
+| `birthYear` | integer | 是 | — | 出生年（1900-2100） |
+| `birthMonth` | integer | 是 | — | 出生月（1-12） |
+| `birthDay` | integer | 是 | — | 出生日（公历 1-31，农历 1-30） |
+| `birthHour` | integer | 是 | — | 出生时（0-23） |
+| `birthMinute` | integer | 否 | `0` | 出生分（0-59） |
+| `calendarType` | enum | 否 | `"solar"` | 出生日期的历法（solar=公历，lunar=农历）；可选值: `solar` / `lunar` |
+| `isLeapMonth` | boolean | 否 | `false` | 是否农历闰月（仅 calendarType=lunar 时有效） |
+| `longitude` | number | 否 | — | 出生地经度（-180 到 180；提供时按真太阳时校正出生时间） |
+| `detailLevel` | enum | 否 | `"default"` | 输出详略（default=核心盘面；full=追加杂曜、神煞、小限、斗君、命主星与身主星等）；可选值: `default` / `full` |
 
 ## 调用示例
 
@@ -53,8 +53,8 @@ echo '{"gender":"male","birthYear":1990,"birthMonth":1,"birthDay":15,"birthHour"
 
 ## 输出结构（structuredContent 顶层键）
 
-- `基本信息`
-- `十二宫位`：十二宫位列表
+- `基本信息`：命盘基本信息
+- `十二宫位`：十二宫位详细信息
 - `小限`：小限列表
 - `计算规则`
 

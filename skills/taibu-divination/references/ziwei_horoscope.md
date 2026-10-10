@@ -27,17 +27,17 @@
 | `calculationOptions.mutagens.壬` | string[] | 否 | — | — |
 | `calculationOptions.mutagens.癸` | string[] | 否 | — | — |
 | `gender` | enum | 是 | — | 性别；可选值: `male` / `female` |
-| `birthYear` | integer | 是 | — | 出生年 (1900-2100) |
-| `birthMonth` | integer | 是 | — | 出生月 (1-12) |
-| `birthDay` | integer | 是 | — | 出生日 (1-31) |
-| `birthHour` | integer | 是 | — | 出生时 (0-23) |
-| `birthMinute` | integer | 否 | `0` | 出生分 (0-59) |
-| `calendarType` | enum | 否 | `"solar"` | 历法类型（solar=公历，lunar=农历）；可选值: `solar` / `lunar` |
-| `isLeapMonth` | boolean | 否 | `false` | 农历闰月标记 |
-| `longitude` | number | 否 | — | 出生地经度 |
-| `targetDate` | string | 否 | — | 目标日期 (YYYY-MM-DD，省略时取当前日期) |
-| `targetTimeIndex` | integer | 否 | — | 目标流时时段序号 (0-12) |
-| `detailLevel` | enum | 否 | `"default"` | 输出细节级别。；可选值: `default` / `full` |
+| `birthYear` | integer | 是 | — | 出生年（1900-2100） |
+| `birthMonth` | integer | 是 | — | 出生月（1-12） |
+| `birthDay` | integer | 是 | — | 出生日（公历 1-31，农历 1-30） |
+| `birthHour` | integer | 是 | — | 出生时（0-23） |
+| `birthMinute` | integer | 否 | `0` | 出生分（0-59） |
+| `calendarType` | enum | 否 | `"solar"` | 出生日期的历法（solar=公历，lunar=农历）；可选值: `solar` / `lunar` |
+| `isLeapMonth` | boolean | 否 | `false` | 是否农历闰月（仅 calendarType=lunar 时有效） |
+| `longitude` | number | 否 | — | 出生地经度（-180 到 180；提供时按真太阳时校正出生时间） |
+| `targetDate` | string | 否 | — | 目标日期（公历 YYYY-MM-DD；省略时取当前日期） |
+| `targetTimeIndex` | integer | 否 | — | 流时所用的时辰序号（0-12：0=早子，1=丑…11=亥，12=晚子） |
+| `detailLevel` | enum | 否 | `"default"` | 输出详略（default=核心运限；full=追加命主、身主、运限叠宫的十二宫重排及岁前、将前十二星）；可选值: `default` / `full` |
 
 ## 调用示例
 
@@ -47,10 +47,10 @@ echo '{"gender":"male","birthYear":1990,"birthMonth":1,"birthDay":15,"birthHour"
 
 ## 输出结构（structuredContent 顶层键）
 
-- `基本信息`
-- `运限叠宫`
-- `流年星曜`
-- `岁前十二星`：岁前十二星列表
-- `将前十二星`：将前十二星列表
+- `基本信息`：本命与目标日期基本信息
+- `运限叠宫`：运限叠宫（本命、大限、流年、流月、流日、流时等各层次的宫位叠加）
+- `流年星曜`：流年星曜分布
+- `岁前十二星`：岁前十二星在各宫的分布（太岁、晦气、丧门等）
+- `将前十二星`：将前十二星在各宫的分布（博士、力士、青龙等）
 - `计算规则`
 

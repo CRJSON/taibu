@@ -14,7 +14,7 @@
 | `isLeapMonth` | boolean | 否 | `false` | 手工农历是否为闰月 |
 | `leapMonthStrategy` | enum | 否 | `"repeat"` | 闰月沿用同月计数或递进一月计数；可选值: `repeat` / `advance` |
 | `question` | string | 否 | — | 占问事项 |
-| `detailLevel` | enum | 否 | `"default"` | 输出细节级别。；可选值: `default` / `full` |
+| `detailLevel` | enum | 否 | `"default"` | 输出详略（default=起课结果；full=追加释义与诗诀）；可选值: `default` / `full` |
 
 ## 调用示例
 
@@ -28,8 +28,8 @@ echo '{"lunarMonth":1,"lunarDay":1,"hour":1}' | node "$TB/scripts/taibu.mjs" cal
 
 ## 输出结构（structuredContent 顶层键）
 
-- `起课信息`
-- `推演链`
-- `结果`
+- `起课信息`：起课基本信息
+- `推演链`：三步推演链（月上起→日上落→时上落）
+- `结果`：最终结果与释义
 - `计算规则`
 

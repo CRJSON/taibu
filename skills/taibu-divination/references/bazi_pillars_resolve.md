@@ -12,25 +12,25 @@
 | `longitude` | number | 否 | — | 经度；提供时校正真太阳时 |
 | `startYear` | integer | 否 | `1900` | — |
 | `endYear` | integer | 否 | `2100` | — |
-| `yearPillar` | string | 是 | — | 年柱干支（如“甲子”） |
-| `monthPillar` | string | 是 | — | 月柱干支（如“乙丑”） |
-| `dayPillar` | string | 是 | — | 日柱干支（如“丙寅”） |
-| `hourPillar` | string | 是 | — | 时柱干支（如“丁卯”） |
+| `yearPillar` | string | 是 | — | 年柱干支（两个字，如“甲子”） |
+| `monthPillar` | string | 是 | — | 月柱干支（两个字，如“乙丑”） |
+| `dayPillar` | string | 是 | — | 日柱干支（两个字，如“丙寅”） |
+| `hourPillar` | string | 是 | — | 时柱干支（两个字，如“丁卯”） |
 
 ## 调用示例
 
 ```bash
-echo '{"yearPillar":"甲子","monthPillar":"乙丑","dayPillar":"丙寅","hourPillar":"丁卯"}' | node "$TB/scripts/taibu.mjs" call bazi_pillars_resolve -
+echo '{"yearPillar":"甲子","monthPillar":"丙寅","dayPillar":"己巳","hourPillar":"丁卯"}' | node "$TB/scripts/taibu.mjs" call bazi_pillars_resolve -
 ```
 
 ```bash
-echo '{"yearPillar":"戊子","monthPillar":"乙丑","dayPillar":"辛卯","hourPillar":"癸巳"}' | node "$TB/scripts/taibu.mjs" call bazi_pillars_resolve -
+echo '{"yearPillar":"戊子","monthPillar":"庚申","dayPillar":"辛卯","hourPillar":"癸巳"}' | node "$TB/scripts/taibu.mjs" call bazi_pillars_resolve -
 ```
 
 ## 输出结构（structuredContent 顶层键）
 
-- `原始四柱`
-- `候选数量`：候选数量
-- `候选列表`
+- `原始四柱`：用户输入的原始四柱干支
+- `候选数量`：匹配到的候选日期总数
+- `候选列表`：所有匹配四柱的候选日期
 - `计算规则`
 
