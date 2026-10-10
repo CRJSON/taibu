@@ -60,14 +60,38 @@ import { ModelSelector } from '@/components/ui/ModelSelector';
 import { AgentContextDetails } from '@/components/chat/agent/AgentContextUsage';
 import { getAgentChart } from '@/lib/agent/tool-presentation';
 import { getChartTargets } from '@/lib/agent/chart-interaction';
+import { ANALYSIS_GUIDES, ANALYSIS_METHODS } from '@/lib/agent/analysis-methods.generated';
 const initialToolParts = AGENT_TOOL_FIXTURE_PARTS;
+const familyParts = () => [
+  AGENT_DAYUN_FIXTURE_PART,
+  { type: 'tool', id: 'family-web', name: 'web_search', title: '联网检索', status: 'completed', input: { query: '庚金 月令' }, output: [{ title: '庚金论', url: 'https://example.com/gengjin', content: '庚金带煞，刚健为最。' }, { title: '无效链接', url: 'javascript:alert(1)', content: '不应成为链接' }] },
+  { type: 'tool', id: 'family-kb', name: 'search_knowledge', title: '知识库检索', status: 'completed', input: { query: '不存在的资料' }, output: [] },
+  { type: 'tool', id: 'family-method', name: 'load_analysis_method', title: '加载分析方法', status: 'completed', input: { id: 'bazi' },
+    output: { ...ANALYSIS_METHODS.find(method => method.id === 'bazi'), version: '1.0.0', title: ANALYSIS_GUIDES.bazi.title, tools: ['bazi', 'bazi_dayun'], instructions: ANALYSIS_GUIDES.bazi.body } },
+  { type: 'tool', id: 'family-team', name: 'parallel_analysis', title: '协作分析', status: 'completed', output: { analyses: [
+    { system: 'bazi', conversationId: 21, name: '子平', modelName: '分析模型', reasoningEffort: 'high', focus: '格局取用', status: 'completed', answer: '身强取财官。' },
+    { system: 'bazi', conversationId: 22, name: '盲派', modelName: '复核模型', reasoningEffort: 'off', status: 'completed', answer: '做功看财星。' },
+  ] } },
+  { type: 'tool', id: 'family-memory', name: 'remember_user_fact', title: '记住偏好', status: 'completed', output: { id: '33333333-3333-4333-8333-333333333333', title: '历法偏好', content: '以后都用公历时间', kind: 'preference', updated_at: '2026-10-10T00:00:00Z' } },
+  { type: 'tool', id: 'family-external', name: 'mcp__archive__lookup', title: '档案检索', status: 'completed', input: { keyword: '庚金' }, output: { rows: 1 } },
+  { type: 'tool', id: 'family-ask', name: 'ask_user', title: '补充必要信息', status: 'completed', input: {},
+    output: { question: '出生时间？', questions: [{ id: 'birth', question: '出生时间？', options: [{ id: 'morning', label: '早上' }, { id: 'night', label: '晚上' }], allowCustom: true, allowSkip: false }], awaitingUser: true } },
+  { type: 'question', id: '9:family-ask', question: '出生时间？' },
+];
+const fixtureArtifacts = [{ type: 'artifact', id: 'bazi', title: '已保存八字', chartType: 'bazi', chartId: 'saved-bazi' }];
 function AgentResultsProbe() {
   const [open, setOpen] = useState(false);
   const [request, setRequest] = useState(undefined);
   const [parts, setParts] = useState(initialToolParts);
   const [runtime, setRuntime] = useState(undefined);
+  const [answers, setAnswers] = useState(() => new Map());
+  const [status, setStatus] = useState('completed');
   const { user } = useSessionSafe();
-  const data = { version: 1, runId: 'ui-results', status: 'completed', parts, runtime };
+  window.fixture.agentRunStatus = setStatus;
+  window.fixture.workspaceFamilies = () => setParts(previous => [...previous.filter(part => !part.id.includes('family')), ...familyParts()]);
+  window.fixture.workspaceStep = (name, status) => setParts(previous => [...previous, { type: 'tool', id: 'step-' + (window.fixture.stepRevision = (window.fixture.stepRevision ?? 0) + 1), name, title: name, status, input: { query: '流年' } }]);
+  window.fixture.answerFamilyQuestion = () => setAnswers(new Map([['9:family-ask', { content: '出生时间？\n早上', answers: { birth: ['morning'] } }]]));
+  const data = { version: 1, runId: 'ui-results', status, parts, runtime };
   window.fixture.agentTiming = () => {
     setRuntime(JSON.parse(JSON.stringify({ responses: [{ id: 'reply-1', durationMs: 1500 }, { id: 'reply-2', durationMs: 500 }] })));
     setParts(previous => JSON.parse(JSON.stringify(previous.map(tool => tool.id === initialToolParts.find(part => part.name === 'bazi').id ? { ...tool, durationMs: 1500, startedAt: 1000, endedAt: 6000 } : tool))));
@@ -98,7 +122,8 @@ function AgentResultsProbe() {
   return <section data-testid="agent-results"><AgentResultContext.Provider value={{ openResource(id) { setRequest(previous => ({ id, version: (previous?.version ?? 0) + 1 })); setOpen(true); } }}>
     <AgentMessage data={data} />
     <button onClick={() => { setRequest(previous => ({ id: 'chart:bazi', version: (previous?.version ?? 0) + 1 })); setOpen(true); }}>恢复已有成果标签</button>
-    {open && <AgentWorkspacePanel workspaceKey={(user?.id ?? 'visitor') + ':ui-fixture'} artifacts={[{ type: 'artifact', id: 'bazi', title: '已保存八字', chartType: 'bazi', chartId: 'saved-bazi' }]} sources={[]} historyTools={parts} attachmentIds={[]} data={data} requestedResource={request} onChartQuestion={text => { window.fixture.chartQuestion = text; }} onClose={() => setOpen(false)} />}
+    {open && <AgentWorkspacePanel workspaceKey={(user?.id ?? 'visitor') + ':ui-fixture'} artifacts={fixtureArtifacts} parts={parts} attachmentIds={[]} data={data}
+      run={{ billing: 'charged' }} answers={answers} userId={user?.id ?? null} requestedResource={request} onChartQuestion={text => { window.fixture.chartQuestion = text; }} onClose={() => setOpen(false)} />}
   </AgentResultContext.Provider></section>;
 }
 
@@ -302,9 +327,13 @@ export async function build(outputDirectory) {
   const traditional = buildToolSuccessPayload('taiyi', await executeTool('taiyi', { system: 'traditional', mode: 'hour', date: '2026-04-10', hour: 9, timezone: 'Asia/Shanghai' }));
   const traditionalPart = { ...toolParts.find(tool => tool.name === 'taiyi'), output: { artifactId: 'taiyi', result: traditional.structuredContent }, canonicalText: traditional.content.map(part => part.text).join('\n') };
   const revisedBazi = buildToolSuccessPayload('bazi', await executeTool('bazi', { ...toolParts.find(tool => tool.name === 'bazi').input, birthYear: 2001, birthMonth: 10, birthDay: 1 }));
+  const dayunInput = listToolDefinitions().find(tool => tool.name === 'bazi_dayun').inputSchema.examples[0];
+  const dayun = buildToolSuccessPayload('bazi_dayun', await executeTool('bazi_dayun', dayunInput));
+  const dayunPart = { type: 'tool', id: 'family-dayun', name: 'bazi_dayun', title: '八字大运', status: 'completed', input: dayunInput, durationMs: 12,
+    output: { artifactId: 'family-dayun', result: dayun.structuredContent }, canonicalText: dayun.content.map(part => part.text).join('\n') };
 
   await bundle({
-    stdin: { contents: entry.replace('AGENT_TOOL_FIXTURE_PARTS', JSON.stringify(toolParts)).replace('TRADITIONAL_TAIYI_FIXTURE_PART', JSON.stringify(traditionalPart)).replace('REVISED_BAZI_FIXTURE_RESULT', JSON.stringify(revisedBazi.structuredContent)), loader: 'jsx', resolveDir: root, sourcefile: 'p5-browser-entry.jsx' },
+    stdin: { contents: entry.replace('AGENT_TOOL_FIXTURE_PARTS', JSON.stringify(toolParts)).replace('TRADITIONAL_TAIYI_FIXTURE_PART', JSON.stringify(traditionalPart)).replace('REVISED_BAZI_FIXTURE_RESULT', JSON.stringify(revisedBazi.structuredContent)).replace('AGENT_DAYUN_FIXTURE_PART', JSON.stringify(dayunPart)), loader: 'jsx', resolveDir: root, sourcefile: 'p5-browser-entry.jsx' },
     outfile, bundle: true, format: 'iife', platform: 'browser', jsx: 'automatic',
     tsconfig: resolve(root, 'tsconfig.json'),
     define: { 'process.env.NODE_ENV': '"development"', 'process.env': '{}' },
@@ -582,6 +611,7 @@ export async function run(existingPage, bundlePath) {
         return route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ error: { message: 'Account changed' } }) });
       }
       if (url.pathname === '/api/user/agent-memory' && method === 'GET') return ok({ memories: [] });
+      if (url.pathname === '/api/user/agent-memory' && method === 'DELETE') return ok({ deleted: true });
       if (url.pathname === '/api/user/settings') {
         const owned = settingsByUser[cookieUser] ?? settings;
         if (method === 'GET') { settingsReads++; return ok({ settings: owned }); }
@@ -1591,17 +1621,17 @@ export async function run(existingPage, bundlePath) {
     await page.keyboard.press('Escape');
     await chartDialog.waitFor({ state: 'hidden' });
     check('Closing a chart returns focus to its expand button', await baziResult.getByRole('button', { name: '展开命盘', exact: true }).evaluate(button => button === document.activeElement));
-    await baziResult.getByRole('button', { name: '固定到工作区', exact: true }).click();
+    await baziResult.getByRole('button', { name: '在工作区查看', exact: true }).click();
     await page.getByRole('dialog', { name: '任务工作区', exact: true }).waitFor();
     await page.locator('#agent-workspace-panel [data-chart-kind="bazi"]').waitFor();
     check('Pinning opens the corresponding real tool result in the workspace', await page.locator('#agent-workspace-panel [data-chart-kind="bazi"]').count() === 1);
-    check('Workspace counts valid readings once and excludes the incomplete result', await page.locator('#agent-workspace-panel .agent-panel-tabs button').first().innerText() === '命盘11');
+    check('Workspace counts valid readings once and excludes the incomplete result', await page.locator('#agent-workspace-panel .agent-panel-tabs button').first().innerText() === '成果11');
     await page.getByRole('button', { name: '关闭任务工作区', exact: true }).click();
     await results.getByRole('button', { name: '恢复已有成果标签', exact: true }).click();
     await page.locator('#agent-workspace-panel [data-chart-kind="bazi"]').waitFor();
     check('A restored saved-artifact tab uses the same persisted reading without chart loading or recalculation', resultOperations() === callsBeforeResults && await page.getByRole('tab', { name: '已保存八字', exact: true }).count() === 1);
     await page.getByRole('button', { name: '关闭任务工作区', exact: true }).click();
-    await results.locator('[data-tool-result="tarot"]').getByRole('button', { name: '固定到工作区', exact: true }).click();
+    await results.locator('[data-tool-result="tarot"]').getByRole('button', { name: '在工作区查看', exact: true }).click();
     check('Workspace supports multiple pinned readings without replacing their data', await page.getByRole('tab', { name: '八字命盘', exact: true }).count() === 1 && await page.locator('#agent-workspace-panel [data-chart-kind="tarot"]').count() === 1);
     await page.getByRole('button', { name: '关闭任务工作区', exact: true }).click();
     await page.setViewportSize({ width: 320, height: 740 });
@@ -1611,7 +1641,7 @@ export async function run(existingPage, bundlePath) {
     await page.keyboard.press('Escape');
     await page.setViewportSize({ width: 1200, height: 1000 });
     check('Incomplete chart retains canonical text instead of generating another reading', await results.locator('[data-tool-result="incomplete"]').innerText().then(text => text.includes('命盘数据不完整') && text.includes('规范文本仍可访问')));
-    await results.locator('[data-tool-result="bazi"]').getByRole('button', { name: '固定到工作区', exact: true }).click();
+    await results.locator('[data-tool-result="bazi"]').getByRole('button', { name: '在工作区查看', exact: true }).click();
     const interactive = page.locator('#agent-workspace-panel');
     await page.evaluate(() => window.fixture.chartFocus('bazi', ['bazi:cell:2:1'], '模型查看日支'));
     await interactive.getByRole('button', { name: '跟随模型', exact: true }).click();
@@ -1632,9 +1662,9 @@ export async function run(existingPage, bundlePath) {
     await interactive.getByRole('button', { name: '跟随模型', exact: true }).click();
     const star = interactive.locator('[data-chart-target="' + starId + '"]');
     await star.waitFor();
-    check('Ziwei model focus selects the returned palace and its exact star', await star.getAttribute('aria-pressed') === 'true' && await interactive.locator('[data-chart-selected=true]').count() === 1 && await interactive.locator('svg line').count() === 3);
+    check('Ziwei model focus selects the returned palace and its exact star', await star.getAttribute('aria-pressed') === 'true' && await interactive.locator('[data-chart-selected=true]').count() === 1 && await interactive.locator('[data-chart-kind="ziwei"] svg line').count() === 3);
     await interactive.getByRole('checkbox', { name: '三方四正', exact: true }).uncheck();
-    check('Ziwei related-palace visibility is an actual chart interaction', await interactive.locator('svg line').count() === 0);
+    check('Ziwei related-palace visibility is an actual chart interaction', await interactive.locator('[data-chart-kind="ziwei"] svg line').count() === 0);
     await star.focus();
     await page.keyboard.press('Enter');
     check('Star selection works from the keyboard without nested palace activation', await star.getAttribute('aria-pressed') === 'true');
@@ -1687,6 +1717,74 @@ export async function run(existingPage, bundlePath) {
     await page.evaluate(() => window.fixture.collaborationResults(true));
     await collaboration.locator('details').last().locator('summary').click();
     check('Completed collaborator analysis survives JSON history and can be expanded', await collaboration.innerText().then(text => !text.includes('分析中') && text.includes('生克关系复核完成。')) && resultOperations() === callsBeforeResults);
+
+    // Tool families: every call reaches its own workspace view from the chat, and following tracks the latest call.
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.evaluate(() => window.fixture.workspaceFamilies());
+    await results.getByRole('button', { name: /任务过程/ }).click();
+    await results.getByRole('button', { name: '在工作区查看：八字大运', exact: true }).click();
+    const workspacePanel = page.locator('#agent-workspace-panel');
+    await workspacePanel.locator('[data-workspace-view="calculation"]').waitFor();
+    check('A calculation step opens the persisted Core dayun timeline with exactly one current period', await workspacePanel.locator('.agent-ws-timeline > li').count() === 9 &&
+      await workspacePanel.locator('.agent-ws-timeline > li[aria-current="step"]').count() === 1 && await workspacePanel.getByText('Core 规范文本', { exact: true }).count() === 1);
+    check('Desktop workspace is a complementary panel rather than a modal', await page.locator('aside#agent-workspace-panel').count() === 1 && await page.getByRole('dialog', { name: '任务工作区' }).count() === 0);
+    await workspacePanel.getByRole('button', { name: '跟随模型', exact: true }).click();
+    await workspacePanel.locator('[data-workspace-view="question"]').waitFor();
+    check('Following the model shows the view of its latest tool call', await workspacePanel.locator('.agent-ws-following').innerText() === '模型正在看：补充信息' &&
+      await workspacePanel.locator('.agent-ws-questions').innerText().then(text => text.includes('出生时间？') && text.includes('未回答')));
+    await page.evaluate(() => window.fixture.answerFamilyQuestion());
+    await workspacePanel.getByText('回答：早上', { exact: true }).waitFor();
+    check('A stored reply is matched to its question through the question ID', await workspacePanel.locator('.agent-ws-chips [data-selected="true"]').innerText() === '早上');
+    await page.evaluate(() => window.fixture.workspaceStep('todo_write', 'completed'));
+    await renderBarrier();
+    check('Plan updates do not pull the followed view away', await workspacePanel.locator('[data-workspace-view="question"]').count() === 1);
+    await page.evaluate(() => window.fixture.workspaceStep('web_search', 'running'));
+    await workspacePanel.locator('[data-workspace-view="evidence"]').waitFor();
+    const evidence = workspacePanel.locator('[data-workspace-view="evidence"]');
+    check('A call left unfinished by an ended task stops spinning', await evidence.innerText().then(text => text.includes('任务结束时这一步仍未完成')) && await evidence.getByRole('status').count() === 0);
+    await page.evaluate(() => window.fixture.agentRunStatus('running'));
+    await evidence.getByRole('status').waitFor();
+    check('A new search call switches the followed view to the evidence with a live state', await evidence.getByRole('status').innerText().then(text => text.includes('正在检索「流年」')));
+    await page.evaluate(() => window.fixture.agentRunStatus('completed'));
+    check('Evidence numbers results, links only HTTP(S) sources and explains an empty search', await evidence.getByRole('link', { name: '庚金论' }).getAttribute('href') === 'https://example.com/gengjin' &&
+      await evidence.getByRole('link', { name: '无效链接' }).count() === 0 && await evidence.locator('.agent-ws-cite').first().innerText() === '1' &&
+      await evidence.innerText().then(text => text.includes('没有找到与「不存在的资料」相关的知识库段落')));
+    await workspacePanel.getByRole('button', { name: /^过程\d+$/ }).click();
+    check('Opening a section pauses following', await workspacePanel.getByRole('button', { name: '跟随模型', exact: true }).getAttribute('aria-pressed') === 'false');
+    const steps = workspacePanel.getByRole('list').filter({ has: page.getByText('加载分析方法') });
+    await steps.getByRole('button', { name: /加载分析方法/ }).click();
+    await workspacePanel.locator('[data-workspace-view="method"]').waitFor();
+    check('A process step opens its versioned read-only method guide', await workspacePanel.innerText().then(text => text.includes('版本 1.0.0') && text.includes('不增加任何执行权限') && text.includes('八字命理解读指引')));
+    await workspacePanel.getByRole('button', { name: /^过程\d+$/ }).click();
+    await steps.getByRole('button', { name: /协作分析/ }).last().click();
+    await workspacePanel.locator('[data-workspace-view="collaboration"]').waitFor();
+    check('Collaboration cards show each member model, effort and focus', await workspacePanel.locator('.agent-ws-member').count() === 2 &&
+      await workspacePanel.innerText().then(text => text.includes('推理 高') && text.includes('不推理') && text.includes('分工：格局取用')));
+    await workspacePanel.getByRole('button', { name: /^过程\d+$/ }).click();
+    await steps.getByRole('button', { name: /档案检索/ }).click();
+    await workspacePanel.locator('[data-workspace-view="tool"]').waitFor();
+    check('External tools show their arguments and raw result with copy actions', await workspacePanel.getByRole('button', { name: '复制调用参数', exact: true }).count() === 1 && await workspacePanel.getByRole('button', { name: '复制工具结果', exact: true }).count() === 1);
+    const memoryDeletes = () => requests.filter(item => item.pathname === '/api/user/agent-memory' && item.method === 'DELETE');
+    await workspacePanel.getByRole('button', { name: /^过程\d+$/ }).click();
+    await steps.getByRole('button', { name: /记住偏好/ }).click();
+    await workspacePanel.getByRole('button', { name: '删除记忆：历法偏好', exact: true }).click();
+    check('Deleting a memory asks for confirmation before any request', memoryDeletes().length === 0);
+    await workspacePanel.getByRole('button', { name: '确认删除', exact: true }).click();
+    await workspacePanel.getByText('已删除', { exact: true }).waitFor();
+    check('A confirmed memory deletion is scoped to the signed-in account', memoryDeletes().length === 1 && memoryDeletes()[0].expectedUserId === 'alice' && memoryDeletes()[0].body?.id === '33333333-3333-4333-8333-333333333333');
+    await workspacePanel.getByRole('button', { name: /^成果\d+$/ }).click();
+    check('Results summarize evidence, intermediate material and billing', await workspacePanel.innerText().then(text => text.includes('3 次检索 · 2 条结果') && text.includes('过程资料') && text.includes('本任务计费 1 次')));
+    const familyTabs = await Promise.all(['八字大运', '八字命理解读指引', '协作分析', '档案检索', '长期记忆'].map(name => workspacePanel.getByRole('tab', { name, exact: true }).count()));
+    check('Opened family views stay as one tab each; following alone adds no tabs', familyTabs.every(count => count === 1) && await workspacePanel.getByRole('tab', { name: '回答依据', exact: true }).count() === 0);
+    await results.getByRole('button', { name: /^依据 \d+/ }).click();
+    await workspacePanel.locator('[data-workspace-view="evidence"]').waitFor();
+    check('The answer evidence chip opens the numbered sources in the workspace', await results.getByRole('button', { name: /^依据 \d+/ }).innerText().then(text => text.includes('联网 2')));
+    await results.getByRole('button', { name: '在工作区比较', exact: true }).last().click();
+    await workspacePanel.locator('[data-workspace-view="collaboration"]').waitFor();
+    check('The compact collaboration card compares its members in the workspace', await workspacePanel.locator('.agent-ws-member').count() === 2 &&
+      await results.locator('.agent-collaboration-results').last().innerText().then(text => text.includes('分析模型 · 高') && text.includes('复核模型 · 不推理')));
+    await workspacePanel.getByRole('button', { name: '关闭任务工作区', exact: true }).click();
+    await page.setViewportSize({ width: 1200, height: 1000 });
     await page.evaluate(() => window.fixture.mount.results(false));
 
     check('No unhandled network requests escaped fixtures', blocked.length === 0);

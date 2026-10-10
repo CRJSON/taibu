@@ -45,7 +45,7 @@ export async function verifyAgentChartWorkspace({ page, newChat, send, waitForRu
   assert.ok(tools.some(tool => Number.isFinite(tool.durationMs) && Number.isFinite(tool.startedAt) && Number.isFinite(tool.endedAt)), 'completed native tools retain execution and wall-clock measurements');
   assert.ok((await panel.locator('.agent-board-focus').innerText()).includes(focus.caption), 'refresh rebuilds the exact native focus');
   const openChart = async kind => {
-    await panel.getByRole('button', { name: /^命盘/ }).click();
+    await panel.getByRole('button', { name: /^成果/ }).click();
     assert.equal(await panel.locator('.agent-workspace-chart-link').count(), 11, 'inspection and final artifacts are deduplicated');
     await panel.locator('.agent-workspace-chart-link').filter({ hasText: names[kind] }).click();
     await selectedTarget(focuses[kind]).waitFor();
@@ -57,7 +57,7 @@ export async function verifyAgentChartWorkspace({ page, newChat, send, waitForRu
     if (kind === 'bazi') assert.ok(await panel.locator('.chart-cell-button[aria-pressed=true]').count() >= 2, 'actual relation endpoints are highlighted');
     if (kind === 'ziwei') {
       assert.equal(await panel.locator('[data-chart-selected=true]').count(), 1);
-      assert.equal(await panel.locator('svg line').count(), 3, 'existing three-direction links follow the chosen star palace');
+      assert.equal(await panel.locator('[data-chart-kind="ziwei"] svg line').count(), 3, 'existing three-direction links follow the chosen star palace');
       const chartBounds = await panel.locator('[data-chart-kind="ziwei"]').boundingBox();
       const panelBounds = await panel.boundingBox();
       assert.ok(chartBounds.x >= panelBounds.x && chartBounds.x + chartBounds.width <= panelBounds.x + panelBounds.width, 'all twelve palaces fit in the default desktop workspace');
@@ -72,7 +72,7 @@ export async function verifyAgentChartWorkspace({ page, newChat, send, waitForRu
     await page.screenshot({ path: path.join(output, 'agent-chart-' + kind + '.png'), fullPage: true });
   }
   for (const [kind, prefix, count] of [['almanac', 'almanac:hour:', 13], ['astrology', 'astrology:house:', 12]]) {
-    await page.locator('[data-result-kind="' + kind + '"]').getByRole('button', { name: '固定到工作区', exact: true }).click();
+    await page.locator('[data-result-kind="' + kind + '"]').getByRole('button', { name: '在工作区查看', exact: true }).click();
     await selectedTarget(focuses[kind]).waitFor();
     assert.equal(await panel.locator('[data-chart-target^="' + prefix + '"]').count(), count, 'pinning the original calculation also uses its latest inspected full snapshot');
   }

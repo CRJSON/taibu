@@ -1,5 +1,9 @@
 import type { ChatMessage } from '@/types';
 import type { AgentMessageData, AgentPart, AgentRunStatus, AgentRuntimeInfo } from '@/lib/agent/types';
+import type { AgentToolFamily } from '@/lib/agent/tool-catalog';
+import { getAgentAttachmentRead, getAgentDataResults, getAgentMethod, getAgentSearchResults, getAgentToolQuestions } from '@/lib/agent/tool-presentation';
+import { getChartFocus } from '@/lib/agent/chart-interaction';
+import { parallelAnalysisResults } from '@/lib/agent/parallel-results';
 
 export type AgentArtifact = Extract<AgentPart, { type: 'artifact' }>;
 export type AgentTool = Extract<AgentPart, { type: 'tool' }>;
@@ -35,13 +39,39 @@ export function getAgentActivityLabel(data: AgentMessageData) {
     }
 }
 
+/** One line under a process step, read from its arguments and stored result only. */
 export function summarizeAgentTool(tool: AgentTool): string | null {
     const args = tool.input && typeof tool.input === 'object' && !Array.isArray(tool.input) ? tool.input as Record<string, unknown> : {};
-    if (tool.name === 'bazi' || tool.name === 'ziwei') {
+    if (typeof args.birthYear === 'number' && (tool.name.startsWith('bazi') || tool.name.startsWith('ziwei'))) {
         const date = [args.birthYear, args.birthMonth, args.birthDay].filter(value => typeof value === 'number').join(' / ');
         return [typeof args.name === 'string' ? args.name : '', date, typeof args.birthHour === 'number' ? `${args.birthHour} 时` : ''].filter(Boolean).join(' · ') || null;
     }
     if (tool.name === 'select_final_artifacts' && Array.isArray(args.artifactIds)) return `选定 ${args.artifactIds.length} 份成果`;
+    if (tool.name === 'web_search' || tool.name === 'search_knowledge') {
+        const query = typeof args.query === 'string' ? `「${args.query.slice(0, 60)}」` : '';
+        const results = getAgentSearchResults(tool);
+        return results ? `${query} · ${results.length ? `命中 ${results.length} 条` : '没有可引用的结果'}` : query || null;
+    }
+    if (tool.name === 'list_user_data') {
+        const data = getAgentDataResults(tool);
+        return data ? `找到 ${data.items.length} 份资料${data.errors.length ? ` · ${data.errors.length} 项暂不可读` : ''}` : null;
+    }
+    if (tool.name === 'load_analysis_method') return getAgentMethod(tool)?.title ?? (typeof args.id === 'string' ? args.id : null);
+    if (tool.name === 'parallel_analysis') {
+        const members = parallelAnalysisResults(tool.output);
+        return members.length ? `${members.length} 名成员 · ${members.filter(member => member.status === 'completed').length} 名已完成` : null;
+    }
+    if (tool.name === 'ask_user') {
+        const count = getAgentToolQuestions(tool).length;
+        return count ? `${count} 个问题` : null;
+    }
+    if (tool.name === 'focus_chart') return getChartFocus(tool)?.caption ?? null;
+    if (tool.name === 'todo_write' && Array.isArray(args.items)) return `${args.items.length} 项`;
+    if (tool.name === 'read_attachment') {
+        const read = getAgentAttachmentRead(tool);
+        return read ? `${read.name}${read.readUntil !== null && read.total !== null ? ` · 读到 ${read.readUntil} / ${read.total} 字` : ''}` : null;
+    }
+    if (tool.name === 'remember_user_fact' && typeof args.title === 'string') return args.title;
     for (const key of ['query', 'name', 'type']) if (typeof args[key] === 'string') return (args[key] as string).slice(0, 120);
     return null;
 }
@@ -112,4 +142,22 @@ export function formatAgentValue(value: unknown): string {
     if (value === undefined) return '暂无数据';
     if (typeof value === 'string') return value;
     return JSON.stringify(value, null, 2) ?? '暂无数据';
+}
+
+/** Short tags shown on process steps, one per tool family. */
+export const AGENT_TOOL_FAMILY_LABELS: Record<AgentToolFamily, string> = {
+    chart: '命盘', calculation: '推演', search: '检索', data: '资料', method: '方法', plan: '计划',
+    question: '提问', collaboration: '协作', memory: '记忆', artifacts: '成果', external: '外部', other: '工具',
+};
+
+/** Results the answer can cite: completed web and knowledge searches of one task. */
+export function getAgentEvidenceSummary(parts: AgentPart[]) {
+    let web = 0, knowledge = 0;
+    for (const part of parts) {
+        if (part.type !== 'tool') continue;
+        const count = getAgentSearchResults(part)?.length ?? 0;
+        if (part.name === 'web_search') web += count;
+        else knowledge += count;
+    }
+    return { total: web + knowledge, web, knowledge };
 }

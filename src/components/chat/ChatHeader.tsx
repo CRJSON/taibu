@@ -7,13 +7,17 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { BookOpenText, MessageSquare, SquarePen } from 'lucide-react';
+import { BookOpenText, SquarePen } from 'lucide-react';
 import { useConversationList } from '@/lib/chat/ConversationListContext';
 import { SettingsCenterLink } from '@/components/settings/SettingsCenterLink';
 import { SETTINGS_CENTER_TAB_ICONS } from '@/components/settings/settings-center-icons';
 
 interface ChatHeaderProps {
     title: string;
+    /** Conversation mode shown next to the title, e.g. Agent. */
+    badge?: string;
+    /** Live task status shown before the actions. */
+    status?: ReactNode;
     children?: ReactNode;
     membershipType: string;
     knowledgeBaseEnabled: boolean;
@@ -24,6 +28,8 @@ const PersonalizationIcon = SETTINGS_CENTER_TAB_ICONS.personalization;
 
 export function ChatHeader({
     title,
+    badge,
+    status,
     children,
     membershipType,
     knowledgeBaseEnabled,
@@ -32,8 +38,9 @@ export function ChatHeader({
     const { handleNewChat } = useConversationList();
     return (
         <header className="chat-session-header">
-            <div className="chat-session-title"><MessageSquare size={17} aria-hidden="true" /><h1 title={title}>{title}</h1></div>
+            <div className="chat-session-title"><h1 title={title}>{title}</h1>{badge && <span className="chat-mode-badge">{badge}</span>}</div>
             <div className="chat-session-actions">
+                {status}
                 <button type="button" className="agent-icon-button" aria-label="新建对话" title="新建对话" onClick={() => void handleNewChat()}><SquarePen size={16} /></button>
                 <div className="hidden lg:flex items-center gap-1">
                     {aiPersonalizationEnabled && (

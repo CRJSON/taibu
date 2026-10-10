@@ -1,12 +1,12 @@
 'use client';
 
 import { useState } from 'react';
-import { BookOpen, Calculator, Check, ChevronRight, CircleAlert, CircleHelp, Copy, Database, Globe, ListChecks, LoaderCircle, Search, Users, Wrench, type LucideIcon } from 'lucide-react';
+import { BookOpen, Calculator, Check, ChevronRight, CircleAlert, CircleHelp, Copy, Database, Globe, ListChecks, LoaderCircle, Search, Square, Users, Wrench, type LucideIcon } from 'lucide-react';
 import type { AgentRunStatus } from '@/lib/agent/types';
 import { getAgentToolFamily, type AgentToolFamily } from '@/lib/agent/tool-catalog';
 import { MarkdownContent } from '@/components/ui/MarkdownContent';
 import { useToast } from '@/components/ui/Toast';
-import { formatAgentToolDuration, formatAgentValue, getAgentTaskSpan, getAgentToolState, summarizeAgentTool, type AgentTool } from './presentation';
+import { AGENT_TOOL_FAMILY_LABELS, formatAgentToolDuration, formatAgentValue, getAgentTaskSpan, getAgentToolState, summarizeAgentTool, type AgentTool } from './presentation';
 import { AgentToolResult } from './AgentToolResult';
 
 const FAMILY_ICONS: Record<AgentToolFamily, LucideIcon> = {
@@ -61,23 +61,25 @@ function ToolSection({ label, value }: { label: string; value: unknown }) {
     </section>;
 }
 
-export function AgentToolCard({ tool, runStatus, showResult = true, fullResult = false }: { tool: AgentTool; runStatus: AgentRunStatus; showResult?: boolean; fullResult?: boolean }) {
+export function AgentToolCard({ tool, runStatus, showResult = true, fullResult = false, defaultOpen = false }: { tool: AgentTool; runStatus: AgentRunStatus; showResult?: boolean; fullResult?: boolean; defaultOpen?: boolean }) {
     const [expanded, setExpanded] = useState<boolean | null>(null);
     const state = getAgentToolState(tool, runStatus);
     const summary = summarizeAgentTool(tool);
     const span = getAgentTaskSpan(tool);
-    const ToolIcon = FAMILY_ICONS[getAgentToolFamily(tool.name)];
+    const family = getAgentToolFamily(tool.name);
+    const ToolIcon = FAMILY_ICONS[family];
     const Icon = state.status === 'running' ? LoaderCircle : state.status === 'failed' ? CircleAlert
-        : state.status === 'completed' ? Check : ToolIcon;
-    const open = expanded ?? state.status === 'failed';
+        : state.status === 'completed' ? Check : state.status === 'awaiting_input' ? CircleHelp : state.status === 'interrupted' ? Square : ToolIcon;
+    const open = expanded ?? (defaultOpen || state.status === 'failed');
     return <div><details className={`agent-tool-card agent-tool-card--${state.status}`} open={open}>
         <summary onClick={event => { event.preventDefault(); setExpanded(!open); }}>
-            <span className="agent-tool-indicator">
-                <Icon size={14} className={state.status === 'running' ? 'animate-spin motion-reduce:animate-none' : undefined} aria-hidden="true" />
+            <span className="agent-tool-indicator" data-state={state.status}>
+                <Icon size={13} strokeWidth={2.4} className={state.status === 'running' ? 'animate-spin motion-reduce:animate-none' : undefined} aria-hidden="true" />
             </span>
             <span className="agent-tool-label"><span>{tool.title}</span>{summary && <small>{summary}</small>}</span>
             {['completed', 'failed'].includes(state.status) && typeof tool.durationMs === 'number' && Number.isFinite(tool.durationMs) && tool.durationMs >= 0 && <span className="agent-tool-time" title="本次工具调用的实际执行用时">{formatAgentToolDuration(tool.durationMs)}</span>}
-            <span className="agent-tool-state">{state.label}</span>
+            <span className="agent-tool-tag">{AGENT_TOOL_FAMILY_LABELS[family]}</span>
+            <span className={state.status === 'completed' ? 'sr-only' : 'agent-tool-state'}>{state.label}</span>
             <ChevronRight size={14} className="agent-tool-chevron" aria-hidden="true" />
         </summary>
         {open && <div className="agent-tool-details">

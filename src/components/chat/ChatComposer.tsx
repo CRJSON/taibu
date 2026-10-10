@@ -462,9 +462,9 @@ export function ChatComposer({
                     />
                     {allowDuringRun && isLoading && !awaitingInput && (
                         <div className="chat-run-actions">
-                            <span>任务执行中，可以补充要求</span>
-                            <button type="button" onClick={submit} disabled={!inputValue.trim() || isSendingToList || uploads.uploading} className="agent-secondary-button">调整任务</button>
-                            {onQueueMessage && <button type="button" onClick={() => void onQueueMessage()} disabled={!inputValue.trim() || isSendingToList || uploads.uploading} className="agent-secondary-button">排队继续</button>}
+                            <span>任务执行中：补充内容在下一个安全步骤生效</span>
+                            <button type="button" onClick={submit} disabled={!inputValue.trim() || isSendingToList || uploads.uploading} className="agent-secondary-button">补充到当前任务</button>
+                            {onQueueMessage && <button type="button" onClick={() => void onQueueMessage()} disabled={!inputValue.trim() || isSendingToList || uploads.uploading} className="agent-secondary-button">结束后续问</button>}
                         </div>
                     )}
 

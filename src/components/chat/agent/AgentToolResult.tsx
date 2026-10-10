@@ -1,8 +1,11 @@
 'use client';
 
 import { useId, useMemo, useState } from 'react';
-import { ArrowUpRight, Maximize2, PanelRightOpen, X } from 'lucide-react';
-import { getAgentChart, getAgentDataResults, getAgentSearchResults, getAgentToolText, type AgentToolPart } from '@/lib/agent/tool-presentation';
+import { Maximize2, Orbit, PanelRightOpen, X } from 'lucide-react';
+import { getAgentChart, getAgentToolText, type AgentChart, type AgentToolPart } from '@/lib/agent/tool-presentation';
+import { REASONING_EFFORT_LABELS } from '@/lib/chat/model-settings';
+import { AI_REASONING_EFFORTS, type AIReasoningEffort } from '@/types';
+import { getBranchElement, getElementColor, getStemElement } from '@/lib/divination/display-helpers';
 import { isAgentChartTool } from '@/lib/agent/tool-catalog';
 import { ChartErrorBoundary } from '@/components/visualization/ChartRenderer';
 import { MarkdownContent } from '@/components/ui/MarkdownContent';
@@ -21,6 +24,24 @@ function TextFallback({ tool, incomplete = false }: { tool: AgentToolPart; incom
   </div>;
 }
 
+/** Bazi shows its four pillars in element colors; other readings show their kind. */
+function ChartGlyph({ value }: { value: AgentChart | null }) {
+  if (value?.kind !== 'bazi') return <span className="agent-result-glyph" aria-hidden="true"><Orbit size={18} /></span>;
+  return <span className="agent-result-pillars" aria-hidden="true">{value.chart.四柱.map(pillar => {
+    const [stem, branch] = [pillar.干支.charAt(0), pillar.干支.charAt(1)];
+    const color = (element: ReturnType<typeof getStemElement>) => element ? { color: getElementColor(element) } : undefined;
+    return <span key={pillar.柱} data-day-pillar={pillar.柱 === '日柱' ? 'true' : undefined}><span style={color(getStemElement(stem))}>{stem}</span><span style={color(getBranchElement(branch))}>{branch}</span></span>;
+  })}</span>;
+}
+
+const effortLabel = (value?: string) => value === 'off' ? '不推理' : value && (AI_REASONING_EFFORTS as readonly string[]).includes(value) ? REASONING_EFFORT_LABELS[value as AIReasoningEffort] : null;
+
+function chartSubtitle(value: AgentChart) {
+  if (value.kind !== 'bazi') return value.summary;
+  const basic = value.chart.基本信息;
+  return [basic.性别, `日主 ${basic.日主}`, value.chart.干支关系[0]].filter(Boolean).join(' · ');
+}
+
 export function AgentToolResult({ tool, full = false }: { tool: AgentToolPart; full?: boolean }) {
   const id = useId();
   const workspace = useAgentResultWorkspace();
@@ -28,10 +49,13 @@ export function AgentToolResult({ tool, full = false }: { tool: AgentToolPart; f
   const value = useMemo(() => getAgentChart(tool), [tool]);
   const analyses = tool.name === 'parallel_analysis' ? parallelAnalysisResults(tool.output) : [];
   if (analyses.length) return <section className="agent-result-list agent-collaboration-results" aria-label="协作分析">
-    <h3>协作分析 <span>{analyses.length}</span></h3>
+    <header>
+      <div><h3>协作分析</h3><p>各成员独立分析，主模型汇总分歧</p></div>
+      {workspace && <button type="button" className="agent-primary-button" onClick={() => workspace.openResource(`tool:${tool.id}`)}><PanelRightOpen size={14} aria-hidden="true" />在工作区比较</button>}
+    </header>
     {analyses.map(analysis => <details key={analysis.conversationId}>
-      <summary><span>{analysis.name ?? analysis.system}<small>{analysis.modelName ?? analysis.model ?? '主模型'}</small></span>
-        <span>{analysis.status === 'completed' ? '已完成' : analysis.status === 'failed' || tool.status === 'failed' ? '未完成' : '分析中'}</span></summary>
+      <summary><span>{analysis.name ?? analysis.system}<small>{[analysis.modelName ?? analysis.model ?? '主模型', effortLabel(analysis.reasoningEffort)].filter(Boolean).join(' · ')}</small></span>
+        <span data-status={analysis.status}>{analysis.status === 'completed' ? '已完成' : analysis.status === 'failed' || tool.status === 'failed' ? '未完成' : '分析中'}</span></summary>
       {analysis.answer && <MarkdownContent content={analysis.answer} />}
     </details>)}
   </section>;
@@ -42,12 +66,17 @@ export function AgentToolResult({ tool, full = false }: { tool: AgentToolPart; f
     const title = value?.title ?? tool.title;
     const content = value ? <ChartErrorBoundary resetKey={tool.output} fallback={<TextFallback tool={tool} />}><CanonicalChartView value={value} text={getAgentToolText(tool) ?? undefined} /></ChartErrorBoundary> : <TextFallback tool={tool} incomplete />;
     if (full) return <section className="agent-result-full" aria-label={title}>{value && <p className="agent-result-summary">{value.summary}</p>}<div className="agent-chart-scroll" tabIndex={0} aria-label={`${title}内容`}>{content}</div></section>;
+    // Calculations are cached task results until the final selection saves them; inspections read saved records.
+    const status = tool.name === 'inspect_chart' ? '已存资料' : '暂存成果';
     return <article className="agent-result-card" data-tool-result={tool.id} data-result-kind={tool.name}>
-      <header><div><h3>{title}</h3><p className="agent-result-summary">{value?.summary ?? '已保留工具返回内容'}</p></div><span className="agent-result-badge">已生成</span></header>
+      <header>
+        <ChartGlyph value={value} />
+        <div className="min-w-0 flex-1"><h3>{title}</h3><p className="agent-result-summary">{value ? `${chartSubtitle(value)} · ${status}` : '已保留工具返回内容'}</p></div>
+        {workspace && <button type="button" className="agent-primary-button" onClick={() => workspace.openResource(`tool:${tool.id}`)}><PanelRightOpen size={14} aria-hidden="true" />在工作区查看</button>}
+      </header>
       {value ? <div className="agent-result-preview" aria-hidden="true" inert>{content}</div> : <TextFallback tool={tool} incomplete />}
       <footer>
         <button type="button" className="agent-secondary-button" onClick={() => setExpanded(true)}><Maximize2 size={14} />展开{value ? '命盘' : '结果'}</button>
-        {workspace && <button type="button" className="agent-secondary-button" onClick={() => workspace.openResource(`tool:${tool.id}`)}><PanelRightOpen size={14} />固定到工作区</button>}
       </footer>
       <Modal open={expanded} onClose={() => setExpanded(false)} labelledBy={id} className="agent-chart-dialog">
         <header className="agent-chart-dialog-header"><div><h2 id={id}>{title}</h2><p className="agent-result-summary">{value?.summary}</p></div><button type="button" className="agent-icon-button" aria-label="关闭命盘" onClick={() => setExpanded(false)}><X size={20} /></button></header>
@@ -55,18 +84,5 @@ export function AgentToolResult({ tool, full = false }: { tool: AgentToolPart; f
       </Modal>
     </article>;
   }
-  const search = getAgentSearchResults(tool);
-  if (search) return <section className="agent-result-list" aria-label={tool.name === 'web_search' ? '查询来源' : '知识库结果'}>
-    <h3>{tool.name === 'web_search' ? '查询来源' : '知识库结果'} <span>{search.length}</span></h3>
-    {search.length ? search.map(result => <details key={result.id}><summary>{result.url ? <a href={result.url} target="_blank" rel="noopener noreferrer">{result.title}<ArrowUpRight size={13} /></a> : <span>{result.title}</span>}</summary><MarkdownContent content={result.content} /></details>) : <p className="text-sm text-foreground-secondary">没有找到匹配资料。</p>}
-  </section>;
-  const records = getAgentDataResults(tool);
-  if (records) return <section className="agent-result-list" aria-label="个人资料查询结果">
-    <h3>个人资料 <span>{records.items.length}</span></h3>
-    {records.items.map(item => <details key={`${item.type}:${item.id}`}><summary>{item.name}</summary><p className="text-sm text-foreground-secondary">{item.preview}</p></details>)}
-    {!records.items.length && <p className="text-sm text-foreground-secondary">暂无已保存资料。</p>}
-    {records.errors.map((error, index) => <p key={index} className="text-sm text-warning">{error}</p>)}
-  </section>;
-  if (tool.name === 'read_user_data' && getAgentToolText(tool)) return <section className="agent-result-list" aria-label="已读取资料"><h3>已读取资料</h3><div className="agent-result-text" tabIndex={0}><MarkdownContent content={getAgentToolText(tool)!} /></div></section>;
   return null;
 }
