@@ -5,17 +5,8 @@
  * its own duplicated item arrays.
  */
 import {
-  Dices,
-  HeartHandshake,
   BotMessageSquare,
-  Brain,
-  Sun,
   User,
-  ScanFace,
-  Hand,
-  CalendarRange,
-  Aperture,
-  Tags,
   Settings,
   CircleStar,
   Bell,
@@ -23,36 +14,31 @@ import {
   BookOpenText,
   Scroll,
   CircleQuestionMark,
-  Telescope,
-  Waypoints,
   type LucideIcon,
 } from 'lucide-react';
-import { YinYangIcon, CheckerboardIcon, CompassRoseIcon, StarOfDavidIcon, FlowerLotusIcon } from '@phosphor-icons/react';
-import { createElement, type ComponentType } from 'react';
+import type { ComponentType } from 'react';
+import {
+  BaziIcon,
+  CommunityIcon,
+  DailyIcon,
+  DaliurenIcon,
+  FaceIcon,
+  HepanIcon,
+  LiuyaoIcon,
+  MbtiIcon,
+  MeihuaIcon,
+  MonthlyIcon,
+  PalmIcon,
+  QimenIcon,
+  RecordsIcon,
+  TarotIcon,
+  XiaoliurenIcon,
+  ZiweiIcon,
+} from '@/lib/navigation/nav-icons';
 import { getSettingsCenterRouteTarget } from '@/lib/settings-center';
 
-/** Icon type that accepts both Lucide and Phosphor icon components. */
+/** Icon type shared by Lucide icons and the custom single-stroke nav icons. */
 export type NavIcon = ComponentType<{ className?: string; size?: number | string }>;
-
-/**
- * Wrap a Phosphor icon so it visually matches Lucide's stroke weight.
- * Phosphor regular paths are thinner than Lucide's default strokeWidth=2,
- * so we scale up ~115% while keeping the bounding box unchanged.
- */
-function phosphor(Icon: ComponentType<Record<string, unknown>>): NavIcon {
-  const Wrapped: NavIcon = (props) =>
-    createElement(Icon, {
-      ...props,
-      style: { transform: 'scale(1.1)' },
-    });
-  Wrapped.displayName = `Phosphor(${Icon.displayName ?? Icon.name})`;
-  return Wrapped;
-}
-
-const PYinYang = phosphor(YinYangIcon);
-const PCheckerboard = phosphor(CheckerboardIcon);
-const PCompassRose = phosphor(CompassRoseIcon);
-const PStarOfDavid = phosphor(StarOfDavidIcon);
 
 export type { LucideIcon };
 
@@ -95,26 +81,26 @@ export interface NavItemDef {
 
 export const NAV_REGISTRY: readonly NavItemDef[] = [
   // ── Divination ──────────────────────────────────────────────────────────
-  { id: 'bazi', href: '/bazi', label: '八字', icon: PYinYang, emoji: '🔮', description: '四柱八字精批', category: 'divination', group: 'chart' },
-  { id: 'hepan', href: '/hepan', label: '八字合盘', icon: HeartHandshake, emoji: '💑', description: '八字合盘', category: 'divination', group: 'chart' },
-  { id: 'ziwei', href: '/ziwei', label: '紫微斗数', icon: PCompassRose, emoji: '⭐', description: '紫微命盘', category: 'divination', group: 'chart' },
-  { id: 'tarot', href: '/tarot', label: '塔罗', icon: PStarOfDavid, emoji: '🃏', description: '塔罗占卜', category: 'divination', group: 'divine' },
-  { id: 'liuyao', href: '/liuyao', label: '六爻', icon: Dices, emoji: '☯️', description: '六爻占卜', category: 'divination', group: 'divine' },
-  { id: 'qimen', href: '/qimen', label: '奇门遁甲', icon: PCheckerboard, emoji: '🧭', description: '奇门遁甲', category: 'divination', group: 'sanshi' },
-  { id: 'daliuren', href: '/daliuren', label: '大六壬', icon: Telescope, emoji: '📜', description: '大六壬', category: 'divination', group: 'sanshi' },
-  { id: 'meihua', href: '/meihua', label: '梅花易数', icon: FlowerLotusIcon, description: '梅花易数', category: 'divination', group: 'divine' },
-  { id: 'xiaoliuren', href: '/xiaoliuren', label: '小六壬', icon: Waypoints, description: '小六壬', category: 'divination', group: 'divine' },
-  { id: 'face', href: '/face', label: '面相', icon: ScanFace, emoji: '👤', description: '面相分析', category: 'divination', group: 'xiang' },
-  { id: 'palm', href: '/palm', label: '手相', icon: Hand, emoji: '🖐️', description: '手相分析', category: 'divination', group: 'xiang' },
-  { id: 'mbti', href: '/mbti', label: 'MBTI', icon: Brain, emoji: '🧩', description: '性格测试', category: 'divination', group: 'xiang' },
+  { id: 'bazi', href: '/bazi', label: '八字', icon: BaziIcon, emoji: '🔮', description: '四柱八字精批', category: 'divination', group: 'chart' },
+  { id: 'hepan', href: '/hepan', label: '八字合盘', icon: HepanIcon, emoji: '💑', description: '八字合盘', category: 'divination', group: 'chart' },
+  { id: 'ziwei', href: '/ziwei', label: '紫微斗数', icon: ZiweiIcon, emoji: '⭐', description: '紫微命盘', category: 'divination', group: 'chart' },
+  { id: 'tarot', href: '/tarot', label: '塔罗', icon: TarotIcon, emoji: '🃏', description: '塔罗占卜', category: 'divination', group: 'divine' },
+  { id: 'liuyao', href: '/liuyao', label: '六爻', icon: LiuyaoIcon, emoji: '☯️', description: '六爻占卜', category: 'divination', group: 'divine' },
+  { id: 'qimen', href: '/qimen', label: '奇门遁甲', icon: QimenIcon, emoji: '🧭', description: '奇门遁甲', category: 'divination', group: 'sanshi' },
+  { id: 'daliuren', href: '/daliuren', label: '大六壬', icon: DaliurenIcon, emoji: '📜', description: '大六壬', category: 'divination', group: 'sanshi' },
+  { id: 'meihua', href: '/meihua', label: '梅花易数', icon: MeihuaIcon, description: '梅花易数', category: 'divination', group: 'divine' },
+  { id: 'xiaoliuren', href: '/xiaoliuren', label: '小六壬', icon: XiaoliurenIcon, description: '小六壬', category: 'divination', group: 'divine' },
+  { id: 'face', href: '/face', label: '面相', icon: FaceIcon, emoji: '👤', description: '面相分析', category: 'divination', group: 'xiang' },
+  { id: 'palm', href: '/palm', label: '手相', icon: PalmIcon, emoji: '🖐️', description: '手相分析', category: 'divination', group: 'xiang' },
+  { id: 'mbti', href: '/mbti', label: 'MBTI', icon: MbtiIcon, emoji: '🧩', description: '性格测试', category: 'divination', group: 'xiang' },
 
-  { id: 'daily', href: '/daily', label: '日运', icon: Sun, description: '日运 · 黄历', category: 'divination', group: 'fortune' },
-  { id: 'monthly', href: '/monthly', label: '月运', icon: CalendarRange, description: '月运', category: 'divination', group: 'fortune' },
+  { id: 'daily', href: '/daily', label: '日运', icon: DailyIcon, description: '日运 · 黄历', category: 'divination', group: 'fortune' },
+  { id: 'monthly', href: '/monthly', label: '月运', icon: MonthlyIcon, description: '月运', category: 'divination', group: 'fortune' },
 
   // ── Tools ───────────────────────────────────────────────────────────────
   { id: 'chat', href: '/chat', label: '新聊天', icon: BotMessageSquare, category: 'tool' },
-  { id: 'records', href: '/records', label: '命理记录', icon: Tags, category: 'tool' },
-  { id: 'community', href: '/community', label: '社区', icon: Aperture, category: 'tool' },
+  { id: 'records', href: '/records', label: '命理记录', icon: RecordsIcon, category: 'tool' },
+  { id: 'community', href: '/community', label: '社区', icon: CommunityIcon, category: 'tool' },
 
   // ── User ────────────────────────────────────────────────────────────────
   { id: 'settings-profile', href: getSettingsCenterRouteTarget('profile'), label: '我的', icon: User, category: 'user' },

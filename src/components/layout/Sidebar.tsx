@@ -12,9 +12,8 @@
 'use client';
 
 import Link from 'next/link';
-import Image from 'next/image';
 import { usePathname, useSearchParams, useRouter } from 'next/navigation';
-import { Bell, LayoutGrid, LogIn, Plus } from 'lucide-react';
+import { Bell, LayoutGrid, LogIn, Plus, Search } from 'lucide-react';
 import { useState, useCallback, useMemo, useRef, Suspense } from 'react';
 import { AuthModal } from '@/components/auth/AuthModal';
 import { SidebarUserCard } from '@/components/layout/UserMenu';
@@ -37,15 +36,17 @@ const ASIDE_CLASS = 'hidden lg:flex flex-col h-screen sticky top-0 z-20 bg-sideb
 const ITEM_BASE = 'flex items-center gap-2.5 h-9 px-2 rounded-lg text-sm transition-colors duration-150';
 const ITEM_IDLE = 'text-foreground hover:bg-background-secondary';
 const ITEM_ACTIVE = 'bg-background-tertiary text-foreground font-medium';
-const SECTION_LABEL = 'px-2 pt-4 pb-1.5 text-xs text-foreground-secondary';
+const SECTION_LABEL = 'px-2 pt-5 pb-2 text-xs text-foreground-secondary';
+/** Opens the global conversation search (ConversationSearchHost listens for this event; ⌘K also works). */
+const openConversationSearch = () => window.dispatchEvent(new Event('taibu:search'));
 
 const isActivePath = (pathname: string | null, href: string) => pathname === href || !!pathname?.startsWith(href + '/');
 
 function Brand() {
     return (
-        <Link href="/" className="flex items-center gap-2 min-w-0">
-            <Image src="/Logo.svg" alt="太卜 Logo" width={26} height={26} className="rounded-md flex-shrink-0 dark:invert" />
-            <span className="font-display text-[19px] text-foreground whitespace-nowrap">太卜</span>
+        <Link href="/" aria-label="太卜首页" className="flex items-center gap-2 min-w-0">
+            <span aria-hidden className="w-[26px] h-[26px] rounded-[7px] bg-clay text-[#faf9f5] flex items-center justify-center flex-shrink-0 font-display text-base font-semibold leading-none">卜</span>
+            <span className="font-display text-[19px] font-medium text-foreground whitespace-nowrap">太卜</span>
         </Link>
     );
 }
@@ -137,6 +138,7 @@ function SidebarInner() {
     const transientNavItem = useMemo(() => filteredNavItems
         .find((item) => !pins.includes(item.id) && isActivePath(pathname, item.href)) ?? null, [filteredNavItems, pathname, pins]);
     const allActive = !!transientNavItem;
+    const divinationCount = useMemo(() => filteredNavItems.filter((item) => item.group !== 'fortune').length, [filteredNavItems]);
     const closeAll = useCallback(() => setAllOpen(false), []);
 
     const chatItem = useMemo(() => toolItems
@@ -166,7 +168,7 @@ function SidebarInner() {
     return (
         <>
             <aside className={ASIDE_CLASS}>
-                <div className="flex items-center h-14 px-3 justify-between flex-shrink-0">
+                <div className="flex items-center h-16 px-3.5 justify-between flex-shrink-0">
                     <Brand />
                     <button
                         onClick={toggleAnnouncementCenter}
@@ -182,7 +184,7 @@ function SidebarInner() {
                     </button>
                 </div>
 
-                <div className="flex-shrink-0 px-2 space-y-0.5">
+                <div className="flex-shrink-0 px-2.5 space-y-1">
                     {chatItem ? (
                         <Link
                             href={chatItem.href}
@@ -199,12 +201,18 @@ function SidebarInner() {
                             <span className="whitespace-nowrap">{chatItem.label}</span>
                         </Link>
                     ) : null}
+                    {chatItem ? (
+                        <button type="button" onClick={openConversationSearch} className={`${ITEM_BASE} w-full ${ITEM_IDLE}`}>
+                            <Search className="w-[18px] h-[18px] flex-shrink-0 text-foreground-secondary" strokeWidth={1.6} />
+                            <span>搜索</span>
+                        </button>
+                    ) : null}
                     {filteredToolItems.map((item) => (
                         <SidebarNavLink key={item.href} item={item} active={pathname === item.href} />
                     ))}
                 </div>
 
-                <div className="flex-shrink-0 px-2 pb-2">
+                <div className="flex-shrink-0 px-2.5 pb-2">
                     <div className={SECTION_LABEL}>占术</div>
                     <ul className="space-y-0.5">
                         {pinnedNavItems.map((item) => (
@@ -226,9 +234,9 @@ function SidebarInner() {
                                 aria-haspopup="dialog"
                                 className={`${ITEM_BASE} w-full ${allOpen ? 'bg-background-secondary text-foreground' : 'text-foreground-secondary hover:bg-background-secondary'}`}
                             >
-                                <LayoutGrid className={`w-[18px] h-[18px] flex-shrink-0 ${allActive ? 'text-accent' : ''}`} />
+                                <LayoutGrid className={`w-[18px] h-[18px] flex-shrink-0 ${allActive ? 'text-accent' : ''}`} strokeWidth={1.6} />
                                 <span>全部占术</span>
-                                <span className="ml-auto text-xs text-foreground-tertiary tabular-nums">{filteredNavItems.length}</span>
+                                <span className="ml-auto text-xs text-foreground-tertiary tabular-nums">{divinationCount}</span>
                             </button>
                         </li>
                     </ul>
@@ -252,11 +260,11 @@ function SidebarInner() {
                     </FloatingPanel>
                 </div>
 
-                <nav aria-label="最近对话" className="flex-1 min-h-0 overflow-y-auto px-2 border-t border-border/60">
+                <nav aria-label="最近对话" className="flex-1 min-h-0 overflow-y-auto px-2.5">
                     {chatItem && user ? (
                         <div>
-                            <div className="sticky top-0 z-30 bg-sidebar px-2 pt-3 pb-1.5 text-xs text-foreground-secondary">
-                                最近对话
+                            <div className="sticky top-0 z-30 bg-sidebar px-2 pt-4 pb-2 text-xs text-foreground-secondary">
+                                最近
                             </div>
                             <ul>
                                 <li>
