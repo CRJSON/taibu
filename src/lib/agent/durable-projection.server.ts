@@ -7,6 +7,7 @@ import type { AgentDurableStorage } from "./durable-storage.server";
 import type { AgentCheckpoint, AgentPart, AgentRuntimeInfo, DomainTool } from "./types";
 import { projectAgentContextUsage } from "./context-usage";
 import { projectAgentUsage } from './usage';
+import { projectsAgentCanonicalText } from './tool-catalog';
 
 function taskTiming(task?: { startedAt?: number; endedAt?: number }) {
   return {
@@ -106,7 +107,7 @@ export async function projectDurableConversation(
           card.output = message.details ?? message.content;
           Object.assign(card, taskTiming(task));
           if (typeof message.durationMs === 'number' && Number.isFinite(message.durationMs) && message.durationMs >= 0) card.durationMs = message.durationMs;
-          if (['bazi', 'ziwei', 'liuyao', 'meihua', 'tarot', 'qimen', 'daliuren', 'xiaoliuren', 'read_user_data', 'inspect_chart'].includes(card.name)) card.canonicalText = message.content.filter(part => part.type === 'text').map(part => part.type === 'text' ? part.text : '').join('\n');
+          if (projectsAgentCanonicalText(card.name)) card.canonicalText = message.content.filter(part => part.type === 'text').map(part => part.type === 'text' ? part.text : '').join('\n');
           if (entry.byTaskId) attach(card.id, `${entry.byTaskId}:${message.toolCallId}`);
         }
       }

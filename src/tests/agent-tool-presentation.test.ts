@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildToolSuccessPayload, executeTool, listToolDefinitions } from 'taibu-core/mcp';
-import { AGENT_CHART_NAMES, getAgentChart, getAgentDataResults, getAgentSearchResults, getAgentToolArtifactId, getAgentToolText, getAgentUnrepresentedArtifacts, isAgentChartTool, type AgentToolPart } from '../lib/agent/tool-presentation';
+import { getAgentChart, getAgentDataResults, getAgentSearchResults, getAgentToolArtifactId, getAgentToolText, getAgentUnrepresentedArtifacts, type AgentToolPart } from '../lib/agent/tool-presentation';
+import { AGENT_CHART_NAMES, isAgentChartTool } from '../lib/agent/tool-catalog';
 
 test('all eleven real tool results display the persisted reading in default/full formats and after JSON history restore', async () => {
   const definitions = listToolDefinitions();

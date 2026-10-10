@@ -2,7 +2,8 @@
 
 import { useId, useMemo, useState } from 'react';
 import { ArrowUpRight, Maximize2, PanelRightOpen, X } from 'lucide-react';
-import { getAgentChart, getAgentDataResults, getAgentSearchResults, getAgentToolText, isAgentChartTool, type AgentToolPart } from '@/lib/agent/tool-presentation';
+import { getAgentChart, getAgentDataResults, getAgentSearchResults, getAgentToolText, type AgentToolPart } from '@/lib/agent/tool-presentation';
+import { isAgentChartTool } from '@/lib/agent/tool-catalog';
 import { ChartErrorBoundary } from '@/components/visualization/ChartRenderer';
 import { MarkdownContent } from '@/components/ui/MarkdownContent';
 import { Modal } from '@/components/ui/Modal';

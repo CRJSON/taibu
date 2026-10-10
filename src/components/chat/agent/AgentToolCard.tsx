@@ -1,12 +1,28 @@
 'use client';
 
 import { useState } from 'react';
-import { Calculator, Check, ChevronRight, CircleAlert, CircleHelp, Copy, Database, ListChecks, LoaderCircle, Search, Wrench } from 'lucide-react';
+import { BookOpen, Calculator, Check, ChevronRight, CircleAlert, CircleHelp, Copy, Database, Globe, ListChecks, LoaderCircle, Search, Users, Wrench, type LucideIcon } from 'lucide-react';
 import type { AgentRunStatus } from '@/lib/agent/types';
+import { getAgentToolFamily, type AgentToolFamily } from '@/lib/agent/tool-catalog';
 import { MarkdownContent } from '@/components/ui/MarkdownContent';
 import { useToast } from '@/components/ui/Toast';
 import { formatAgentToolDuration, formatAgentValue, getAgentTaskSpan, getAgentToolState, summarizeAgentTool, type AgentTool } from './presentation';
 import { AgentToolResult } from './AgentToolResult';
+
+const FAMILY_ICONS: Record<AgentToolFamily, LucideIcon> = {
+    chart: Calculator,
+    calculation: Calculator,
+    search: Search,
+    data: Database,
+    method: BookOpen,
+    plan: ListChecks,
+    question: CircleHelp,
+    collaboration: Users,
+    memory: Database,
+    artifacts: ListChecks,
+    external: Globe,
+    other: Wrench,
+};
 
 function ToolValue({ value }: { value: unknown }) {
     if (Array.isArray(value) && value.length > 0 && value.every(item => item?.type === 'text' && typeof item.text === 'string')) {
@@ -50,8 +66,7 @@ export function AgentToolCard({ tool, runStatus, showResult = true, fullResult =
     const state = getAgentToolState(tool, runStatus);
     const summary = summarizeAgentTool(tool);
     const span = getAgentTaskSpan(tool);
-    const ToolIcon = tool.name === 'bazi' || tool.name === 'ziwei' ? Calculator : tool.name === 'ask_user' ? CircleHelp
-        : tool.name.includes('search') ? Search : tool.name === 'select_final_artifacts' ? ListChecks : tool.name.includes('user') ? Database : Wrench;
+    const ToolIcon = FAMILY_ICONS[getAgentToolFamily(tool.name)];
     const Icon = state.status === 'running' ? LoaderCircle : state.status === 'failed' ? CircleAlert
         : state.status === 'completed' ? Check : ToolIcon;
     const open = expanded ?? state.status === 'failed';

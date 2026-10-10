@@ -27,7 +27,7 @@ import { attachmentBytes, attachmentDto, validateAttachmentIds } from './attachm
 import { AGENT_MEMORY_SELECT } from './memory';
 import { authorizeChartReference, loadAgentChart, loadInspectedChart } from './chart-tools.server';
 import { CHART_SOURCE_KINDS, getChartTargets, validateChartFocus } from './chart-interaction';
-import { isAgentChartTool } from './tool-presentation';
+import { isAgentChartTool } from './tool-catalog';
 import { searchKnowledgeWithPersistence } from "@/lib/knowledge-base/search";
 import type {
   KnowledgeSearchPersistence,

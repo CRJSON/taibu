@@ -10,21 +10,18 @@ import type { TaiyiCanonicalJSON } from 'taibu-core/taiyi';
 import type { AstrologyCanonicalJSON } from 'taibu-core/astrology';
 import type { AlmanacCanonicalJSON } from 'taibu-core/almanac';
 import type { AgentPart } from './types';
+import { AGENT_CHART_NAMES, isAgentChartTool, type AgentChartKind } from './tool-catalog';
 
 export type AgentToolPart = Extract<AgentPart, { type: 'tool' }>;
-type ChartTypes = {
+type ChartJson = {
   bazi: BaziCanonicalJSON; ziwei: ZiweiCanonicalJSON; qimen: QimenCanonicalJSON;
   liuyao: LiuyaoCanonicalJSON; meihua: MeihuaCanonicalJSON; daliuren: DaliurenCanonicalJSON;
   xiaoliuren: XiaoliurenCanonicalJSON; tarot: TarotCanonicalJSON;
   taiyi: TaiyiCanonicalJSON; astrology: AstrologyCanonicalJSON; almanac: AlmanacCanonicalJSON;
 };
+/** Keyed by the catalog: a chart kind without a canonical JSON type fails to compile. */
+type ChartTypes = { [K in AgentChartKind]: ChartJson[K] };
 export type AgentChart = { [K in keyof ChartTypes]: { kind: K; chart: ChartTypes[K]; title: string; summary: string } }[keyof ChartTypes];
-
-export const AGENT_CHART_NAMES = {
-  bazi: '八字命盘', ziwei: '紫微命盘', qimen: '奇门九宫盘', liuyao: '六爻卦盘',
-  meihua: '梅花卦盘', daliuren: '大六壬天地盘', xiaoliuren: '小六壬课盘', tarot: '塔罗牌阵',
-  taiyi: '太乙局盘', astrology: '西方占星盘', almanac: '黄历择日',
-} as const;
 
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -35,10 +32,6 @@ function stringArray(value: unknown) { return Array.isArray(value) && value.ever
 function rows(value: unknown, length: number, keys: string[]) {
   return Array.isArray(value) && value.length === length && arrayRows(value, keys);
 }
-export function isAgentChartTool(name: string): name is keyof ChartTypes {
-  return Object.hasOwn(AGENT_CHART_NAMES, name);
-}
-
 export function getAgentToolArtifactId(tool: AgentToolPart): string | null {
   const id = record(tool.output).artifactId;
   return typeof id === 'string' && id ? id : null;
