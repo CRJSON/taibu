@@ -181,9 +181,10 @@ export const renderBaziCanonicalJSON = withRulesJSON(renderBaziCanonicalJSONBase
 function buildRelationCoordinates(chart: BaziOutput): BaziRelationJSON[] {
   const pillars = [chart.fourPillars.year, chart.fourPillars.month, chart.fourPillars.day, chart.fourPillars.hour];
   const names = ['年柱', '月柱', '日柱', '时柱'] as const;
-  const positions = ['年支', '月支', '日支', '时支'];
+  const branchPositions = ['年支', '月支', '日支', '时支'];
+  const stemPositions = ['年干', '月干', '日干', '时干'];
   const cell = (position: string, part: BaziCellJSON['部位']): BaziCellJSON | null => {
-    const index = positions.indexOf(position);
+    const index = (part === '天干' ? stemPositions : branchPositions).indexOf(position);
     if (index < 0) return null;
     const char = part === '天干' ? pillars[index].stem : pillars[index].branch;
     return char && char !== '*' ? { 柱: names[index], 部位: part, 字: char } : null;
@@ -206,7 +207,7 @@ function buildRelationCoordinates(chart: BaziOutput): BaziRelationJSON[] {
     const reversed = relation === 'produced' || relation === 'controlled';
     const type = relation === 'produce' || relation === 'produced' ? '生' : '克';
     const from = reversed ? j : i, to = reversed ? i : j;
-    add(type, names[from] + pillars[from].stem + type + names[to] + pillars[to].stem, [cell(positions[from], '天干'), cell(positions[to], '天干')]);
+    add(type, names[from] + pillars[from].stem + type + names[to] + pillars[to].stem, [cell(stemPositions[from], '天干'), cell(stemPositions[to], '天干')]);
   }
   return result;
 }

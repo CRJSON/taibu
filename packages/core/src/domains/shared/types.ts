@@ -40,6 +40,9 @@ export interface PillarKongWangInfo {
 
 export type PillarPosition = '年支' | '月支' | '日支' | '时支';
 
+/** 天干所在柱位（用于天干五合、天干冲克等干系关系） */
+export type StemPosition = '年干' | '月干' | '日干' | '时干';
+
 export interface PillarRelation {
   type: '合' | '冲' | '刑' | '害';
   pillars: PillarPosition[];
@@ -50,7 +53,7 @@ export interface TianGanWuHeItem {
   stemA: string;
   stemB: string;
   resultElement: string;
-  positions: [PillarPosition, PillarPosition];
+  positions: [StemPosition, StemPosition];
 }
 
 export interface DiZhiBanHeItem {
@@ -63,7 +66,7 @@ export interface DiZhiBanHeItem {
 export interface TianGanChongKeItem {
   stemA: string;
   stemB: string;
-  positions: [PillarPosition, PillarPosition];
+  positions: [StemPosition, StemPosition];
 }
 
 export interface DiZhiSanHuiItem {

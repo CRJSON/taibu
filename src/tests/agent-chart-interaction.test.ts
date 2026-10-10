@@ -60,6 +60,14 @@ test('all saved chart provider references are explicit, normalized and reject un
   for (const source of ['face_reading', 'mbti_reading', 'daily_fortune', '__proto__']) assert.equal(parseChartReference(source + ':' + id), null);
 });
 
+test('normalized friendship palace remains selectable and usable in chart follow-up questions', async () => {
+  const tool = await chartTool('ziwei'), chart = getAgentChart(tool)!, reference = getAgentChartReference(tool)!;
+  const target = getChartTargets(chart).find(target => target.label.includes('交友'));
+  assert.ok(target);
+  assert.deepEqual(validateChartFocus(chart, reference, [target.id], true, '核对交友宫').targetIds, [target.id]);
+  assert.ok(chartQuestion(reference, [target]).includes('交友'));
+});
+
 test('inline results keep one chart per reading and preserve saved inspections, fallback text and unrelated receipts', async () => {
   const calculation = await chartTool('bazi');
   const inspected: AgentToolPart = { ...calculation, id: 'inspect', name: 'inspect_chart', output: { chartKind: 'bazi', chartReference: getAgentChartReference(calculation), result: getAgentChart(calculation)!.chart } };
@@ -195,7 +203,7 @@ test('repeated characters retain their actual pillar positions and nonadjacent s
   keys.forEach((key, index) => { output.fourPillars[key].stem = index < 2 ? '甲' : '庚'; output.fourPillars[key].branch = index < 2 ? '午' : '子'; });
   output.relations = [{ type: '刑', pillars: ['年支', '月支'], description: '午午自刑' }];
   output.tianGanWuHe = []; output.diZhiBanHe = []; output.diZhiSanHui = [];
-  output.tianGanChongKe = [{ stemA: '甲', stemB: '庚', positions: ['年支', '时支'] }];
+  output.tianGanChongKe = [{ stemA: '甲', stemB: '庚', positions: ['年干', '时干'] }];
   const json = toBaziJson(output);
   assert.deepEqual(json.干支关系明细!.find(relation => relation.类型 === '刑')!.位置, [
     { 柱: '年柱', 部位: '地支', 字: '午' }, { 柱: '月柱', 部位: '地支', 字: '午' },

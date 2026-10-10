@@ -24,6 +24,19 @@ test('every domain and supported detail level satisfies its public output schema
   }
 });
 
+test('all published tool examples execute and produce schema-valid canonical output', async () => {
+  for (const definition of listToolDefinitions()) for (const example of definition.inputSchema.examples) {
+    const input = { ...example };
+    if (definition.name === 'tarot') Object.assign(input, { seed: 'all-public-examples', referenceYear: 2024 });
+    if (definition.name === 'astrology') input.transitDateTime = '2024-06-01T12:00:00Z';
+    const result = await executeTool(definition.name, input);
+    const rendered = renderToolResult(definition.name, result);
+    assert.doesNotThrow(() => validateOutput(definition.name, rendered.structuredContent, definition.outputSchema), definition.name);
+    if (definition.name === 'bazi_pillars_resolve') assert.ok(result.candidates.length > 0, 'reverse-pillar examples identify real birth times');
+    if (definition.name === 'almanac' && input.dayMaster) assert.ok(rendered.structuredContent.基础与个性化坐标.流日十神);
+  }
+});
+
 test('Xiaoliuren schema rejects date plus even a partial manual lunar counter',async()=>{
   await assert.rejects(executeTool('xiaoliuren',{date:'2024-01-01',lunarMonth:1,hour:0}),{name:'CoreInputError'});
 });

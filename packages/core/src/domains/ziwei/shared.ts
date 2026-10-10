@@ -47,6 +47,19 @@ export const LUCUN_TABLE: Record<string, string> = {
   '壬': '亥', '癸': '子',
 };
 
+/**
+ * 宫名归一：iztro 输出「仆役」，对外统一为通行名称「交友」（两名为同一宫位）。
+ * 所有从 iztro 取出的宫名在进入本包输出前都应经过此函数。
+ */
+export function normalizePalaceName(name: string): string {
+  return name === '仆役' ? '交友' : name;
+}
+
+/** 反向归一：将对外名称「交友」还原为 iztro 识别的「仆役」，用于向 iztro 查询宫位 */
+export function toPalaceLookupName(name: string): string {
+  return name === '交友' ? '仆役' : name;
+}
+
 /** 计算流年虚岁列表 */
 export function computeLiuNianAges(palaceBranch: DiZhi, birthYearBranch: DiZhi, max = 60): number[] {
   const pIdx = DI_ZHI.indexOf(palaceBranch);

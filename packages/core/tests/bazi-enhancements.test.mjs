@@ -19,6 +19,22 @@ function toPillarString(pillar) {
   return `${pillar.stem}${pillar.branch}`;
 }
 
+test('stem combinations and clashes retain distinct stem positions in canonical chart coordinates', () => {
+  const chart = mcpCore.calculateBazi({ gender: 'male', birthYear: 1987, birthMonth: 6, birthDay: 15, birthHour: 12, timezone: 'Asia/Shanghai' });
+  assert.ok(chart.tianGanWuHe.length > 0 && chart.tianGanChongKe.length > 0, 'fixture has both combination and clash relations');
+  const stemRelations = [...chart.tianGanWuHe, ...chart.tianGanChongKe];
+  for (const relation of stemRelations) assert.ok(relation.positions.every(position => /^(年|月|日|时)干$/u.test(position)));
+  for (const detailLevel of ['default', 'full']) {
+    const coordinates = mcpCore.toBaziJson(chart, { detailLevel }).干支关系明细;
+    const combinations = coordinates.filter(relation => relation.类型 === '合' && relation.位置.every(cell => cell.部位 === '天干'));
+    const clashes = coordinates.filter(relation => relation.类型 === '冲克');
+    assert.equal(combinations.length, chart.tianGanWuHe.length);
+    assert.equal(clashes.length, chart.tianGanChongKe.length);
+    for (const relation of [...combinations, ...clashes]) assert.equal(relation.位置.length, 2);
+    assert.ok(coordinates.some(relation => relation.类型 === '生' || relation.类型 === '克'), 'element relation coordinates remain available');
+  }
+});
+
 test('bazi punishment groups require distinct branches unless explicitly self-punishing', () => {
   for (const branch of ['子', '丑', '寅', '卯', '巳', '未', '申', '戌']) {
     const punishments = analyzePillarRelations(branch, branch, '辰', '酉').filter(relation => relation.type === '刑');

@@ -17,7 +17,7 @@ export const xiaoliurenDefinition: ToolDefinition = {
       detailLevel: {
         type: 'string',
         enum: ['default', 'full'],
-        description: '输出细节级别。',
+        description: "输出详略（default=起课结果；full=追加释义与诗诀）",
         default: 'default',
       },
     },

@@ -13,7 +13,7 @@ import type {
   MutagedPlaceInfo,
   SurroundedPalaceInfo,
 } from '../shared/types.js';
-import { createAstrolabeWithTrueSolar, MUTAGEN_NAMES, type MutagenName } from '../ziwei/shared.js';
+import { createAstrolabeWithTrueSolar, MUTAGEN_NAMES, normalizePalaceName, toPalaceLookupName, type MutagenName } from '../ziwei/shared.js';
 import { getAstrolabeMutagens, getZiweiOptions, snapshotZiweiResult } from '../ziwei/profile.js';
 import { CoreInputError, resolveEnum } from '../../shared/validation.js';
 
@@ -34,9 +34,10 @@ function buildActualFlights(
   for (const mutagen of requested) {
     const index = MUTAGEN_NAMES.indexOf(mutagen as MutagenName);
     if (index < 0) continue;
+    const targetPalace = places[index]?.name;
     result.push({
       mutagen,
-      targetPalace: places[index]?.name ?? null,
+      targetPalace: targetPalace ? normalizePalaceName(targetPalace) : null,
       starName: stemMutagens[index] || null,
     });
   }
@@ -51,17 +52,17 @@ function processQuery(
 ): FlyingStarResult {
   switch (query.type) {
     case 'fliesTo': {
-      const palace = astrolabe.palace(query.from);
+      const palace = astrolabe.palace(toPalaceLookupName(query.from));
       if (!palace) throw new Error(`宫位 "${query.from}" 不存在`);
       const mutagens = (query.mutagens?.length ? query.mutagens : MUTAGEN_NAMES) as MutagenName[];
-      const result = palace.fliesTo(query.to, mutagens);
+      const result = palace.fliesTo(toPalaceLookupName(query.to), mutagens);
       return {
         queryIndex: idx,
         type: 'fliesTo',
         result,
         queryTarget: {
-          fromPalace: query.from,
-          toPalace: query.to,
+          fromPalace: normalizePalaceName(query.from),
+          toPalace: normalizePalaceName(query.to),
           mutagens: [...mutagens],
         },
         sourcePalaceGanZhi: `${palace.heavenlyStem}${palace.earthlyBranch}`,
@@ -69,7 +70,7 @@ function processQuery(
       };
     }
     case 'selfMutaged': {
-      const palace = astrolabe.palace(query.palace);
+      const palace = astrolabe.palace(toPalaceLookupName(query.palace));
       if (!palace) throw new Error(`宫位 "${query.palace}" 不存在`);
       const mutagens = (query.mutagens?.length ? query.mutagens : MUTAGEN_NAMES) as MutagenName[];
       const result = palace.selfMutaged(mutagens);
@@ -78,46 +79,49 @@ function processQuery(
         type: 'selfMutaged',
         result,
         queryTarget: {
-          palace: query.palace,
+          palace: normalizePalaceName(query.palace),
           mutagens: [...mutagens],
         },
         sourcePalaceGanZhi: `${palace.heavenlyStem}${palace.earthlyBranch}`,
       };
     }
     case 'mutagedPlaces': {
-      const palace = astrolabe.palace(query.palace);
+      const palace = astrolabe.palace(toPalaceLookupName(query.palace));
       if (!palace) throw new Error(`宫位 "${query.palace}" 不存在`);
       const places = palace.mutagedPlaces();
-      const result: MutagedPlaceInfo[] = MUTAGEN_NAMES.map((m, i) => ({
-        mutagen: m,
-        targetPalace: places[i]?.name ?? null,
-      }));
+      const result: MutagedPlaceInfo[] = MUTAGEN_NAMES.map((m, i) => {
+        const targetPalace = places[i]?.name;
+        return {
+          mutagen: m,
+          targetPalace: targetPalace ? normalizePalaceName(targetPalace) : null,
+        };
+      });
       return {
         queryIndex: idx,
         type: 'mutagedPlaces',
         result,
         queryTarget: {
-          palace: query.palace,
+          palace: normalizePalaceName(query.palace),
         },
         sourcePalaceGanZhi: `${palace.heavenlyStem}${palace.earthlyBranch}`,
         actualFlights: buildActualFlights(palace, MUTAGEN_NAMES, astrolabe),
       };
     }
     case 'surroundedPalaces': {
-      const surrounded = astrolabe.surroundedPalaces(query.palace);
+      const surrounded = astrolabe.surroundedPalaces(toPalaceLookupName(query.palace));
       if (!surrounded) throw new Error(`宫位 "${query.palace}" 不存在`);
       const result: SurroundedPalaceInfo = {
-        target: { name: surrounded.target.name, index: surrounded.target.index },
-        opposite: { name: surrounded.opposite.name, index: surrounded.opposite.index },
-        wealth: { name: surrounded.wealth.name, index: surrounded.wealth.index },
-        career: { name: surrounded.career.name, index: surrounded.career.index },
+        target: { name: normalizePalaceName(surrounded.target.name), index: surrounded.target.index },
+        opposite: { name: normalizePalaceName(surrounded.opposite.name), index: surrounded.opposite.index },
+        wealth: { name: normalizePalaceName(surrounded.wealth.name), index: surrounded.wealth.index },
+        career: { name: normalizePalaceName(surrounded.career.name), index: surrounded.career.index },
       };
       return {
         queryIndex: idx,
         type: 'surroundedPalaces',
         result,
         queryTarget: {
-          palace: query.palace,
+          palace: normalizePalaceName(query.palace),
         },
       };
     }

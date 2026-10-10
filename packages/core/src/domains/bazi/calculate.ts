@@ -23,6 +23,7 @@ import type {
   PillarKongWangInfo,
   PillarPosition,
   PillarRelation,
+  StemPosition,
   TianGanChongKeItem,
   TianGanWuHeItem,
   TrueSolarTimeInfo,
@@ -230,7 +231,7 @@ function analyzeTianGanWuHe(
   yearStem: string, monthStem: string, dayStem: string, hourStem: string,
 ): TianGanWuHeItem[] {
   const stems = [yearStem, monthStem, dayStem, hourStem];
-  const pillarNames: PillarPosition[] = ['年支', '月支', '日支', '时支'];
+  const stemNames: StemPosition[] = ['年干', '月干', '日干', '时干'];
   const result: TianGanWuHeItem[] = [];
 
   // Check all pillar pairs (including day master vs. non-adjacent stems)
@@ -243,7 +244,7 @@ function analyzeTianGanWuHe(
           stemA: stems[i],
           stemB: stems[j],
           resultElement: element,
-          positions: [pillarNames[i], pillarNames[j]],
+          positions: [stemNames[i], stemNames[j]],
         });
       }
     }
@@ -311,7 +312,7 @@ function analyzeTianGanChongKe(
   yearStem: string, monthStem: string, dayStem: string, hourStem: string,
 ): TianGanChongKeItem[] {
   const stems = [yearStem, monthStem, dayStem, hourStem];
-  const pillarNames: PillarPosition[] = ['年支', '月支', '日支', '时支'];
+  const stemNames: StemPosition[] = ['年干', '月干', '日干', '时干'];
   const result: TianGanChongKeItem[] = [];
 
   for (let i = 0; i < stems.length; i++) {
@@ -321,7 +322,7 @@ function analyzeTianGanChongKe(
           result.push({
             stemA: stems[i],
             stemB: stems[j],
-            positions: [pillarNames[i], pillarNames[j]],
+            positions: [stemNames[i], stemNames[j]],
           });
         }
       }
@@ -387,7 +388,6 @@ function calculateMingGong(yearStem: string, monthBranch: string, hourBranch: st
   const yinIdx = DI_ZHI.indexOf('寅'); // 2
   const monthNum = (monthIdx - yinIdx + 12) % 12 + 1;
 
-  // 从卯起正月逆数到生月，再从该位起子时顺数到生时
   const mingBranchIdx = (maoIdx - (monthNum - 1) + hourIdx + 12 * 10) % 12;
   const mingBranch = DI_ZHI[mingBranchIdx];
 

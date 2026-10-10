@@ -16,6 +16,21 @@ const BASE_BIRTH = {
   calendarType: 'solar',
 };
 
+test('friendship palace aliases produce the same normalized queries and keep all four mutagens by default', async () => {
+  const queries = palace => [
+    { type: 'fliesTo', from: palace, to: palace },
+    { type: 'selfMutaged', palace, mutagens: [] },
+    { type: 'mutagedPlaces', palace },
+    { type: 'surroundedPalaces', palace },
+  ];
+  const modern = await calculateZiweiFlyingStar({ ...BASE_BIRTH, queries: queries('交友') });
+  const alias = await calculateZiweiFlyingStar({ ...BASE_BIRTH, queries: queries('仆役') });
+  assert.deepEqual(alias.results, modern.results);
+  assert.deepEqual(modern.results[0].queryTarget.mutagens, ['禄', '权', '科', '忌']);
+  assert.equal(modern.results[3].result.target.name, '交友');
+  assert.ok(!JSON.stringify(modern.results).includes('仆役'));
+});
+
 test('calculateZiweiFlyingStar should return results array for mutagedPlaces query', async () => {
   const result = await calculateZiweiFlyingStar({
     ...BASE_BIRTH,
