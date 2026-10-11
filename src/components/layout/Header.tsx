@@ -59,7 +59,7 @@ const ROUTE_LABELS: Record<string, string> = {
     '/ziwei': '紫微斗数',
     '/tarot': '塔罗占卜',
     '/liuyao': '六爻占卜',
-    '/hepan': '关系合盘',
+    '/hepan': '八字合盘',
     '/face': '面相分析',
     '/palm': '手相分析',
     '/mbti': 'MBTI',
