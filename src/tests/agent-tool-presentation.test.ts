@@ -78,6 +78,21 @@ test('search views keep returned excerpts and only expose HTTP sources', () => {
   assert.equal(getAgentToolText({ ...tool, name: 'read_user_data', output: [{ type: 'text', text: '已保存命盘' }] }), '已保存命盘');
 });
 
+test('knowledge passages are titled by their record heading and keep the stamped number and match method', () => {
+  const tool: AgentToolPart = { type: 'tool', id: 'kb', name: 'search_knowledge', title: '知识库检索', status: 'completed', output: [
+    { content: '# 《滴天髓》天干论 · 庚金\n庚金带煞，刚健为最。', method: 'fts', cite: 3, metadata: { file_name: 'dts.md', category: '命理古籍' } },
+    { content: '八字用神，专求月令。', method: 'vector', cite: 0, metadata: { file_name: '子平真诠.md' } },
+    { content: '# 只有标题', method: 'unknown', cite: 2.5, metadata: { category: '命理古籍' } },
+  ] };
+  assert.deepEqual(getAgentSearchResults(tool)?.map(item => [item.title, item.excerpt, item.source, item.method, item.cite]), [
+    ['《滴天髓》天干论 · 庚金', '庚金带煞，刚健为最。', 'dts.md', 'fts', 3],
+    ['子平真诠.md', '八字用神，专求月令。', null, 'vector', null],
+    ['只有标题', '# 只有标题', '命理古籍', null, null],
+  ], 'a heading with no body keeps the chunk as its excerpt; invalid numbers and methods are dropped');
+  const web: AgentToolPart = { ...tool, name: 'web_search', output: [{ title: '来源', url: 'https://www.example.com/a', content: '摘要', method: 'fts', cite: 7 }] };
+  assert.deepEqual(getAgentSearchResults(web)?.map(item => [item.source, item.method, item.cite]), [['www.example.com', null, 7]], 'web rows name their host and never a knowledge match method');
+});
+
 test('personal-data results preserve partial failures and filter incomplete rows', () => {
   const tool: AgentToolPart = { type: 'tool', id: 'data', name: 'list_user_data', title: '资料', status: 'completed', output: {
     items: [{ id: 'chart-id', type: 'bazi_chart', name: '命盘', preview: '真实摘要' }, { id: 'incomplete' }],

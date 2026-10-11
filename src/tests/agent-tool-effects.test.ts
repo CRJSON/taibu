@@ -138,6 +138,45 @@ test('knowledge hit counts are recorded only for searches whose results were cac
   assert.deepEqual(run.checkpoint.knowledgeQueries, { '9:kb': 2 }, 'replays overwrite one entry per call');
 });
 
+test('search results are numbered after the conversation\'s earlier evidence, once per call', async (t) => {
+  const web = withWebSearch(t);
+  try {
+    const store = new MemoryStore(), run = row();
+    run.input.webEnabled = true;
+    run.checkpoint.citations = { base: 4, calls: {} };
+    store.drafts.set('3:kb', {
+      id: randomUUID(), call_id: '3:kb', tool_name: 'search_knowledge', kind: 'tool', args: { query: '庚金' },
+      result: { content: [], details: [{ id: 'a', content: '庚金带煞', cite: 7 }, { id: 'b', content: '得火而锐', cite: 8 }] },
+    });
+    const tools = await createAgentTools(store, run, run.checkpoint);
+    const cites = (result: { details: unknown }) => (result.details as Array<{ cite?: number }>).map((item) => item.cite);
+    const first = await find(tools, 'web_search').execute('1:web', { query: '庚金' });
+    assert.deepEqual(cites(first), [5]);
+    assert.match(first.content[0].type === 'text' ? first.content[0].text : '', /"cite":5/, 'the model reads the number it may cite');
+    assert.deepEqual(cites(await find(tools, 'web_search').execute('1:web', { query: '庚金' })), [5], 'a replay returns the stored number');
+    assert.deepEqual(cites(await find(tools, 'web_search').execute('2:web', { query: '辛金' })), [6]);
+    await find(tools, 'search_knowledge').execute('3:kb', { query: '庚金' });
+    assert.deepEqual(run.checkpoint.citations, { base: 4, calls: { '1:web': 5, '2:web': 6, '3:kb': 8 } }, 'replayed stamps advance the next number');
+    assert.deepEqual(cites(await find(tools, 'web_search').execute('4:web', { query: '壬水' })), [9]);
+  } finally {
+    web.restore();
+  }
+});
+
+test('a task created before numbering keeps its results unnumbered', async (t) => {
+  const web = withWebSearch(t);
+  try {
+    const store = new MemoryStore(), run = row();
+    run.input.webEnabled = true;
+    const tools = await createAgentTools(store, run, run.checkpoint);
+    const result = await find(tools, 'web_search').execute('1:web', { query: '庚金' });
+    assert.deepEqual(result.details, [{ title: '来源', url: 'https://example.com/source', content: '摘要' }]);
+    assert.equal(run.checkpoint.citations, undefined, 'its answer could not have been told any number');
+  } finally {
+    web.restore();
+  }
+});
+
 /** user_settings has memory on; agent_write_memory returns the full table row like the SQL function. */
 class MemoryToolStore extends MemoryStore {
   constructor() {

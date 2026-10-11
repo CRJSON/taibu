@@ -1,17 +1,19 @@
 "use client";
 // 需要工作区上下文与折叠交互；任务过程、成果与操作栏按设计稿组合
-import { useId, type ReactNode } from "react";
+import { useId, useMemo, type ReactNode } from "react";
 import Link from "next/link";
 import { ArrowUpRight, CircleAlert, FileCheck2, Globe } from "lucide-react";
-import type { AgentMessageData } from "@/lib/agent/types";
+import type { AgentMessageData, AgentPart } from "@/lib/agent/types";
 import { getAgentChart, getAgentToolArtifactId } from "@/lib/agent/tool-presentation";
 import { AGENT_CHART_NAMES, isAgentChartTool } from "@/lib/agent/tool-catalog";
 import { collaborationProgress } from "@/lib/agent/parallel-results";
-import { MarkdownContent } from "@/components/ui/MarkdownContent";
+import { getAgentCitationLabels } from "@/lib/agent/evidence";
+import { MarkdownContent, type MarkdownCitations } from "@/components/ui/MarkdownContent";
 import { AgentStatus } from './agent/AgentStatus';
 import { AgentActivityGroup, AgentActivityIndicator } from './agent/AgentActivityGroup';
 import { AgentTodoProgress } from './agent/AgentTodoProgress';
 import { AgentEvidenceChip } from './agent/AgentEvidenceChip';
+import { useAgentResultWorkspace } from './agent/AgentResultContext';
 import { BaziPillars } from './agent/AgentToolResult';
 import { formatAgentToolDuration, getAgentArtifactHref, getAgentIntermediateResults, getAgentResponseTiming, groupAgentParts, type AgentArtifact, type AgentTool } from './agent/presentation';
 
@@ -45,7 +47,21 @@ function AgentFinalResults({ artifacts, tools }: { artifacts: AgentArtifact[]; t
   </section>;
 }
 
+/**
+ * [n] badges for what this answer's own task returned; a badge opens its source in the workspace.
+ * The labels keep their identity while text streams in, so settled blocks are not parsed again.
+ */
+function useAnswerCitations(parts: AgentPart[]): MarkdownCitations | undefined {
+  const workspace = useAgentResultWorkspace();
+  const key = useMemo(() => JSON.stringify([...getAgentCitationLabels(parts)]), [parts]);
+  const labels = useMemo(() => new Map(JSON.parse(key) as Array<[number, string]>), [key]);
+  const active = workspace?.shown?.cite ?? null;
+  const openResource = workspace?.openResource;
+  return useMemo(() => labels.size ? { labels, active, onOpen: openResource && ((cite: number) => openResource(`cite:${cite}`)) } : undefined, [labels, active, openResource]);
+}
+
 export function AgentMessage({ data, actions }: { data: AgentMessageData; actions?: ReactNode }) {
+  const citations = useAnswerCitations(data.parts);
   const groups = groupAgentParts(data.parts);
   const responseTiming = getAgentResponseTiming(data.runtime?.responses);
   const active = ['queued', 'running', 'awaiting_input', 'cancelling'].includes(data.status);
@@ -73,7 +89,7 @@ export function AgentMessage({ data, actions }: { data: AgentMessageData; action
         const part = group.part;
         if (part.type === "text") {
           const streaming = data.status === 'running' && index === groups.length - 1 && index === lastText;
-          return <div key={part.id} className={`chat-answer${streaming ? ' is-streaming' : ''}`}><MarkdownContent content={part.text} className="chat-prose" streaming={streaming} /></div>;
+          return <div key={part.id} className={`chat-answer${streaming ? ' is-streaming' : ''}`}><MarkdownContent content={part.text} className="chat-prose" streaming={streaming} citations={citations} /></div>;
         }
         if (part.type === "source")
           return /^https?:\/\//iu.test(part.url) ? (

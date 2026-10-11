@@ -61,6 +61,9 @@ import { AgentContextMeter } from '@/components/chat/agent/AgentContextUsage';
 import { getAgentChart } from '@/lib/agent/tool-presentation';
 import { getChartTargets } from '@/lib/agent/chart-interaction';
 import { ANALYSIS_GUIDES, ANALYSIS_METHODS } from '@/lib/agent/analysis-methods.generated';
+import { getAgentEvidence } from '@/lib/agent/evidence';
+import { agentMessageContent } from '@/lib/agent/types';
+import { getAgentCitedParagraph } from '@/components/chat/agent/presentation';
 const initialToolParts = AGENT_TOOL_FIXTURE_PARTS;
 const familyParts = () => [
   AGENT_DAYUN_FIXTURE_PART,
@@ -102,11 +105,24 @@ function AgentResultsProbe() {
   };
   window.fixture.collaborationResults = completed => setParts(previous => [...previous.filter(part => part.id !== 'collaboration'), {
     ...initialToolParts[0], id: 'collaboration', name: 'parallel_analysis', title: '协作分析', status: completed ? 'completed' : 'running',
-    output: JSON.parse(JSON.stringify({ analyses: [
-      { system: 'bazi', conversationId: 10, name: '八字分析', modelName: '分析模型', status: 'completed', answer: '已核对天干与日支。' },
-      { system: 'bazi', conversationId: 11, name: '独立复核', modelName: '复核模型', status: completed ? 'completed' : 'running', ...(completed ? { answer: '生克关系复核完成。' } : {}) },
+    output: JSON.parse(JSON.stringify({ title: '两派会诊', topics: [{ title: '是否变动', options: ['先争取权责', '主动变动'] }, { title: '命局主线' }], analyses: [
+      { system: 'bazi', conversationId: 10, name: '八字分析', modelName: '分析模型', status: 'completed', answer: '已核对天干与日支。', positions: { 是否变动: '先争取权责', 命局主线: '正官制身' }, toolCalls: 3, durationMs: 41000 },
+      { system: 'bazi', conversationId: 11, name: '独立复核', modelName: '复核模型', status: completed ? 'completed' : 'running',
+        ...(completed ? { answer: '生克关系复核完成。', positions: { 是否变动: '主动变动' } } : { steps: [{ name: 'bazi', title: '八字排盘', status: 'completed' }, { name: 'read_user_data', title: '读取官禄宫', status: 'running' }] }) },
     ] })),
   }]);
+  // An answer citing the two passages its own search returned, numbered after the evidence already shown.
+  window.fixture.citedAnswer = () => setParts(previous => {
+    const rest = previous.filter(part => !part.id.startsWith('cited-'));
+    const base = getAgentEvidence(rest).at(-1)?.n ?? 0;
+    window.fixture.cited = [base + 1, base + 2];
+    return [...rest,
+      { type: 'tool', id: 'cited-kb', name: 'search_knowledge', title: '知识库检索', status: 'completed', input: { query: '庚金 刚健' }, output: [
+        { content: '# 《滴天髓》天干论 · 庚金\n庚金带煞，刚健为最。', method: 'fts', cite: base + 1, metadata: { category: '命理古籍' } },
+        { content: '# 《子平真诠》论用神\n八字用神，专求月令。', method: 'vector', cite: base + 2, metadata: { category: '命理古籍' } },
+      ] },
+      { type: 'text', id: 'cited-answer', text: '古籍说庚金刚健[' + (base + 1) + ']。\n\n用神专求月令[' + (base + 2) + ']，[' + (base + 9) + '] 不是本任务的依据。' }];
+  });
   window.fixture.chartTargets = kind => getChartTargets(getAgentChart(parts.find(tool => tool.name === kind)));
   window.fixture.chartFocus = (kind, ids, caption, savedReference) => {
     const original = parts.find(tool => tool.name === kind);
@@ -129,7 +145,8 @@ function AgentResultsProbe() {
     <AgentMessage data={data} />
     <button onClick={() => { setRequest(previous => ({ id: 'chart:bazi', version: (previous?.version ?? 0) + 1 })); setOpen(true); }}>恢复已有成果标签</button>
     {open && <AgentWorkspacePanel workspaceKey={(user?.id ?? 'visitor') + ':ui-fixture'} artifacts={fixtureArtifacts} parts={parts} attachmentIds={[]} data={data}
-      run={{ billing: 'charged' }} answers={answers} userId={user?.id ?? null} requestedResource={request} onShownChange={setShown} onChartQuestion={text => { window.fixture.chartQuestion = text; }} onClose={() => setOpen(false)} />}
+      run={{ billing: 'charged' }} answers={answers} userId={user?.id ?? null} requestedResource={request} onShownChange={setShown} onChartQuestion={text => { window.fixture.chartQuestion = text; }} onClose={() => setOpen(false)}
+      citedParagraph={cite => getAgentCitedParagraph([{ agent: data, content: agentMessageContent(parts) }], cite)} />}
   </AgentResultContext.Provider></section>;
 }
 
@@ -1804,8 +1821,8 @@ export async function run(existingPage, bundlePath) {
     const collaboration = results.getByRole('region', { name: '协作分析', exact: true });
     await collaboration.waitFor();
     await results.getByRole('button', { name: /任务过程/ }).click();
-    check('Collaborator models and live progress remain visible when the task process is folded', await results.getByRole('button', { name: /任务过程/ }).getAttribute('aria-expanded') === 'false' &&
-      await collaboration.innerText().then(text => text.includes('分析模型') && text.includes('复核模型') && text.includes('分析中')) && await collaboration.locator('li[data-state="running"]').count() === 1);
+    check('Collaborator models and the call a running member is on remain visible when the task process is folded', await results.getByRole('button', { name: /任务过程/ }).getAttribute('aria-expanded') === 'false' &&
+      await collaboration.innerText().then(text => text.includes('分析模型') && text.includes('复核模型')) && await collaboration.locator('li[data-state="running"]').innerText().then(text => text.includes('读取官禄宫')));
     check('The live line names the member still analysing', await results.locator('.agent-live-activity').innerText() === '等待协作成员 · 独立复核 正在分析');
     await page.evaluate(() => window.fixture.agentRunStatus('completed'));
     check('A member left analysing when the task ended is shown unfinished, not spinning', await collaboration.locator('li[data-state="failed"]').innerText().then(text => text.includes('未完成')) && await collaboration.locator('.animate-spin').count() === 0);
@@ -1813,7 +1830,11 @@ export async function run(existingPage, bundlePath) {
     await collaboration.getByRole('button', { name: /^独立复核/ }).click();
     await page.locator('#agent-workspace-panel [data-workspace-view="collaboration"]').waitFor();
     check('Completed collaborator analysis survives JSON history and opens for comparison', await collaboration.innerText().then(text => !text.includes('分析中')) &&
-      await page.locator('#agent-workspace-panel').innerText().then(text => text.includes('生克关系复核完成。')) && resultOperations() === callsBeforeResults);
+      await page.locator('#agent-workspace-panel').innerText().then(text => text.includes('生克关系复核完成。') && text.includes('两派会诊') && text.includes('3 次工具 · 41 秒')) && resultOperations() === callsBeforeResults);
+    const divergence = page.locator('#agent-workspace-panel').getByRole('region', { name: /分歧对照/ });
+    check('The divergence table marks only the option topic where finished members disagree', await divergence.locator('tbody tr').count() === 2 &&
+      await divergence.locator('tr[data-divergent]').count() === 1 && await divergence.locator('tr[data-divergent] th').innerText().then(text => text.startsWith('是否变动')) &&
+      await divergence.locator('td[data-empty]').innerText() === '未表态');
     // Close this call's tab so the family section below starts from its own opened views.
     await page.getByRole('button', { name: '关闭协作分析标签', exact: true }).click();
     await page.getByRole('button', { name: '关闭任务工作区', exact: true }).click();
@@ -1844,11 +1865,11 @@ export async function run(existingPage, bundlePath) {
     check('A call left unfinished by an ended task stops spinning', await evidence.innerText().then(text => text.includes('任务结束时这一步仍未完成')) && await evidence.getByRole('status').count() === 0);
     await page.evaluate(() => window.fixture.agentRunStatus('running'));
     await evidence.getByRole('status').waitFor();
-    check('A new search call switches the followed view to the evidence with a live state', await evidence.getByRole('status').innerText().then(text => text.includes('正在检索「流年」')));
+    check('A new search call switches the followed view to the evidence with a live state', await evidence.getByRole('status').innerText().then(text => text.includes('检索「流年」')));
     await page.evaluate(() => window.fixture.agentRunStatus('completed'));
     check('Evidence numbers results, links only HTTP(S) sources and explains an empty search', await evidence.getByRole('link', { name: '庚金论' }).getAttribute('href') === 'https://example.com/gengjin' &&
-      await evidence.getByRole('link', { name: '无效链接' }).count() === 0 && await evidence.locator('.agent-ws-cite').first().innerText() === '1' &&
-      await evidence.innerText().then(text => text.includes('没有找到与「不存在的资料」相关的知识库段落')));
+      await evidence.getByRole('link', { name: '无效链接' }).count() === 0 && await evidence.locator('.agent-ws-source').first().getAttribute('data-evidence') === '1' &&
+      await evidence.innerText().then(text => text.includes('知识库没有匹配的段落') && text.includes('检索「不存在的资料」没有找到相关段落')));
     await workspacePanel.getByRole('button', { name: /^过程\d+$/ }).click();
     check('Opening a section pauses following', await workspacePanel.getByRole('button', { name: '跟随模型', exact: true }).getAttribute('aria-pressed') === 'false');
     const steps = workspacePanel.getByRole('list').filter({ has: page.getByText('加载分析方法') });
@@ -1859,7 +1880,7 @@ export async function run(existingPage, bundlePath) {
     await steps.getByRole('button', { name: /协作分析/ }).last().click();
     await workspacePanel.locator('[data-workspace-view="collaboration"]').waitFor();
     check('Collaboration cards show each member model, effort and focus', await workspacePanel.locator('.agent-ws-member').count() === 2 &&
-      await workspacePanel.innerText().then(text => text.includes('推理 高') && text.includes('不推理') && text.includes('分工：格局取用')));
+      await workspacePanel.innerText().then(text => text.includes('推理 高') && text.includes('不推理') && text.includes('子平 · 格局取用')) && await workspacePanel.getByRole('region', { name: /分歧对照/ }).count() === 0);
     await workspacePanel.getByRole('button', { name: /^过程\d+$/ }).click();
     await steps.getByRole('button', { name: /档案检索/ }).click();
     await workspacePanel.locator('[data-workspace-view="tool"]').waitFor();
@@ -1879,6 +1900,20 @@ export async function run(existingPage, bundlePath) {
     await results.getByRole('button', { name: /^依据 \d+/ }).click();
     await workspacePanel.locator('[data-workspace-view="evidence"]').waitFor();
     check('The answer evidence chip opens the numbered sources in the workspace', await results.getByRole('button', { name: /^依据 \d+/ }).innerText().then(text => text.includes('联网 2')));
+    await page.evaluate(() => window.fixture.citedAnswer());
+    const [firstCite, secondCite] = await page.evaluate(() => window.fixture.cited);
+    const badges = results.locator('.chat-answer .md-cite');
+    await badges.first().waitFor();
+    check('Answer citations become badges only for numbers its own task returned', (await badges.allInnerTexts()).join(',') === firstCite + ',' + secondCite &&
+      await results.locator('.chat-answer').innerText().then(text => text.includes('[' + (secondCite + 7) + ']')));
+    await results.getByRole('button', { name: new RegExp('^依据 ' + secondCite + '：') }).click();
+    await workspacePanel.locator('[data-evidence="' + secondCite + '"][data-selected]').waitFor();
+    check('A citation opens its source selected, with the answer paragraph that cites it', await workspacePanel.locator('[data-evidence="' + secondCite + '"]').innerText()
+      .then(text => text.includes('回答第 2 段引用') && text.includes('《子平真诠》论用神') && text.includes('知识库 · 命理古籍 · 语义检索命中')) &&
+      await results.locator('.md-cite[data-cite="' + secondCite + '"]').getAttribute('data-active') === 'true');
+    await workspacePanel.getByRole('button', { name: /^知识库 \d+$/ }).click();
+    check('Filtering the evidence keeps only one kind of source', await workspacePanel.locator('[data-evidence][data-kind="web"]').count() === 0 &&
+      await workspacePanel.locator('[data-evidence][data-kind="knowledge"]').count() === 2 && await workspacePanel.getByRole('button', { name: /^知识库 \d+$/ }).getAttribute('aria-pressed') === 'true');
     await results.getByRole('button', { name: '在工作区比较', exact: true }).last().click();
     await workspacePanel.locator('[data-workspace-view="collaboration"]').waitFor();
     check('The compact collaboration card compares its members in the workspace', await workspacePanel.locator('.agent-ws-member').count() === 2 &&

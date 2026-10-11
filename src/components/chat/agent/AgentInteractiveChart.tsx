@@ -9,8 +9,10 @@ import { ChartErrorBoundary } from '@/components/visualization/ChartRenderer';
 import { CanonicalChartView } from './CanonicalChartView';
 import './agent-results.css';
 
-export function AgentInteractiveChart({ value, tool, reference, focus, followModel, onManual, onAsk }: {
+export function AgentInteractiveChart({ value, tool, reference, focus, followModel, pinned = false, onManual, onAsk }: {
   value: AgentChart; tool: AgentToolPart; reference: string | null; focus?: ChartFocus | null; followModel: boolean;
+  /** The focus was opened from its step or a citation: show and reveal it even while not following. */
+  pinned?: boolean;
   onManual: () => void; onAsk?: (text: string) => void;
 }) {
   const targets = useMemo(() => getChartTargets(value), [value]);
@@ -28,7 +30,7 @@ export function AgentInteractiveChart({ value, tool, reference, focus, followMod
     : first?.id;
   useEffect(() => {
     const viewport = viewportRef.current;
-    if (!viewport || !followModel || !scrollTarget) return;
+    if (!viewport || !(followModel || pinned) || !scrollTarget) return;
     const reveal = () => {
       const target = [...viewport.querySelectorAll<HTMLElement>('[data-chart-target]')].find(node => node.dataset.chartTarget === scrollTarget);
       if (!target) return false;
@@ -46,7 +48,7 @@ export function AgentInteractiveChart({ value, tool, reference, focus, followMod
     const observer = new MutationObserver(() => { if (reveal()) observer.disconnect(); });
     observer.observe(viewport, { childList: true, subtree: true });
     return () => observer.disconnect();
-  }, [scrollTarget, followModel]);
+  }, [scrollTarget, followModel, pinned]);
   const select = (id: string) => { onManual(); setManual({ snapshot, ids: [id], related }); };
   const relations = targets.filter(target => target.kind === 'bazi_relation');
   return <section className="agent-interactive-chart" aria-label={value.title}>
@@ -54,8 +56,8 @@ export function AgentInteractiveChart({ value, tool, reference, focus, followMod
       <button type="button" className="agent-icon-button" aria-label="清除盘面高亮" onClick={() => { onManual(); setManual({ snapshot, ids: [], related }); }}><RotateCcw size={15} /></button>
     </header>
     <div className="agent-board-focus" aria-live="polite" data-chart-focus={selected.map(target => target.id).join(',')}>
-      <span>{followModel && model ? '当前分析' : selected.length ? '正在查看' : '命盘全览'}</span>
-      <strong>{followModel && model ? model.caption : selected.map(target => target.label).join('、') || '选择盘面中的位置，继续了解'}</strong>
+      <span>{followModel && model ? '当前分析' : pinned && model && !currentManual ? '分析位置' : selected.length ? '正在查看' : '命盘全览'}</span>
+      <strong>{(followModel || (pinned && !currentManual)) && model ? model.caption : selected.map(target => target.label).join('、') || '选择盘面中的位置，继续了解'}</strong>
     </div>
     {['ziwei', 'daliuren', 'astrology'].includes(value.kind) && <label className="agent-board-related"><input type="checkbox" checked={related} onChange={event => {
       onManual(); setManual({ snapshot, ids, related: event.target.checked });

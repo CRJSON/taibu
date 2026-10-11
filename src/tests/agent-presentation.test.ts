@@ -95,8 +95,10 @@ test('Activity grouping preserves narration, question IDs and tool ordering', ()
 test('process steps summarize each call from its arguments and stored result only', () => {
     const tool = (name: string, extra: Partial<AgentTool> = {}): AgentTool => ({ type: 'tool', id: name, name, title: name, status: 'completed', ...extra });
     assert.equal(summarizeAgentTool(tool('bazi_dayun', { input: { birthYear: 1990, birthMonth: 1, birthDay: 15, birthHour: 9 } })), '1990 / 1 / 15 · 9 时');
-    assert.equal(summarizeAgentTool(tool('search_knowledge', { input: { query: '庚金 正官 月令' }, output: [{ content: '庚金带煞' }, { content: '八字用神' }] })), '「庚金 正官 月令」 · 命中 2 条');
-    assert.equal(summarizeAgentTool(tool('web_search', { input: { query: '丑月' }, output: [] })), '「丑月」 · 没有可引用的结果');
+    assert.equal(summarizeAgentTool(tool('search_knowledge', { input: { query: '庚金 正官 月令' }, output: [{ content: '庚金带煞' }, { content: '八字用神' }] })), '「庚金 正官 月令」 · 命中 2 段');
+    assert.equal(summarizeAgentTool(tool('web_search', { input: { query: '丑月' }, output: [] })), '「丑月」 · 没有可引用的公开来源');
+    assert.equal(summarizeAgentTool(tool('web_search', { input: { query: '丑月' }, output: [{ title: 'a', url: 'https://a.example', content: 'x' }] })), '「丑月」 · 找到 1 个公开来源');
+    assert.equal(summarizeAgentTool(tool('search_knowledge', { output: [] })), '没有匹配的段落', 'a search without a query still reports its outcome');
     assert.equal(summarizeAgentTool(tool('web_search', { status: 'running', input: { query: '丑月' } })), '「丑月」', 'a running search never claims a hit count');
     assert.equal(summarizeAgentTool(tool('list_user_data', { output: { items: [{ id: 'a', type: 'bazi_chart', name: '本人', preview: '己巳' }], errors: [{ message: '塔罗不可读' }] } })), '找到 1 份资料 · 1 项暂不可读');
     assert.equal(summarizeAgentTool(tool('parallel_analysis', { status: 'running', output: { analyses: [{ system: 'bazi', conversationId: 1, status: 'completed' }, { system: 'bazi', conversationId: 2, status: 'running' }] } })), '2 名成员 · 1 名已完成');
@@ -108,14 +110,18 @@ test('process steps summarize each call from its arguments and stored result onl
 });
 
 test('the evidence chip counts only completed search results and the header clock never runs backwards', () => {
+    const focus = { type: 'tool', id: 'f', name: 'focus_chart', title: '', status: 'completed', output: { chartFocus: { version: 1, reference: 'artifact:11111111-1111-4111-8111-111111111111', targetIds: [], includeRelated: true, caption: '月柱 丁丑' } } } as AgentTool;
     const parts = [
         { type: 'tool', id: 'w', name: 'web_search', title: '', status: 'completed', output: [{ title: 'a', url: 'https://a.example', content: 'x' }] },
         { type: 'tool', id: 'k', name: 'search_knowledge', title: '', status: 'completed', output: [{ content: 'y' }, { content: 'z' }] },
         { type: 'tool', id: 'r', name: 'web_search', title: '', status: 'running' },
         { type: 'tool', id: 'b', name: 'bazi', title: '', status: 'completed', output: [{ content: 'not evidence' }] },
+        focus,
     ] as AgentTool[];
-    assert.deepEqual(getAgentEvidenceSummary(parts), { total: 3, web: 1, knowledge: 2 });
-    assert.deepEqual(getAgentEvidenceSummary([]), { total: 0, web: 0, knowledge: 0 });
+    assert.deepEqual(getAgentEvidenceSummary(parts), { total: 4, web: 1, knowledge: 2, chart: 1 }, 'located chart positions count beside search results');
+    assert.equal(getAgentEvidenceSummary([]), null);
+    assert.equal(getAgentEvidenceSummary([focus]), null, 'a task that never searched has no chip; its positions live in the chart');
+    assert.equal(getAgentEvidenceSummary([{ type: 'tool', id: 'e', name: 'web_search', title: '', status: 'completed', output: [] }]), null, 'empty searches leave nothing to cite');
     assert.equal(formatAgentElapsed(72_000), '1 分 12 秒');
     assert.equal(formatAgentElapsed(-5), '0 秒');
     assert.equal(formatAgentElapsed(3_723_000), '1 小时 2 分');
@@ -123,7 +129,7 @@ test('the evidence chip counts only completed search results and the header cloc
 
 test('a process step pairs its state with the summary and a note only where the state needs one', () => {
     const tool = (extra: Partial<AgentTool> = {}): AgentTool => ({ type: 'tool', id: 'step', name: 'web_search', title: '联网检索', status: 'completed', input: { query: '丑月' }, output: [], ...extra });
-    assert.deepEqual(describeAgentStep(tool({ durationMs: 30_000 }), 'completed'), { status: 'completed', label: '完成', summary: '「丑月」 · 没有可引用的结果', note: null, duration: '30 秒' });
+    assert.deepEqual(describeAgentStep(tool({ durationMs: 30_000 }), 'completed'), { status: 'completed', label: '完成', summary: '「丑月」 · 没有可引用的公开来源', note: null, duration: '30 秒' });
     const failed = describeAgentStep(tool({ status: 'failed', output: '网络错误', durationMs: 1200 }), 'completed');
     assert.equal(failed.note, '失败');
     assert.equal(failed.duration, '1.2 秒', 'a failed call keeps its measured execution time');

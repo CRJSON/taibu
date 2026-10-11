@@ -17,7 +17,7 @@ import './agent-results.css';
 import { getChartFocus } from '@/lib/agent/chart-interaction';
 import { parallelAnalysisResults, type ParallelAnalysisResult } from '@/lib/agent/parallel-results';
 import type { AgentRunStatus } from '@/lib/agent/types';
-import { getAgentToolState } from './presentation';
+import { getAgentToolState, getParallelMemberState } from './presentation';
 
 function TextFallback({ tool, incomplete = false }: { tool: AgentToolPart; incomplete?: boolean }) {
   const text = getAgentToolText(tool);
@@ -55,14 +55,7 @@ function chartSubtitle(value: AgentChart) {
   return [basic.性别, `日主 ${basic.日主}`, value.chart.干支关系[0]].filter(Boolean).join(' · ');
 }
 
-function memberStatus(analysis: ParallelAnalysisResult, call: ReturnType<typeof getAgentToolState>['status']) {
-  if (analysis.status === 'completed') return { state: 'completed', label: '已完成' } as const;
-  // A member still marked running in a call that has ended, or in a stopped task, did not finish.
-  if (analysis.status === 'running' && (call === 'running' || call === 'pending')) return { state: 'running', label: '分析中' } as const;
-  return { state: 'failed', label: '未完成' } as const;
-}
-
-/** 协作分析: one column per member with its model, effort and progress; answers are compared in the workspace. */
+/** 协作分析: one column per member with its model, effort and the call it is on; answers are compared in the workspace. */
 function CollaborationCard({ tool, analyses, runStatus }: { tool: AgentToolPart; analyses: ParallelAnalysisResult[]; runStatus: AgentRunStatus }) {
   const id = useId();
   const workspace = useAgentResultWorkspace();
@@ -77,13 +70,14 @@ function CollaborationCard({ tool, analyses, runStatus }: { tool: AgentToolPart;
     </header>
     <ul>
       {analyses.map(analysis => {
-        const status = memberStatus(analysis, call);
+        const status = getParallelMemberState(analysis, call);
+        const current = status.state === 'running' ? analysis.steps?.findLast(step => step.status === 'running')?.title : undefined;
         const content = <>
           <strong>{analysis.name ?? analysis.system}</strong>
           <small>{[analysis.modelName ?? analysis.model ?? '主模型', effortLabel(analysis.reasoningEffort)].filter(Boolean).join(' · ')}</small>
           <span className="agent-member-status" data-state={status.state}>
             {status.state === 'completed' ? <Check size={12} strokeWidth={2.6} aria-hidden="true" /> : status.state === 'running' ? <LoaderCircle size={12} strokeWidth={2.6} className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <CircleAlert size={12} aria-hidden="true" />}
-            {status.label}
+            {current ? <>{current}<span className="sr-only">（{status.label}）</span></> : status.label}
           </span>
         </>;
         // With a workspace the comparison lives there; otherwise a member discloses its own answer here.

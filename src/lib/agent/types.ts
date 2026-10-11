@@ -49,6 +49,8 @@ export interface AgentMessageData {
   error?: string;
   runtime?: AgentRuntimeInfo;
   compactions?: Array<{ id: string; summary?: string; through?: string; retainedFrom?: string; status: 'completed' | 'failed'; reason?: string }>;
+  /** Questions the final answer suggests asking next (follow-ups.ts). */
+  followUps?: string[];
 }
 
 /** Public projection of Pi's active context, never credentials or the full prompt. */
@@ -87,6 +89,14 @@ export interface AgentCheckpoint {
   finalSelectionMade?: boolean;
   summaryThrough?: number;
   knowledgeQueries?: Record<string, number>;
+  /**
+   * Evidence numbering (evidence.ts): the conversation's highest number before
+   * this task, and the last number each tool call used. Keyed by call so a
+   * replayed result records the same numbers again instead of advancing.
+   */
+  citations?: { base: number; calls: Record<string, number> };
+  /** Suggestions parsed from the latest answer text; the block itself is not shown. */
+  followUps?: string[];
   streamingAssistantId?: string;
   runtime?: AgentRuntimeInfo;
   durable: {

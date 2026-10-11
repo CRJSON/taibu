@@ -5,15 +5,15 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore, lazy, Suspe
 import { Files, ListChecks, LoaderCircle, ScanEye, X } from 'lucide-react';
 import type { AgentMessageData, AgentPart } from '@/lib/agent/types';
 import { getAgentChart, getAgentUnrepresentedArtifacts } from '@/lib/agent/tool-presentation';
-import { getAgentChartReference, getLatestChartFocus, parseChartReference } from '@/lib/agent/chart-interaction';
+import { getAgentChartReference, getChartFocus, getLatestChartFocus, parseChartReference } from '@/lib/agent/chart-interaction';
 import {
-    AGENT_WORKSPACE_SECTIONS, buildAgentWorkspace, getAgentToolQuestionIds, getAgentWorkspaceFollowTarget, resolveAgentWorkspaceLocation,
+    AGENT_WORKSPACE_SECTIONS, buildAgentWorkspace, getAgentToolQuestionIds, getAgentWorkspaceFollowTarget, parseAgentCitationTarget, resolveAgentWorkspaceLocation,
     type AgentQuestionAnswer, type AgentWorkspaceModel, type AgentWorkspaceResource, type AgentWorkspaceSection,
 } from '@/lib/agent/workspace';
 import { ChartErrorBoundary } from '@/components/visualization/ChartRenderer';
 import { Modal } from '@/components/ui/Modal';
 import { AgentToolCard } from './AgentToolCard';
-import { getAgentSteps, getAgentToolState, type AgentArtifact } from './presentation';
+import { getAgentStepNumbers, getAgentSteps, getAgentToolState, type AgentArtifact } from './presentation';
 import type { AgentWorkspaceShown } from './AgentResultContext';
 import {
     AttachmentView, CalculationView, CollaborationView, DataListView, EvidenceView, MemoryView, MethodCatalogView, MethodView,
@@ -50,10 +50,14 @@ function readSavedWorkspace(workspaceKey: string): Partial<SavedWorkspace> {
 }
 
 /** One resource's view, chosen by its tool family. Any rendering error falls back to the tool's canonical text. */
-function ResourceView({ resource, model, data, answers, questionIds, userId, artifacts, followModel, onManual, onOpen, onChartQuestion }: {
+function ResourceView({ resource, model, data, answers, questionIds, userId, artifacts, followModel, namedToolId, cite, citedParagraph, onManual, onOpen, onChartQuestion }: {
     resource: AgentWorkspaceResource; model: AgentWorkspaceModel; data?: AgentMessageData;
     answers: ReadonlyMap<string, AgentQuestionAnswer>; questionIds: ReadonlyMap<string, string>; userId: string | null;
-    artifacts: AgentArtifact[]; followModel: boolean; onManual: () => void; onOpen: (id: string) => void; onChartQuestion?: (text: string) => void;
+    artifacts: AgentArtifact[]; followModel: boolean;
+    /** A call of this view the reader opened by name, from its step or a citation, while not following. */
+    namedToolId: string | null; cite: number | null;
+    citedParagraph?: (cite: number) => number | null;
+    onManual: () => void; onOpen: (id: string) => void; onChartQuestion?: (text: string) => void;
 }) {
     const tools = resource.toolIds.flatMap(id => model.toolsById.get(id) ?? []);
     const latest = tools.at(-1);
@@ -64,10 +68,15 @@ function ResourceView({ resource, model, data, answers, questionIds, userId, art
             const reading = tools.findLast(tool => getAgentChart(tool));
             const value = reading && getAgentChart(reading);
             const reference = reading ? getAgentChartReference(reading) : null;
+            // A focus step opened from the process list or a citation shows that position, not the latest one.
+            const named = namedToolId ? model.toolsById.get(namedToolId) : undefined;
+            const opened = named && reference ? getChartFocus(named) : null;
+            const pinned = opened?.reference === reference ? opened : null;
             body = value && reading
                 ? <Suspense fallback={<p role="status">加载命盘…</p>}>
-                    <InteractiveChart key={reference ?? reading.id} value={value} tool={reading} reference={reference}
-                        focus={reference ? getLatestChartFocus(model.tools, reference) : null} followModel={followModel} onManual={onManual} onAsk={onChartQuestion} />
+                    <InteractiveChart key={`${reference ?? reading.id}:${pinned ? named!.id : ''}`} value={value} tool={reading} reference={reference}
+                        focus={pinned ?? (reference ? getLatestChartFocus(model.tools, reference) : null)} followModel={followModel} pinned={pinned !== null}
+                        onManual={onManual} onAsk={onChartQuestion} />
                 </Suspense>
                 : latest && latest.status === 'completed' ? <WorkspaceTextFallback tool={latest} note="命盘数据不完整，已保留工具返回内容。" />
                 : latest && <><WorkspaceToolMeta tool={latest} runStatus={runStatus} /><WorkspaceToolPending tool={latest} runStatus={runStatus} running="正在排盘…" /></>;
@@ -81,7 +90,8 @@ function ResourceView({ resource, model, data, answers, questionIds, userId, art
             break;
         }
         case 'calculation': body = latest && <CalculationView tool={latest} runStatus={runStatus} />; break;
-        case 'evidence': body = <EvidenceView tools={tools} runStatus={runStatus} />; break;
+        case 'evidence': body = <EvidenceView model={model} tools={tools} runStatus={runStatus} selected={cite}
+            paragraph={cite !== null ? citedParagraph?.(cite) ?? null : null} onOpen={onOpen} />; break;
         case 'data': body = <DataListView tools={tools} runStatus={runStatus} />; break;
         case 'record': {
             const reference = parseChartReference(latest?.output && typeof latest.output === 'object' ? (latest.output as { chartReference?: unknown }).chartReference : undefined);
@@ -98,14 +108,19 @@ function ResourceView({ resource, model, data, answers, questionIds, userId, art
             body = latest && <QuestionView tool={latest} runStatus={runStatus} answer={questionId ? answers.get(questionId) : undefined} />;
             break;
         }
-        case 'collaboration': body = latest && <CollaborationView tool={latest} runStatus={runStatus} />; break;
+        case 'collaboration': {
+            // A collaboration opened from its step shows that call; step numbers belong to the latest task.
+            const tool = tools.find(item => item.id === namedToolId) ?? latest;
+            body = tool && <CollaborationView tool={tool} runStatus={runStatus} step={data ? getAgentStepNumbers(data.parts).get(tool.id) : undefined} />;
+            break;
+        }
         case 'memory': body = <MemoryView tools={tools} runStatus={runStatus} userId={userId} />; break;
         case 'tool': body = latest && <AgentToolCard tool={latest} runStatus={runStatus} />; break;
     }
     return latest ? <ChartErrorBoundary resetKey={latest} fallback={<WorkspaceTextFallback tool={latest} note="这个视图暂时无法显示，已改为工具返回的规范文本。" />}>{body}</ChartErrorBoundary> : <>{body}</>;
 }
 
-export function AgentWorkspacePanel({ parts, artifacts, data, run, attachmentIds, answers, userId, canExport = false, onClose, workspaceKey, requestedResource, onChartQuestion, onShownChange }: {
+export function AgentWorkspacePanel({ parts, artifacts, data, run, attachmentIds, answers, userId, canExport = false, onClose, workspaceKey, requestedResource, onChartQuestion, onShownChange, citedParagraph }: {
     workspaceKey: string;
     /** Agent parts of the visible conversation branch, in transcript order. */
     parts: AgentPart[];
@@ -121,6 +136,8 @@ export function AgentWorkspacePanel({ parts, artifacts, data, run, attachmentIds
     onChartQuestion?: (text: string) => void;
     /** Reports the tool view on screen so the chat can mark its step and result card. */
     onShownChange?: (shown: AgentWorkspaceShown | null) => void;
+    /** The paragraph of the answer that cites a number, counted from 1. */
+    citedParagraph?: (cite: number) => number | null;
 }) {
     const desktop = useSyncExternalStore(subscribeToViewport, () => window.matchMedia(desktopQuery).matches, () => false);
     const panelRef = useRef<HTMLElement>(null);
@@ -145,22 +162,31 @@ export function AgentWorkspacePanel({ parts, artifacts, data, run, attachmentIds
     // The step the reader is on: a step they opened, else the newest call of the view (the followed one).
     // The process section keeps showing the call details of the last step a view showed.
     const [openedTool, setOpenedTool] = useState<string | null>(null);
-    const shownToolId = !activeResource ? null
-        : !followModel && openedTool !== null && activeResource.toolIds.includes(openedTool) ? openedTool
-        : activeResource.toolIds.at(-1) ?? null;
-    const shownKey = activeResource ? JSON.stringify([shownToolId, activeResource.toolIds]) : null;
+    // Opening a step or a citation names its call; opening a tab or section does not.
+    const [namedTool, setNamedTool] = useState<string | null>(null);
+    const inView = (id: string | null) => !followModel && id !== null && activeResource?.toolIds.includes(id) ? id : null;
+    const shownToolId = !activeResource ? null : inView(openedTool) ?? activeResource.toolIds.at(-1) ?? null;
+    // A citation stays selected while its source is on screen.
+    const [cite, setCite] = useState<number | null>(null);
+    const activeCite = cite !== null && !followModel && resolve(`cite:${cite}`) === location ? cite : null;
+    const shownKey = activeResource ? JSON.stringify([shownToolId, activeResource.toolIds, activeCite]) : null;
     useEffect(() => {
         if (!onShownChange) return;
         if (shownKey === null) { onShownChange(null); return; }
-        const [toolId, toolIds] = JSON.parse(shownKey) as [string | null, string[]];
-        onShownChange({ toolId, toolIds: new Set(toolIds) });
+        const [toolId, toolIds, shownCite] = JSON.parse(shownKey) as [string | null, string[], number | null];
+        onShownChange({ toolId, toolIds: new Set(toolIds), cite: shownCite });
     }, [shownKey, onShownChange]);
     useEffect(() => () => onShownChange?.(null), [onShownChange]);
 
     const open = (id: string) => {
         const target = resolve(id) ?? id;
+        const citation = parseAgentCitationTarget(id);
+        const cited = citation === null ? undefined : model.evidence.find(item => item.n === citation);
         setFollowModel(false);
-        setOpenedTool(id.startsWith('tool:') ? id.slice('tool:'.length)
+        setCite(cited ? cited.n : null);
+        setNamedTool(cited ? cited.toolId : id.startsWith('tool:') ? id.slice('tool:'.length) : null);
+        setOpenedTool(cited ? cited.toolId
+            : id.startsWith('tool:') ? id.slice('tool:'.length)
             : isSection(target) ? shownToolId ?? openedTool
             : model.resources.find(resource => resource.id === target)?.toolIds.at(-1) ?? null);
         if (!isSection(target)) setTabs(current => current.includes(target) ? current : [...current.slice(-(MAX_TABS - 1)), target]);
@@ -253,7 +279,8 @@ export function AgentWorkspacePanel({ parts, artifacts, data, run, attachmentIds
         <div ref={scrollRef} className="agent-panel-scroll" role={activeResource ? 'tabpanel' : undefined} aria-label={activeResource?.title} data-workspace-view={activeResource?.view ?? section}>
             {activeResource
                 ? <ResourceView resource={activeResource} model={model} data={data} answers={answers ?? new Map()} questionIds={questionIds} userId={userId ?? null}
-                    artifacts={artifacts} followModel={followModel} onManual={() => { setSelected(activeResource.id); setFollowModel(false); }} onOpen={open} onChartQuestion={onChartQuestion} />
+                    artifacts={artifacts} followModel={followModel} namedToolId={inView(namedTool)} cite={activeCite} citedParagraph={citedParagraph}
+                    onManual={() => { setSelected(activeResource.id); setFollowModel(false); }} onOpen={open} onChartQuestion={onChartQuestion} />
                 : section === 'results'
                     ? <WorkspaceResultsSection model={model} artifacts={artifacts} data={data} run={run} onOpen={open} canExport={canExport} />
                     : <WorkspaceProcessSection model={model} data={data} run={run} stepId={openedTool} onOpen={open} />}

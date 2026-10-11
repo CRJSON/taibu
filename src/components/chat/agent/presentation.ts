@@ -3,7 +3,9 @@ import type { AgentMessageData, AgentPart, AgentRunStatus, AgentRuntimeInfo } fr
 import { getAgentToolFamily, type AgentToolFamily } from '@/lib/agent/tool-catalog';
 import { getAgentAttachmentRead, getAgentDataResults, getAgentMethod, getAgentSearchResults, getAgentToolArtifactId, getAgentToolQuestions } from '@/lib/agent/tool-presentation';
 import { getChartFocus } from '@/lib/agent/chart-interaction';
-import { parallelAnalysisResults } from '@/lib/agent/parallel-results';
+import { parallelAnalysisResults, type ParallelAnalysisResult } from '@/lib/agent/parallel-results';
+import { countAgentEvidence, getAgentCitationLabels, getAgentEvidence } from '@/lib/agent/evidence';
+import { getCitedParagraphs } from '@/lib/chat/markdown-citations';
 
 export type AgentArtifact = Extract<AgentPart, { type: 'artifact' }>;
 export type AgentTool = Extract<AgentPart, { type: 'tool' }>;
@@ -70,7 +72,10 @@ export function summarizeAgentTool(tool: AgentTool): string | null {
     if (tool.name === 'web_search' || tool.name === 'search_knowledge') {
         const query = typeof args.query === 'string' ? `「${args.query.slice(0, 60)}」` : '';
         const results = getAgentSearchResults(tool);
-        return results ? `${query} · ${results.length ? `命中 ${results.length} 条` : '没有可引用的结果'}` : query || null;
+        const web = tool.name === 'web_search';
+        if (!results) return query || null;
+        const found = results.length ? web ? `找到 ${results.length} 个公开来源` : `命中 ${results.length} 段` : web ? '没有可引用的公开来源' : '没有匹配的段落';
+        return query ? `${query} · ${found}` : found;
     }
     if (tool.name === 'list_user_data') {
         const data = getAgentDataResults(tool);
@@ -197,6 +202,13 @@ export function getAgentToolState(tool: AgentTool, runStatus: AgentRunStatus) {
     };
 }
 
+/** A collaboration member within its call: one still marked running after the call or the task ended did not finish. */
+export function getParallelMemberState(member: Pick<ParallelAnalysisResult, 'status'>, call: ReturnType<typeof getAgentToolState>['status']) {
+    if (member.status === 'completed') return { state: 'completed', label: '已完成' } as const;
+    if (member.status === 'running' && (call === 'running' || call === 'pending')) return { state: 'running', label: '分析中' } as const;
+    return { state: 'failed', label: '未完成' } as const;
+}
+
 /** Tool execution time measured by the durable runtime for the completed attempt. */
 export function formatAgentToolDuration(ms: number): string {
     if (ms < 1) return '不足 1 毫秒';
@@ -229,14 +241,28 @@ export const AGENT_TOOL_FAMILY_LABELS: Record<AgentToolFamily, string> = {
     question: '问题', collaboration: '协作', memory: '记忆', artifacts: '成果', external: '外部', other: '工具',
 };
 
-/** Results the answer can cite: completed web and knowledge searches of one task. */
+/**
+ * 依据 chip of one task: what its searches returned plus the chart positions it
+ * located. A task that never searched has no chip; its positions live in the chart.
+ */
 export function getAgentEvidenceSummary(parts: AgentPart[]) {
-    let web = 0, knowledge = 0;
-    for (const part of parts) {
-        if (part.type !== 'tool') continue;
-        const count = getAgentSearchResults(part)?.length ?? 0;
-        if (part.name === 'web_search') web += count;
-        else knowledge += count;
+    if (!parts.some(part => part.type === 'tool' && getAgentToolFamily(part.name) === 'search')) return null;
+    const counts = countAgentEvidence(getAgentEvidence(parts));
+    return counts.total ? counts : null;
+}
+
+/**
+ * The paragraph, counted from 1, of the latest answer citing `cite`. Answers
+ * cite only what their own task returned; one answer is parsed, on demand.
+ */
+export function getAgentCitedParagraph(messages: readonly Pick<ChatMessage, 'agent' | 'content'>[], cite: number): number | null {
+    for (let index = messages.length - 1; index >= 0; index--) {
+        const { agent, content } = messages[index];
+        if (!agent || !content.includes(String(cite))) continue;
+        const labels = getAgentCitationLabels(agent.parts);
+        if (!labels.has(cite)) continue;
+        const paragraph = getCitedParagraphs(content, value => labels.has(value)).get(cite);
+        if (paragraph !== undefined) return paragraph;
     }
-    return { total: web + knowledge, web, knowledge };
+    return null;
 }

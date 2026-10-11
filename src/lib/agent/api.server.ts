@@ -39,6 +39,7 @@ import { parseReasoningEffort, parseAgentCollaborators } from '@/lib/chat/model-
 import { piHistory } from "./history.server";
 import { normalizeQuestions, validateAnswers, formatQuestionAnswers } from './questions';
 import { validateAttachmentIds } from './attachments.server';
+import { getAgentCitationBase } from './evidence';
 
 class AgentApiError extends Error {
   constructor(
@@ -417,6 +418,8 @@ export async function createAgentTask(request: NextRequest) {
       : piHistory(prepared.sanitizedMessages.map(message => ({ ...message, attachments: message.id === userMessage.id ? userMessage.attachments : history.find(item => item.id === message.id)?.attachments }))),
     parts: [],
     finalArtifacts: [],
+    // Evidence numbers continue across the visible branch, so a new answer never reuses one.
+    citations: { base: getAgentCitationBase(history), calls: {} },
   };
   const assistant: ChatMessage = {
     id: `agent:${runId}`,

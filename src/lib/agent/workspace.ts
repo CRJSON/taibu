@@ -14,6 +14,7 @@ import type { AgentAnswers } from './questions';
 import { AGENT_CHART_NAMES, getAgentToolFamily, isAgentChartTool, type AgentToolFamily } from './tool-catalog';
 import { getAgentChart, getAgentDataResults, getAgentMethod, getAgentAttachmentRead, type AgentToolPart } from './tool-presentation';
 import { CHART_SOURCE_KINDS, getAgentChartReference, getChartFocus, parseChartReference } from './chart-interaction';
+import { getAgentEvidence, type AgentEvidence } from './evidence';
 
 export type AgentWorkspaceSection = 'results' | 'process';
 export const AGENT_WORKSPACE_SECTIONS: readonly AgentWorkspaceSection[] = ['results', 'process'];
@@ -39,6 +40,8 @@ export interface AgentWorkspaceModel {
   locations: ReadonlyMap<string, string>;
   /** Chart resource for each chart reference, so focus and reinspection reach the same tab. */
   chartResources: ReadonlyMap<string, string>;
+  /** Everything the conversation's answers can cite, numbered in transcript order. */
+  evidence: AgentEvidence[];
 }
 
 /** New events of these families open the workspace on desktop until the user closes it for that task. */
@@ -156,18 +159,29 @@ export function buildAgentWorkspace({ parts, artifacts, attachmentIds }: { parts
     }
   }
   for (const artifact of artifacts) add('chart:' + artifact.id, { view: 'saved', family: 'saved', title: artifact.title });
-  return { resources: [...resources.values()], tools, toolsById: new Map(tools.map(tool => [tool.id, tool])), locations, chartResources };
+  return { resources: [...resources.values()], tools, toolsById: new Map(tools.map(tool => [tool.id, tool])), locations, chartResources, evidence: getAgentEvidence(tools) };
+}
+
+/** `cite:<n>` names a citation in an answer; anything else is not one. */
+export function parseAgentCitationTarget(id: string): number | null {
+  const match = /^cite:([1-9]\d{0,8})$/u.exec(id);
+  return match ? Number(match[1]) : null;
 }
 
 /**
- * Normalizes a requested location: a tool ID reaches the tab that shows it and a
- * source reaches the evidence view. Unknown IDs resolve to null.
+ * Normalizes a requested location: a tool ID reaches the tab that shows it, a
+ * source reaches the evidence view, and a citation reaches the evidence view or,
+ * when the task never searched, the chart position it cites. Unknown IDs resolve to null.
  */
 export function resolveAgentWorkspaceLocation(model: AgentWorkspaceModel, id: string): string | null {
   if ((AGENT_WORKSPACE_SECTIONS as readonly string[]).includes(id)) return id;
   if (model.resources.some(resource => resource.id === id)) return id;
   if (id.startsWith('tool:')) return model.locations.get(id.slice(5)) ?? null;
-  if (id.startsWith('source:') && model.resources.some(resource => resource.id === 'evidence')) return 'evidence';
+  const evidence = model.resources.some(resource => resource.id === 'evidence');
+  if (id.startsWith('source:') && evidence) return 'evidence';
+  const cite = parseAgentCitationTarget(id);
+  const item = cite === null ? undefined : model.evidence.find(entry => entry.n === cite);
+  if (item) return evidence ? 'evidence' : model.locations.get(item.toolId) ?? null;
   return null;
 }
 

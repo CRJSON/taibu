@@ -150,6 +150,11 @@
 .chat-prose table { font-size: calc(13 / 16 * 1rem); line-height: 1.7; }
 .chat-prose pre { min-width: 0; max-width: 100%; overflow: auto; border-radius: 8px; }
 .chat-prose code { font-family: var(--font-mono); }
+/* [n] citation badges; the one whose source is open in the workspace takes the accent. */
+.chat-prose .md-cite { display: inline-flex; align-items: center; height: 1.5em; margin: 0 2px; padding: 0 6px; border-radius: 6px; background: var(--background-secondary); font-family: inherit; font-size: calc(12 / 16 * 1rem); font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; vertical-align: 2px; color: var(--foreground-secondary); }
+.chat-prose button.md-cite:hover { background: var(--background-tertiary); color: var(--foreground); }
+.chat-prose .md-cite[data-active] { background: var(--accent-light); color: var(--accent-hover); }
+.chat-prose button.md-cite:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .chat-provider-dialog { width: min(480px, calc(100vw - 24px)); }
 .chat-provider-dialog > div { width: 100%; border: 0; box-shadow: none; padding: 24px; }
 .chat-provider-dialog h3 { padding-right: 20px; }

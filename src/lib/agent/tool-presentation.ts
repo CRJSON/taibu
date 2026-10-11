@@ -145,12 +145,51 @@ export function getAgentToolText(tool: AgentToolPart): string | null {
   return null;
 }
 
-export function getAgentSearchResults(tool: AgentToolPart) {
+/** Evidence number the server stamped on a returned row; anything else is not a citation. */
+export function readAgentCite(value: unknown): number | null {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? value : null;
+}
+
+export type AgentSearchMethod = 'fts' | 'trigram' | 'vector';
+const SEARCH_METHODS: readonly string[] = ['fts', 'trigram', 'vector'] satisfies AgentSearchMethod[];
+
+export interface AgentSearchResult {
+  id: string;
+  title: string;
+  /** The returned text, unchanged. */
+  content: string;
+  /** The text to quote: content without the heading already shown as the title. */
+  excerpt: string;
+  url: string | null;
+  /** Number the model was given to cite this row; null for rows saved before numbering. */
+  cite: number | null;
+  /** How a knowledge-base passage matched; null for web pages and older rows. */
+  method: AgentSearchMethod | null;
+  /** The file, category or site the row came from, when it says so. */
+  source: string | null;
+}
+
+const nonEmpty = (value: unknown) => typeof value === 'string' && value.trim() ? value.trim() : null;
+const hostname = (url: string) => { try { return new URL(url).hostname; } catch { return null; } };
+
+export function getAgentSearchResults(tool: AgentToolPart): AgentSearchResult[] | null {
   if (tool.status !== 'completed' || !['web_search', 'search_knowledge'].includes(tool.name) || !Array.isArray(tool.output)) return null;
   return tool.output.filter(item => strings(item, ['content'])).map((item, index) => {
     const row = record(item);
     const metadata = record(row.metadata);
-    return { id: `${tool.id}:${index}`, title: String(row.title ?? metadata.title ?? metadata.sourceTitle ?? `资料 ${index + 1}`), content: String(row.content), url: typeof row.url === 'string' && /^https?:\/\//iu.test(row.url) ? row.url : null };
+    const content = String(row.content);
+    const url = typeof row.url === 'string' && /^https?:\/\//iu.test(row.url) ? row.url : null;
+    // Knowledge records are stored with their title as the first heading of every chunk.
+    const heading = /^\s*#{1,6}[ \t]+([^\n]+?)[ \t#]*(?:\r?\n|$)/u.exec(content);
+    const named = nonEmpty(row.title) ?? nonEmpty(metadata.title) ?? nonEmpty(metadata.sourceTitle);
+    const title = named ?? nonEmpty(heading?.[1]) ?? nonEmpty(metadata.file_name) ?? `资料 ${index + 1}`;
+    const excerpt = !named && heading && content.slice(heading[0].length).trim() ? content.slice(heading[0].length).trim() : content;
+    const file = nonEmpty(metadata.file_name);
+    return {
+      id: `${tool.id}:${index}`, title, content, excerpt, url, cite: readAgentCite(row.cite),
+      method: tool.name === 'search_knowledge' && typeof row.method === 'string' && SEARCH_METHODS.includes(row.method) ? row.method as AgentSearchMethod : null,
+      source: url ? hostname(url) : (file !== title ? file : null) ?? nonEmpty(metadata.category),
+    };
   });
 }
 

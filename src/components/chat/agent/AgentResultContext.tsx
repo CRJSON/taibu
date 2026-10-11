@@ -6,6 +6,8 @@ import { createContext, useContext } from 'react';
 export interface AgentWorkspaceShown {
     toolId: string | null;
     toolIds: ReadonlySet<string>;
+    /** The citation whose source is open, so the answer can mark its badge. */
+    cite?: number | null;
 }
 
 export interface AgentResultWorkspace {
@@ -19,7 +21,7 @@ export const useAgentResultWorkspace = () => useContext(AgentResultContext);
 
 export function isSameWorkspaceShown(left: AgentWorkspaceShown | null, right: AgentWorkspaceShown | null) {
     if (left === right) return true;
-    if (!left || !right || left.toolId !== right.toolId || left.toolIds.size !== right.toolIds.size) return false;
+    if (!left || !right || left.toolId !== right.toolId || (left.cite ?? null) !== (right.cite ?? null) || left.toolIds.size !== right.toolIds.size) return false;
     for (const id of left.toolIds) if (!right.toolIds.has(id)) return false;
     return true;
 }

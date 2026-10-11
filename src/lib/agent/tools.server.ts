@@ -28,6 +28,8 @@ import { AGENT_MEMORY_SELECT, publicMemory, type AgentMemory } from './memory';
 import { authorizeChartReference, loadAgentChart, loadInspectedChart } from './chart-tools.server';
 import { CHART_SOURCE_KINDS, getChartTargets, validateChartFocus } from './chart-interaction';
 import { isAgentChartTool } from './tool-catalog';
+import { nextAgentCitation } from './evidence';
+import { readAgentCite } from './tool-presentation';
 import { searchKnowledgeWithPersistence } from "@/lib/knowledge-base/search";
 import type {
   KnowledgeSearchPersistence,
@@ -269,6 +271,23 @@ export async function createAgentTools(
       }),
     );
   };
+  // Evidence numbers continue the conversation's (evidence.ts) and are stamped on
+  // the returned rows, so the model cites what the reader sees. Each call records
+  // the last number it used: a replayed result records the same number again.
+  // Runs created before numbering have no base and keep unnumbered results.
+  const lastCitation = (except?: string) => Math.max(checkpoint.citations?.base ?? 0,
+    ...Object.entries(checkpoint.citations?.calls ?? {}).flatMap(([callId, last]) => callId === except ? [] : [last]));
+  const stampCitations = <T extends object>(rows: T[]) => {
+    if (!checkpoint.citations) return rows;
+    const first = lastCitation() + 1;
+    return rows.map((row, index) => ({ ...row, cite: first + index }));
+  };
+  const recordCitations = (callId: string, cites: Array<number | null>) => {
+    if (!checkpoint.citations || !cites.length) return;
+    const last = cites.reduce<number>((previous, cite) => nextAgentCitation(previous, cite), lastCitation(callId));
+    checkpoint.citations = { base: checkpoint.citations.base, calls: { ...checkpoint.citations.calls, [callId]: last } };
+  };
+  const citesOf = (rows: unknown) => Array.isArray(rows) ? rows.map(row => readAgentCite((row as { cite?: unknown } | null)?.cite)) : [];
   // Checkpoint state is derived from a tool's persisted details only. Fresh
   // results apply it after agent_cache_tool succeeds and cached results replay
   // the same reducer, so a failed cache write cannot leave a phantom question,
@@ -285,8 +304,10 @@ export async function createAgentTools(
       checkpoint.todos = details as AgentCheckpoint["todos"];
       putPart({ type: "todo", id: "task-list", ...checkpoint.todos! });
     }],
-    ["web_search", (details, callId) =>
-      putSources(callId, details as Array<{ title: string; url: string; content: string }>)],
+    ["web_search", (details, callId) => {
+      putSources(callId, details as Array<{ title: string; url: string; content: string }>);
+      recordCitations(callId, citesOf(details));
+    }],
     ["select_final_artifacts", (details) => {
       checkpoint.finalArtifacts = (details as { artifactIds: string[] }).artifactIds;
       checkpoint.finalSelectionMade = true;
@@ -296,7 +317,10 @@ export async function createAgentTools(
         ...checkpoint.knowledgeQueries,
         [callId]: (details as unknown[]).length,
       };
+      recordCitations(callId, citesOf(details));
     }],
+    ["focus_chart", (details, callId) =>
+      recordCitations(callId, [readAgentCite((details as { cite?: unknown }).cite)])],
   ]);
   const applyResult = (name: string, kind: AgentArtifactRow["kind"], details: unknown, callId: string) => {
     // A new or replayed calculation requires the final selection to be confirmed again.
@@ -419,7 +443,8 @@ export async function createAgentTools(
         includeRelated: Type.Optional(Type.Boolean()), caption: Type.String({ minLength: 1, maxLength: 160 }) }),
       async args => {
         const { reference, value } = await loadInspectedChart(store, run, args.reference);
-        return textResult({ chartFocus: validateChartFocus(value, reference, args.targetIds, args.includeRelated ?? true, args.caption) });
+        const chartFocus = validateChartFocus(value, reference, args.targetIds, args.includeRelated ?? true, args.caption);
+        return textResult(checkpoint.citations ? { chartFocus, cite: lastCitation() + 1 } : { chartFocus });
       }),
   );
   tools.push(
@@ -515,7 +540,7 @@ export async function createAgentTools(
             topK: 5,
           },
         );
-        return textResult(results);
+        return textResult(stampCitations(results));
       },
     ),
   );
@@ -530,7 +555,7 @@ export async function createAgentTools(
         "联网检索公开资料，返回可引用来源；仅发送完成检索必要的信息",
         Type.Object({ query: Type.String({ minLength: 1 }) }),
         async (args, _callId, signal) =>
-          textResult(await searchAgentWeb(args.query, signal)),
+          textResult(stampCitations(await searchAgentWeb(args.query, signal))),
       ),
     );
   }

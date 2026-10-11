@@ -42,7 +42,7 @@ import type { ComposerModeControl, ComposerWebControl } from './composer/Compose
 import { applyPromptTemplate } from '@/lib/agent/prompt-templates';
 import { collaborationProgress } from '@/lib/agent/parallel-results';
 import { composerNote } from '@/lib/chat/composer-copy';
-import { collectAgentArtifacts } from './agent/presentation';
+import { collectAgentArtifacts, getAgentCitedParagraph } from './agent/presentation';
 import type { AgentPart } from '@/lib/agent/types';
 import { useTranscriptScroll } from '@/lib/chat/use-transcript-scroll';
 import { orderAgentMessagesForDisplay } from '@/lib/agent/browser-client';
@@ -287,6 +287,11 @@ export function ChatLayout(props: ChatLayoutProps) {
         collaborators,
     });
     const creditStrip = isCreditLocked ? <CreditStrip /> : undefined;
+    // Suggested next questions belong to a finished answer that is still the latest turn.
+    const lastAgent = transcriptMessages.at(-1)?.agent;
+    const followUps = lastAgent?.status === 'completed' && lastAgent.followUps?.length && !inputValue.trim() && !agent?.active && !isLoading && !isSendingToList ? lastAgent.followUps : null;
+    const composerHeader = creditStrip || followUps ? <>{creditStrip}{followUps && <FollowUps questions={followUps} disabled={disabled} onPick={suggest} />}</> : undefined;
+    const citedParagraph = useCallback((cite: number) => getAgentCitedParagraph(messages, cite), [messages]);
     const composerProps = {
         draftKey: workspaceKey,
         reasoningEffort: props.reasoningEffort, onReasoningEffortChange: props.onReasoningEffortChange,
@@ -308,7 +313,7 @@ export function ChatLayout(props: ChatLayoutProps) {
         knowledgeBaseEnabled,
         modeControl, webControl,
     };
-    const composer = <ChatComposer {...composerProps} continuing note={note} header={creditStrip}
+    const composer = <ChatComposer {...composerProps} continuing note={note} header={composerHeader}
         queue={currentRun && <AgentQueue key={`${workspaceKey}:${currentRun.id}`} run={currentRun} restoreDraft={message => void restoreDraft(message)} />} />;
     const toggleWorkspace = () => {
         if (workspaceOpen) { closeWorkspace(); return; }
@@ -422,7 +427,8 @@ export function ChatLayout(props: ChatLayoutProps) {
             </div>
             {workspaceOpen && <AgentWorkspacePanel key={workspaceKey} workspaceKey={workspaceKey} parts={agentParts} artifacts={artifacts} attachmentIds={attachmentIds}
                 data={latestAgentData} run={workspaceRun} answers={questionAnswers} userId={userId} canExport={Boolean(activeConversationId)}
-                onClose={closeWorkspace} onChartQuestion={askAboutChart} onShownChange={updateWorkspaceShown} requestedResource={resourceRequest?.scope === workspaceKey ? resourceRequest : undefined} />}
+                onClose={closeWorkspace} onChartQuestion={askAboutChart} onShownChange={updateWorkspaceShown} requestedResource={resourceRequest?.scope === workspaceKey ? resourceRequest : undefined}
+                citedParagraph={citedParagraph} />}
 
             {children}
             <AnalysisMethodPicker onSelect={text => onInputChange(inputValue.trim() ? `${inputValue}\n${text}` : text)} />
@@ -445,6 +451,13 @@ function subscribeToHour(onChange: () => void) {
 function useGreeting() {
     const hour = useSyncExternalStore(subscribeToHour, () => new Date().getHours(), () => -1);
     return hour < 0 ? '你好' : hour < 5 ? '夜深了' : hour < 11 ? '早上好' : hour < 13 ? '中午好' : hour < 18 ? '下午好' : '晚上好';
+}
+
+/** 继续追问: questions the answer suggested asking next; picking one fills the input to edit or send. */
+function FollowUps({ questions, disabled, onPick }: { questions: readonly string[]; disabled: boolean; onPick: (text: string) => void }) {
+    return <div className="chat-followups" role="group" aria-label="继续追问">
+        {questions.map(question => <button key={question} type="button" title={question} disabled={disabled} onClick={() => onPick(question)}><span>{question}</span></button>)}
+    </div>;
 }
 
 /** Platform credits ran out: hosted models lock, a custom model still works. */
