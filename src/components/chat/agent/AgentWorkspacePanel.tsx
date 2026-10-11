@@ -13,7 +13,8 @@ import {
 import { ChartErrorBoundary } from '@/components/visualization/ChartRenderer';
 import { Modal } from '@/components/ui/Modal';
 import { AgentToolCard } from './AgentToolCard';
-import { getAgentToolState, type AgentArtifact } from './presentation';
+import { getAgentSteps, getAgentToolState, type AgentArtifact } from './presentation';
+import type { AgentWorkspaceShown } from './AgentResultContext';
 import {
     AttachmentView, CalculationView, CollaborationView, DataListView, EvidenceView, MemoryView, MethodCatalogView, MethodView,
     ProfileView, QuestionView, RecordView, WorkspaceTextFallback, WorkspaceToolMeta, WorkspaceToolPending,
@@ -99,12 +100,12 @@ function ResourceView({ resource, model, data, answers, questionIds, userId, art
         }
         case 'collaboration': body = latest && <CollaborationView tool={latest} runStatus={runStatus} />; break;
         case 'memory': body = <MemoryView tools={tools} runStatus={runStatus} userId={userId} />; break;
-        case 'tool': body = latest && <AgentToolCard tool={latest} runStatus={runStatus} fullResult defaultOpen />; break;
+        case 'tool': body = latest && <AgentToolCard tool={latest} runStatus={runStatus} />; break;
     }
     return latest ? <ChartErrorBoundary resetKey={latest} fallback={<WorkspaceTextFallback tool={latest} note="这个视图暂时无法显示，已改为工具返回的规范文本。" />}>{body}</ChartErrorBoundary> : <>{body}</>;
 }
 
-export function AgentWorkspacePanel({ parts, artifacts, data, run, attachmentIds, answers, userId, canExport = false, onClose, workspaceKey, requestedResource, onChartQuestion }: {
+export function AgentWorkspacePanel({ parts, artifacts, data, run, attachmentIds, answers, userId, canExport = false, onClose, workspaceKey, requestedResource, onChartQuestion, onShownChange }: {
     workspaceKey: string;
     /** Agent parts of the visible conversation branch, in transcript order. */
     parts: AgentPart[];
@@ -118,6 +119,8 @@ export function AgentWorkspacePanel({ parts, artifacts, data, run, attachmentIds
     onClose: () => void;
     requestedResource?: { id: string; version: number };
     onChartQuestion?: (text: string) => void;
+    /** Reports the tool view on screen so the chat can mark its step and result card. */
+    onShownChange?: (shown: AgentWorkspaceShown | null) => void;
 }) {
     const desktop = useSyncExternalStore(subscribeToViewport, () => window.matchMedia(desktopQuery).matches, () => false);
     const panelRef = useRef<HTMLElement>(null);
@@ -139,9 +142,27 @@ export function AgentWorkspacePanel({ parts, artifacts, data, run, attachmentIds
     const visibleTabs = tabIds.flatMap(id => model.resources.find(resource => resource.id === id) ?? []);
     const followTitle = followTarget ? isSection(followTarget) ? SECTION_LABELS[followTarget] : model.resources.find(resource => resource.id === followTarget)?.title : null;
 
+    // The step the reader is on: a step they opened, else the newest call of the view (the followed one).
+    // The process section keeps showing the call details of the last step a view showed.
+    const [openedTool, setOpenedTool] = useState<string | null>(null);
+    const shownToolId = !activeResource ? null
+        : !followModel && openedTool !== null && activeResource.toolIds.includes(openedTool) ? openedTool
+        : activeResource.toolIds.at(-1) ?? null;
+    const shownKey = activeResource ? JSON.stringify([shownToolId, activeResource.toolIds]) : null;
+    useEffect(() => {
+        if (!onShownChange) return;
+        if (shownKey === null) { onShownChange(null); return; }
+        const [toolId, toolIds] = JSON.parse(shownKey) as [string | null, string[]];
+        onShownChange({ toolId, toolIds: new Set(toolIds) });
+    }, [shownKey, onShownChange]);
+    useEffect(() => () => onShownChange?.(null), [onShownChange]);
+
     const open = (id: string) => {
         const target = resolve(id) ?? id;
         setFollowModel(false);
+        setOpenedTool(id.startsWith('tool:') ? id.slice('tool:'.length)
+            : isSection(target) ? shownToolId ?? openedTool
+            : model.resources.find(resource => resource.id === target)?.toolIds.at(-1) ?? null);
         if (!isSection(target)) setTabs(current => current.includes(target) ? current : [...current.slice(-(MAX_TABS - 1)), target]);
         setSelected(target);
     };
@@ -167,7 +188,7 @@ export function AgentWorkspacePanel({ parts, artifacts, data, run, attachmentIds
     }, [workspaceKey, location]);
     const adjustWidth = (next: number) => setWidth(Math.max(280, Math.min(next, Math.min(780, (panelRef.current?.parentElement?.clientWidth ?? 1040) - 360))));
     // Results count readings once per tab plus saved results that have no reading in this branch.
-    const sectionCount = (id: AgentWorkspaceSection) => id === 'process' ? model.tools.length
+    const sectionCount = (id: AgentWorkspaceSection) => id === 'process' ? getAgentSteps(model.tools).length
         : model.resources.filter(resource => resource.view === 'chart' && resource.toolIds.some(toolId => getAgentChart(model.toolsById.get(toolId)!))).length
             + getAgentUnrepresentedArtifacts(model.tools, artifacts).length;
     const running = (resource: AgentWorkspaceResource) => resource.toolIds.some(id => {
@@ -235,7 +256,7 @@ export function AgentWorkspacePanel({ parts, artifacts, data, run, attachmentIds
                     artifacts={artifacts} followModel={followModel} onManual={() => { setSelected(activeResource.id); setFollowModel(false); }} onOpen={open} onChartQuestion={onChartQuestion} />
                 : section === 'results'
                     ? <WorkspaceResultsSection model={model} artifacts={artifacts} data={data} run={run} onOpen={open} canExport={canExport} />
-                    : <WorkspaceProcessSection model={model} data={data} run={run} active={location} onOpen={open} />}
+                    : <WorkspaceProcessSection model={model} data={data} run={run} stepId={openedTool} onOpen={open} />}
         </div>
     </div>;
     return desktop ? <aside ref={panelRef} id="agent-workspace-panel" className="agent-workspace-panel" style={{ width }} aria-labelledby="agent-workspace-heading">

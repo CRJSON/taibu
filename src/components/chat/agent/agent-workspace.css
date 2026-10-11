@@ -88,7 +88,8 @@
 .agent-ws-member > header > span { font-size: calc(11 / 16 * 1rem); }
 .agent-ws-member[data-status="completed"] > header > span { color: var(--chat-success); }
 .agent-ws-member[data-status="failed"] > header > span { color: var(--chat-warning); }
-.agent-ws-member summary { cursor: pointer; font-size: calc(12 / 16 * 1rem); color: var(--foreground-secondary); }
+/* The board shows each finished member's conclusion in full; only finished analyses reach the answer. */
+.agent-ws-member-answer { display: flex; flex-direction: column; gap: 8px; font-size: calc(14 / 16 * 1rem); line-height: 1.8; overflow-wrap: anywhere; }
 
 /* 成果与过程 */
 .agent-ws-group { display: flex; flex-direction: column; gap: 10px; margin-bottom: 18px; }
@@ -105,7 +106,7 @@
 .agent-ws-steps > li + li { border-top: 1px solid var(--border); }
 .agent-ws-steps button { display: flex; align-items: center; gap: 9px; width: 100%; padding: 9px 12px; text-align: left; font-size: calc(12 / 16 * 1rem); color: var(--foreground-secondary); }
 .agent-ws-steps button:hover:not(:disabled) { background: var(--background-secondary); }
-.agent-ws-steps button[aria-current="true"] { background: var(--accent-light); }
+.agent-ws-steps button[aria-current] { background: var(--accent-light); }
 .agent-ws-steps button > small { flex-shrink: 0; font-size: calc(11 / 16 * 1rem); color: var(--foreground-tertiary); font-variant-numeric: tabular-nums; }
 .agent-ws-steps [data-state="failed"] button > small:last-child { color: var(--chat-warning); }
 .agent-ws-steps [data-state="completed"] button > small:last-child { color: var(--chat-success); }
@@ -113,6 +114,13 @@
 .agent-ws-step-label { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; color: var(--foreground); }
 .agent-ws-step-label > span, .agent-ws-step-label > small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .agent-ws-step-label > small { font-size: calc(11 / 16 * 1rem); color: var(--foreground-secondary); }
+/* 第 N 步 (Main board, 过程): the step being looked at, its arguments and result as returned, and how it was timed and stored. */
+.agent-ws-call { display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; }
+.agent-ws-call > h3 { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; font-size: calc(13.5 / 16 * 1rem); font-weight: 600; overflow-wrap: anywhere; }
+.agent-ws-call > h3 > code { font-family: var(--font-mono); font-size: calc(12 / 16 * 1rem); font-weight: 400; color: var(--foreground-secondary); }
+.agent-ws-call .agent-tool-details { padding: 0; border: 0; border-radius: 0; background: none; }
+.agent-ws-call .agent-tool-value { padding: 12px 14px; font-size: calc(12.5 / 16 * 1rem); }
+.agent-ws-call > .agent-ws-note { font-size: calc(12.5 / 16 * 1rem); }
 
 /* 对话中的任务清单进度与“在工作区查看” */
 .agent-todo-progress { padding: 10px 12px 10px 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--chat-raised); }

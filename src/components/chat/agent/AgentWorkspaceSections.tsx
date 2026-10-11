@@ -1,6 +1,7 @@
 'use client';
 // 需要点击事件在工作区内切换标签，并派发导出对话事件
 
+import { useId } from 'react';
 import { ArrowUpRight, BookOpen, Calculator, CircleHelp, Database, Download, Files, FileText, Globe, ListChecks, Search, Users, Wrench, type LucideIcon } from 'lucide-react';
 import type { AgentMessageData, AgentPart, AgentRunView } from '@/lib/agent/types';
 import { getAgentToolFamily } from '@/lib/agent/tool-catalog';
@@ -12,7 +13,11 @@ import { AgentArtifactCard } from './AgentArtifactCard';
 import { AgentStatus } from './AgentStatus';
 import { AgentActivityIndicator } from './AgentActivityGroup';
 import { AgentContextDetails } from './AgentContextUsage';
-import { formatAgentToolDuration, getAgentArtifactHref, getAgentResponseTiming, getAgentToolState, summarizeAgentTool, type AgentArtifact } from './presentation';
+import { AgentToolDetails } from './AgentToolCard';
+import {
+    describeAgentCallNote, describeAgentStep, formatAgentToolDuration, getAgentArtifactHref, getAgentResponseTiming, getAgentStepNumbers, getAgentSteps,
+    getAgentToolState, summarizeAgentTool, type AgentArtifact,
+} from './presentation';
 
 export const WORKSPACE_ICONS: Record<AgentWorkspaceResource['family'], LucideIcon> = {
     chart: Calculator, calculation: Calculator, search: Search, data: Database, method: BookOpen, plan: ListChecks,
@@ -52,6 +57,7 @@ export function WorkspaceResultsSection({ model, artifacts, data, run, onOpen, c
     const others = model.resources.filter(resource => !['chart', 'saved', 'evidence', 'attachment'].includes(resource.view));
     const attachments = model.resources.filter(resource => resource.view === 'attachment');
     const timing = getAgentResponseTiming(data?.runtime?.responses);
+    const steps = getAgentSteps(tools);
     return <>
         <p className="agent-panel-description">本次对话的命盘、推演、依据与资料。分析过程保留在聊天中。</p>
         {charts.length > 0 && <section className="agent-ws-group" aria-label="命盘">
@@ -89,7 +95,7 @@ export function WorkspaceResultsSection({ model, artifacts, data, run, onOpen, c
         </section>}
         {(data || canExport) && <section className="agent-ws-summary" aria-label="任务概览">
             <dl className="agent-ws-facts">
-                <div><dt>步骤</dt><dd>{tools.length} 个 · {tools.filter(tool => tool.status === 'completed').length} 个完成</dd></div>
+                <div><dt>步骤</dt><dd>{steps.length} 个 · {steps.filter(tool => tool.status === 'completed').length} 个完成</dd></div>
                 {timing && <div><dt>模型响应</dt><dd>{formatAgentToolDuration(timing.durationMs)} · {timing.count} 次</dd></div>}
                 {run?.billing && <div><dt>计费</dt><dd>{BILLING_LABELS[run.billing]}</dd></div>}
             </dl>
@@ -98,12 +104,19 @@ export function WorkspaceResultsSection({ model, artifacts, data, run, onOpen, c
     </>;
 }
 
-/** 过程: live status, the full task list and every step of the latest task, each opening its view. */
-export function WorkspaceProcessSection({ model, data, run, active, onOpen }: {
-    model: AgentWorkspaceModel; data?: AgentMessageData; run?: WorkspaceRunInfo; active: string | null; onOpen: (id: string) => void;
+/** 过程: live status, the task list, the call details of the step being looked at, and every step, each opening its view. */
+export function WorkspaceProcessSection({ model, data, run, stepId, onOpen }: {
+    model: AgentWorkspaceModel; data?: AgentMessageData; run?: WorkspaceRunInfo;
+    /** The step last shown in a view; the latest step when none was. */
+    stepId: string | null; onOpen: (id: string) => void;
 }) {
+    const callHeading = useId();
     if (!data) return <div className="agent-panel-empty"><ListChecks size={28} aria-hidden="true" /><h3>尚未开始任务</h3><p>Agent 会根据问题决定需要哪些步骤。</p></div>;
-    const steps = data.parts.filter((part): part is AgentToolPart => part.type === 'tool');
+    const steps: AgentToolPart[] = getAgentSteps(data.parts);
+    const numbers = getAgentStepNumbers(data.parts);
+    const step = steps.find(tool => tool.id === stepId) ?? steps.at(-1);
+    const stepDuration = step && describeAgentStep(step, data.status).duration;
+    const note = step && describeAgentCallNote(step);
     const todo = data.parts.findLast((part): part is Extract<AgentPart, { type: 'todo' }> => part.type === 'todo');
     const done = todo?.items.filter(item => item.status === 'completed').length ?? 0;
     const effort = run?.configuration && (run.configuration.reasoning ? run.configuration.reasoningEffort ? `推理 ${REASONING_EFFORT_LABELS[run.configuration.reasoningEffort]}` : '推理 默认' : '不推理');
@@ -117,17 +130,22 @@ export function WorkspaceProcessSection({ model, data, run, active, onOpen }: {
             <h3>任务清单 <span>{done} / {todo.items.length}</span></h3>
             <ol className="agent-todo-list">{todo.items.map(item => <li key={item.id} data-state={item.status}><span aria-hidden="true">{item.status === 'completed' ? '✓' : item.status === 'in_progress' ? '●' : '○'}</span>{item.title}</li>)}</ol>
         </section>}
+        {step && <section className="agent-ws-call" aria-labelledby={callHeading} data-tool-id={step.id}>
+            <h3 id={callHeading}>第 {numbers.get(step.id)} 步 · {step.title}<code>{[step.name, stepDuration].filter(Boolean).join(' · ')}</code></h3>
+            <AgentToolDetails tool={step} runStatus={data.status} heading={false} />
+            {note && <p className="agent-ws-note">{note}</p>}
+        </section>}
         <section className="agent-ws-group" aria-label="任务步骤">
             <h3>步骤 <span>{steps.length}</span></h3>
             {steps.length ? <ol className="agent-ws-steps">
-                {steps.map((tool, index) => {
+                {steps.map(tool => {
                     const state = getAgentToolState(tool, data.status);
                     const location = model.locations.get(tool.id);
                     const Icon = WORKSPACE_ICONS[getAgentToolFamily(tool.name)];
                     const summary = summarizeAgentTool(tool);
                     return <li key={tool.id} data-state={state.status}>
-                        <button type="button" disabled={!location} aria-current={location && location === active ? 'true' : undefined} onClick={() => location && onOpen(location)}>
-                            <span className="agent-ws-step-number" aria-hidden="true">{index + 1}</span>
+                        <button type="button" disabled={!location} aria-current={tool.id === step?.id ? 'step' : undefined} onClick={() => location && onOpen(`tool:${tool.id}`)}>
+                            <span className="agent-ws-step-number" aria-hidden="true">{numbers.get(tool.id)}</span>
                             <Icon size={13} aria-hidden="true" />
                             <span className="agent-ws-step-label"><span>{tool.title}</span>{summary && <small>{summary}</small>}</span>
                             {typeof tool.durationMs === 'number' && Number.isFinite(tool.durationMs) && tool.durationMs >= 0 && <small>{formatAgentToolDuration(tool.durationMs)}</small>}

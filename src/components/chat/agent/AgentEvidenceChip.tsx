@@ -12,7 +12,7 @@ export function AgentEvidenceChip({ parts }: { parts: AgentPart[] }) {
     const evidence = getAgentEvidenceSummary(parts);
     if (!evidence.total) return null;
     const detail = [evidence.knowledge && `知识库 ${evidence.knowledge}`, evidence.web && `联网 ${evidence.web}`].filter(Boolean).join(' · ');
-    const label = <><BookOpenCheck size={14} aria-hidden="true" /><span>依据 {evidence.total}</span><small>{detail}</small></>;
+    const label = <><BookOpenCheck size={14} aria-hidden="true" /><span>依据 {evidence.total}{detail ? ` · ${detail}` : ''}</span></>;
     return workspace
         ? <button type="button" className="agent-evidence-chip" onClick={() => workspace.openResource('evidence')}>{label}</button>
         : <p className="agent-evidence-chip">{label}</p>;

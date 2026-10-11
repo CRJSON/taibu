@@ -72,7 +72,8 @@ export async function verifyAgentChartWorkspace({ page, newChat, send, waitForRu
     await page.screenshot({ path: path.join(output, 'agent-chart-' + kind + '.png'), fullPage: true });
   }
   for (const [kind, prefix, count] of [['almanac', 'almanac:hour:', 13], ['astrology', 'astrology:house:', 12]]) {
-    await page.locator('[data-result-kind="' + kind + '"]').getByRole('button', { name: '在工作区查看', exact: true }).click();
+    // The card of the reading already on screen reads 正在工作区显示; pinning it again is still allowed.
+    await page.locator('[data-result-kind="' + kind + '"]').getByRole('button', { name: /^(在工作区查看|正在工作区显示)$/ }).click();
     await selectedTarget(focuses[kind]).waitFor();
     assert.equal(await panel.locator('[data-chart-target^="' + prefix + '"]').count(), count, 'pinning the original calculation also uses its latest inspected full snapshot');
   }

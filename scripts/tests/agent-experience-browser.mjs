@@ -74,11 +74,11 @@ export async function verifyAgentExperience({ page, context, origin, directory, 
   const workspaceToggle = page.getByRole('button', { name: '任务工作区', exact: true });
   if (await workspaceToggle.getAttribute('aria-expanded') !== 'true') await workspaceToggle.click();
   const workspace = page.locator('aside#agent-workspace-panel');
-  await workspace.getByRole('button', { name: /^命盘/ }).click();
+  await workspace.getByRole('button', { name: /^成果\d+$/ }).click();
   await workspace.locator('.agent-workspace-chart-link').first().click();
   const firstTab = await workspace.getByRole('tab').first().textContent();
   await workspace.getByRole('tabpanel').waitFor();
-  await workspace.getByRole('button', { name: '命盘', exact: false }).first().click();
+  await workspace.getByRole('button', { name: /^成果\d+$/ }).click();
   await workspace.locator('.agent-workspace-chart-link').last().click();
   assert.equal(await workspace.getByRole('tab').count(), 2);
   await workspace.getByRole('tab').last().press('ArrowLeft');
@@ -141,8 +141,7 @@ export async function verifyAgentExperience({ page, context, origin, directory, 
 
   const beforeFork = (await read('/api/user/membership')).membership.aiChatCount;
   const forkResponse = page.waitForResponse(response => new URL(response.url()).pathname === `/api/conversations/${conversationId}/fork`);
-  await page.getByRole('group', { name: '助手消息操作', exact: true }).last().getByRole('button', { name: '消息更多操作' }).click();
-  await page.getByRole('menuitem', { name: '从此回答分叉', exact: true }).click();
+  await page.getByRole('group', { name: '助手消息操作', exact: true }).last().getByRole('button', { name: '从此回答分叉', exact: true }).click();
   const fork = await (await forkResponse).json();
   await page.waitForURL(url => url.searchParams.get('id') === fork.conversationId);
   await ready();

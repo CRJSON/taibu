@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { ChatMessage } from '../types';
-import { collectAgentArtifacts, formatAgentToolDuration, getAgentArtifactHref, getAgentToolState, getAgentResponseTiming, getAgentTaskSpan, groupAgentParts, getAgentActivityLabel, getAgentEvidenceSummary, summarizeAgentTool, AGENT_TOOL_FAMILY_LABELS, type AgentArtifact, type AgentTool } from '../components/chat/agent/presentation';
+import type { AgentPart } from '../lib/agent/types';
+import { collectAgentArtifacts, describeAgentCallNote, describeAgentStep, formatAgentToolDuration, getAgentStepNumbers, getAgentSteps, getAgentLiveLine, getAgentArtifactHref, getAgentIntermediateResults, getAgentToolState, getAgentResponseTiming, getAgentTaskSpan, groupAgentParts, getAgentActivityLabel, getAgentEvidenceSummary, summarizeAgentProcess, summarizeAgentTool, AGENT_TOOL_FAMILY_LABELS, type AgentArtifact, type AgentTool } from '../components/chat/agent/presentation';
 import { formatAgentElapsed } from '../components/chat/agent/AgentHeaderStatus';
 
 const chart: AgentArtifact = { type: 'artifact', id: 'chart-part', title: '命盘', chartType: 'bazi', chartId: 'chart/with?special=字符' };
@@ -118,4 +119,78 @@ test('the evidence chip counts only completed search results and the header cloc
     assert.equal(formatAgentElapsed(72_000), '1 分 12 秒');
     assert.equal(formatAgentElapsed(-5), '0 秒');
     assert.equal(formatAgentElapsed(3_723_000), '1 小时 2 分');
+});
+
+test('a process step pairs its state with the summary and a note only where the state needs one', () => {
+    const tool = (extra: Partial<AgentTool> = {}): AgentTool => ({ type: 'tool', id: 'step', name: 'web_search', title: '联网检索', status: 'completed', input: { query: '丑月' }, output: [], ...extra });
+    assert.deepEqual(describeAgentStep(tool({ durationMs: 30_000 }), 'completed'), { status: 'completed', label: '完成', summary: '「丑月」 · 没有可引用的结果', note: null, duration: '30 秒' });
+    const failed = describeAgentStep(tool({ status: 'failed', output: '网络错误', durationMs: 1200 }), 'completed');
+    assert.equal(failed.note, '失败');
+    assert.equal(failed.duration, '1.2 秒', 'a failed call keeps its measured execution time');
+    const stopped = describeAgentStep(tool({ status: 'running', durationMs: 50 }), 'cancelled');
+    assert.deepEqual([stopped.status, stopped.note, stopped.duration], ['interrupted', '已结束（任务停止时未完成）', null], 'an unfinished call never shows a time');
+    assert.equal(describeAgentStep(tool({ status: 'pending', input: undefined, output: undefined }), 'running').note, '待执行');
+    assert.equal(describeAgentStep(tool({ name: 'mcp__x', status: 'running', input: undefined, output: undefined }), 'running').note, '执行中', 'a running call without a summary still says what it is doing');
+    assert.equal(describeAgentStep(tool({ status: 'running', output: undefined }), 'running').note, null, 'a running call with a summary needs no note');
+    assert.equal(describeAgentStep(tool({ durationMs: Number.NaN }), 'completed').duration, null);
+    assert.equal(describeAgentStep(tool({ durationMs: -1 }), 'completed').duration, null);
+});
+
+test('the folded process line names steps in first-use order, counts repeats and skips plan updates', () => {
+    const tool = (id: string, title: string, name = 'focus_chart'): AgentTool => ({ type: 'tool', id, name, title, status: 'completed' });
+    const tools = [tool('a', '八字排盘', 'bazi'), tool('p', '更新计划', 'todo_write'), tool('b', '定位分析位置'), tool('c', '八字大运', 'bazi_dayun'), tool('d', '定位分析位置'), tool('e', '定位分析位置')];
+    assert.equal(summarizeAgentProcess(tools), '八字排盘、定位分析位置 3 次、八字大运');
+    assert.equal(summarizeAgentProcess([...tools, tool('f', '确定最终成果', 'select_final_artifacts'), tool('g', '联网检索', 'web_search')]), '八字排盘、定位分析位置 3 次、八字大运、确定最终成果等');
+    assert.equal(summarizeAgentProcess([]), '');
+    assert.equal(summarizeAgentProcess([tool('p', '更新计划', 'todo_write')]), '');
+});
+
+test('the live line describes the running call only while tools run', () => {
+    const runtime = (phase: 'tools' | 'thinking') => ({ model: { id: 'm', name: '主模型', contextWindow: null, limitSource: 'unknown' as const }, activity: { phase, toolTitle: '定位分析位置' } });
+    const focus: AgentTool = { type: 'tool', id: 'f', name: 'focus_chart', title: '定位分析位置', status: 'running', input: { reference: 'artifact:11111111-1111-4111-8111-111111111111', targetIds: [], caption: '月干丁火 · 日主庚金' } };
+    const data = { version: 1 as const, runId: 'run', status: 'running' as const, parts: [focus] };
+    assert.equal(getAgentLiveLine({ ...data, runtime: runtime('tools') }), '正在定位分析位置 · 月干丁火 · 日主庚金');
+    assert.equal(getAgentLiveLine(data), '正在定位分析位置 · 月干丁火 · 日主庚金', 'older runs without activity name the running call itself');
+    assert.equal(getAgentLiveLine({ ...data, runtime: runtime('thinking') }), '正在思考', 'a call left marked running does not describe a thinking phase');
+    assert.equal(getAgentLiveLine({ ...data, status: 'awaiting_input' }), '等待你回答问题');
+    assert.equal(getAgentLiveLine({ ...data, parts: [] }), '等待模型响应');
+    const team: AgentTool = { type: 'tool', id: 't', name: 'parallel_analysis', title: '协作分析', status: 'running', output: { analyses: [
+        { system: 'bazi', conversationId: 1, name: '子平', status: 'completed' }, { system: 'ziwei', conversationId: 2, name: '紫微', status: 'running' }, { system: 'bazi', conversationId: 3, status: 'running' },
+    ] } };
+    assert.equal(getAgentLiveLine({ ...data, parts: [focus, team] }), '等待协作成员 · 紫微、bazi 正在分析', 'unnamed members fall back to their system');
+    assert.equal(getAgentLiveLine({ ...data, parts: [{ ...team, output: { analyses: [] } }] }), '正在协作分析', 'a collaboration that has not reported members only names itself');
+});
+
+test('intermediate results name what the task computed but did not save', () => {
+    const selected: AgentArtifact = { type: 'artifact', id: 'kept', title: '本人', chartId: 'c', chartType: 'bazi' };
+    const tools: AgentTool[] = [
+        { type: 'tool', id: 'b', name: 'bazi', title: '八字排盘', status: 'completed', output: { artifactId: 'kept' } },
+        { type: 'tool', id: 'b2', name: 'bazi', title: '八字排盘', status: 'completed', output: { artifactId: 'dropped' } },
+        { type: 'tool', id: 'd', name: 'bazi_dayun', title: '八字大运', status: 'completed' },
+        { type: 'tool', id: 'f1', name: 'focus_chart', title: '定位分析位置', status: 'completed' },
+        { type: 'tool', id: 'f2', name: 'focus_chart', title: '定位分析位置', status: 'completed' },
+        { type: 'tool', id: 'x', name: 'bazi_dayun', title: '八字大运', status: 'failed' },
+        { type: 'tool', id: 's', name: 'web_search', title: '联网检索', status: 'completed', output: [] },
+    ];
+    assert.equal(getAgentIntermediateResults(tools, [selected]), '八字排盘、八字大运、定位分析位置 2 次');
+    assert.equal(getAgentIntermediateResults(tools.slice(0, 1), [selected]), null, 'a selected reading is not intermediate');
+    assert.equal(getAgentIntermediateResults([], []), null);
+});
+
+test('steps are numbered once across the task and leave plan updates to the task list', () => {
+    const tool = (id: string, name: string): AgentTool => ({ type: 'tool', id, name, title: id, status: 'completed' });
+    const parts: AgentPart[] = [tool('plan', 'todo_write'), tool('a', 'bazi'), { type: 'text', id: 'say', text: '先看命盘。' }, tool('plan2', 'todo_write'), tool('b', 'focus_chart')];
+    assert.deepEqual(getAgentSteps(parts).map(step => step.id), ['a', 'b']);
+    assert.deepEqual([...getAgentStepNumbers(parts)], [['a', 1], ['b', 2]], 'narration between groups does not restart the numbering');
+    assert.equal(getAgentStepNumbers([tool('plan', 'todo_write')]).size, 0);
+});
+
+test('a call note separates execution from waiting and only claims storage for cached results', () => {
+    const tool = (extra: Partial<AgentTool> = {}): AgentTool => ({ type: 'tool', id: 'b', name: 'bazi', title: '八字排盘', status: 'completed', durationMs: 86, output: { artifactId: 'a1' }, ...extra });
+    assert.equal(describeAgentCallNote(tool()), '执行阶段 86 毫秒（不含等待）。结果已按任务与调用 ID 暂存，重放不会重新计算或扣费。');
+    assert.equal(describeAgentCallNote(tool({ startedAt: 1_000, endedAt: 6_000, durationMs: 1_500 })), '执行阶段 1.5 秒（不含等待），连同等待共 5 秒。结果已按任务与调用 ID 暂存，重放不会重新计算或扣费。');
+    assert.equal(describeAgentCallNote(tool({ startedAt: 1_000, endedAt: 1_086 })), '执行阶段 86 毫秒（不含等待）。结果已按任务与调用 ID 暂存，重放不会重新计算或扣费。', 'a span that reads the same is not repeated');
+    assert.equal(describeAgentCallNote(tool({ output: { result: 1 } })), '执行阶段 86 毫秒（不含等待）。', 'an uncached result makes no replay claim');
+    assert.equal(describeAgentCallNote(tool({ status: 'failed', durationMs: undefined })), null);
+    assert.equal(describeAgentCallNote(tool({ durationMs: Number.NaN })), '结果已按任务与调用 ID 暂存，重放不会重新计算或扣费。', 'an unmeasured call never shows an invented time');
 });

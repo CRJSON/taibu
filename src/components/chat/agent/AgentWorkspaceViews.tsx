@@ -334,7 +334,7 @@ export function CollaborationView({ tool, runStatus }: ToolViewProps) {
                             <span>{member.system}</span>
                         </p>
                         {member.focus && <p className="agent-ws-note">分工：{member.focus}</p>}
-                        {member.answer ? <details><summary>结论</summary><MarkdownContent content={member.answer} className="text-sm" /></details>
+                        {member.answer ? <div className="agent-ws-member-answer"><MarkdownContent content={member.answer} className="chat-prose" /></div>
                             : status === '分析中' && <p className="agent-ws-running" role="status"><LoaderCircle size={13} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />正在分析</p>}
                     </article>;
                 })}

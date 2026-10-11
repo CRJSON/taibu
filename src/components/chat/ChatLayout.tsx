@@ -32,7 +32,7 @@ import { getSettingsCenterRouteTarget, openSettingsCenter } from '@/lib/settings
 import { AgentStatus } from './agent/AgentStatus';
 import { AgentHeaderStatus } from './agent/AgentHeaderStatus';
 import { AgentWorkspacePanel } from './agent/AgentWorkspacePanel';
-import { AgentResultContext } from './agent/AgentResultContext';
+import { AgentResultContext, isSameWorkspaceShown, type AgentWorkspaceShown } from './agent/AgentResultContext';
 import { getAgentUnrepresentedArtifacts } from '@/lib/agent/tool-presentation';
 import { getChartResources } from '@/lib/agent/chart-interaction';
 import { getAgentQuestionAnswers, getAgentWorkspaceAutoOpenEvent } from '@/lib/agent/workspace';
@@ -145,7 +145,8 @@ export function ChatLayout(props: ChatLayoutProps) {
         setOpenWorkspaceKey(workspaceKey);
         try { sessionStorage.setItem(`taibu.workspace-open:${workspaceKey}`, '1'); } catch { /* optional */ }
     }, [workspaceKey]);
-    const resultWorkspace = useMemo(() => ({ openResource }), [openResource]);
+    const [workspaceShown, setWorkspaceShown] = useState<AgentWorkspaceShown | null>(null);
+    const updateWorkspaceShown = useCallback((next: AgentWorkspaceShown | null) => setWorkspaceShown(previous => isSameWorkspaceShown(previous, next) ? previous : next), []);
     useEffect(() => {
         let current = true;
         queueMicrotask(() => {
@@ -212,6 +213,7 @@ export function ChatLayout(props: ChatLayoutProps) {
         ? [...props.agent.run.message.agent?.parts ?? []].reverse().find((part): part is Extract<AgentPart, { type: 'question' }> => part.type === 'question') : undefined;
     const hasWorkspace = isAgentMode || Boolean(latestAgentData);
     const workspaceOpen = hasWorkspace && openWorkspaceKey === workspaceKey;
+    const resultWorkspace = useMemo(() => ({ openResource, shown: workspaceOpen ? workspaceShown : null }), [openResource, workspaceOpen, workspaceShown]);
     const chartCount = getChartResources(historyTools).length;
     const resultCount = chartCount + getAgentUnrepresentedArtifacts(historyTools, artifacts).length;
     const closeWorkspace = () => {
@@ -420,7 +422,7 @@ export function ChatLayout(props: ChatLayoutProps) {
             </div>
             {workspaceOpen && <AgentWorkspacePanel key={workspaceKey} workspaceKey={workspaceKey} parts={agentParts} artifacts={artifacts} attachmentIds={attachmentIds}
                 data={latestAgentData} run={workspaceRun} answers={questionAnswers} userId={userId} canExport={Boolean(activeConversationId)}
-                onClose={closeWorkspace} onChartQuestion={askAboutChart} requestedResource={resourceRequest?.scope === workspaceKey ? resourceRequest : undefined} />}
+                onClose={closeWorkspace} onChartQuestion={askAboutChart} onShownChange={updateWorkspaceShown} requestedResource={resourceRequest?.scope === workspaceKey ? resourceRequest : undefined} />}
 
             {children}
             <AnalysisMethodPicker onSelect={text => onInputChange(inputValue.trim() ? `${inputValue}\n${text}` : text)} />

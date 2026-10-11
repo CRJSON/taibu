@@ -1,7 +1,7 @@
 import type { ChatMessage } from '@/types';
 import type { AgentMessageData, AgentPart, AgentRunStatus, AgentRuntimeInfo } from '@/lib/agent/types';
-import type { AgentToolFamily } from '@/lib/agent/tool-catalog';
-import { getAgentAttachmentRead, getAgentDataResults, getAgentMethod, getAgentSearchResults, getAgentToolQuestions } from '@/lib/agent/tool-presentation';
+import { getAgentToolFamily, type AgentToolFamily } from '@/lib/agent/tool-catalog';
+import { getAgentAttachmentRead, getAgentDataResults, getAgentMethod, getAgentSearchResults, getAgentToolArtifactId, getAgentToolQuestions } from '@/lib/agent/tool-presentation';
 import { getChartFocus } from '@/lib/agent/chart-interaction';
 import { parallelAnalysisResults } from '@/lib/agent/parallel-results';
 
@@ -39,6 +39,26 @@ export function getAgentActivityLabel(data: AgentMessageData) {
     }
 }
 
+/**
+ * The live line under a running answer: the phase, and while a tool runs what it works on,
+ * e.g. 正在定位分析位置 · 月干丁火. A collaboration names the members still analysing instead.
+ */
+export function getAgentLiveLine(data: AgentMessageData): string {
+    const label = getAgentActivityLabel(data);
+    const phase = data.runtime?.activity?.phase;
+    // A step left marked running must not describe a thinking or answering phase.
+    if (data.status !== 'running' || (phase && phase !== 'tools')) return label;
+    const tool = data.parts.findLast((part): part is AgentTool => part.type === 'tool' && part.status === 'running');
+    if (!tool) return label;
+    if (tool.name === 'parallel_analysis') {
+        const names = parallelAnalysisResults(tool.output).filter(member => member.status === 'running').map(member => member.name ?? member.system);
+        if (names.length) return `等待协作成员 · ${names.join('、')} 正在分析`;
+    }
+    const head = phase ? label : `正在${tool.title}`;
+    const summary = tool.name === 'parallel_analysis' ? null : summarizeAgentTool(tool);
+    return summary ? `${head} · ${summary}` : head;
+}
+
 /** One line under a process step, read from its arguments and stored result only. */
 export function summarizeAgentTool(tool: AgentTool): string | null {
     const args = tool.input && typeof tool.input === 'object' && !Array.isArray(tool.input) ? tool.input as Record<string, unknown> : {};
@@ -65,7 +85,8 @@ export function summarizeAgentTool(tool: AgentTool): string | null {
         const count = getAgentToolQuestions(tool).length;
         return count ? `${count} 个问题` : null;
     }
-    if (tool.name === 'focus_chart') return getChartFocus(tool)?.caption ?? null;
+    // A running focus call has only its arguments; the stored focus replaces them once it completes.
+    if (tool.name === 'focus_chart') return getChartFocus(tool)?.caption ?? (typeof args.caption === 'string' && args.caption.trim() ? args.caption.slice(0, 160) : null);
     if (tool.name === 'todo_write' && Array.isArray(args.items)) return `${args.items.length} 项`;
     if (tool.name === 'read_attachment') {
         const read = getAgentAttachmentRead(tool);
@@ -108,6 +129,64 @@ export function collectAgentArtifacts(messages: ChatMessage[]): AgentArtifact[] 
     return [...artifacts.values()];
 }
 
+/** Collapsed process line: step titles in first-use order with repeats counted, e.g. 八字排盘、定位分析位置 3 次. */
+export function summarizeAgentProcess(tools: readonly AgentTool[], limit = 4): string {
+    const counts = new Map<string, number>();
+    // Plan updates are bookkeeping, not steps the reader looks for.
+    for (const tool of tools) if (tool.name !== 'todo_write') counts.set(tool.title, (counts.get(tool.title) ?? 0) + 1);
+    const items = [...counts].map(([title, count]) => count > 1 ? `${title} ${count} 次` : title);
+    return items.length > limit ? `${items.slice(0, limit).join('、')}等` : items.join('、');
+}
+
+/** Completed results the task did not save: calculations, chart focus and readings left out of the final selection. */
+export function getAgentIntermediateResults(tools: readonly AgentTool[], artifacts: readonly AgentArtifact[]): string | null {
+    const selected = new Set(artifacts.map(artifact => artifact.id));
+    const intermediate = tools.filter(tool => {
+        if (tool.status !== 'completed') return false;
+        if (tool.name === 'focus_chart' || getAgentToolFamily(tool.name) === 'calculation') return true;
+        const artifactId = getAgentToolArtifactId(tool);
+        return artifactId !== null && !selected.has(artifactId);
+    });
+    return intermediate.length ? summarizeAgentProcess(intermediate) : null;
+}
+
+/** Process steps of a task: every call except plan updates, which show as the task list instead. */
+export function getAgentSteps(parts: readonly AgentPart[]): AgentTool[] {
+    return parts.filter((part): part is AgentTool => part.type === 'tool' && getAgentToolFamily(part.name) !== 'plan');
+}
+
+/** 第 N 步: one numbering across the whole task, shared by the chat process card and the workspace. */
+export function getAgentStepNumbers(parts: readonly AgentPart[]): ReadonlyMap<string, number> {
+    return new Map(getAgentSteps(parts).map((tool, index) => [tool.id, index + 1]));
+}
+
+const isMeasured = (ms: number | undefined): ms is number => typeof ms === 'number' && Number.isFinite(ms) && ms >= 0;
+
+/** Note under a call's details: execution apart from waiting, and whether a replay reuses the stored result. */
+export function describeAgentCallNote(tool: AgentTool): string | null {
+    const execution = isMeasured(tool.durationMs) ? formatAgentToolDuration(tool.durationMs) : null;
+    const span = getAgentTaskSpan(tool);
+    const stage = span === null ? null : formatAgentToolDuration(span);
+    const timing = execution === null ? null
+        : stage !== null && stage !== execution ? `执行阶段 ${execution}（不含等待），连同等待共 ${stage}。` : `执行阶段 ${execution}（不含等待）。`;
+    // A calculation's output names the artifact it was cached as under this task and call ID.
+    const stored = tool.status === 'completed' && getAgentToolArtifactId(tool) !== null ? '结果已按任务与调用 ID 暂存，重放不会重新计算或扣费。' : null;
+    return timing || stored ? `${timing ?? ''}${stored ?? ''}` : null;
+}
+
+/** A process step's state, the summary line and a note for states other than a plain completion. */
+export function describeAgentStep(tool: AgentTool, runStatus: AgentRunStatus) {
+    const state = getAgentToolState(tool, runStatus);
+    const summary = summarizeAgentTool(tool);
+    const note = state.status === 'failed' ? '失败'
+        : state.status === 'interrupted' ? '已结束（任务停止时未完成）'
+        : state.status === 'awaiting_input' ? '等待你回答'
+        : state.status === 'pending' ? '待执行'
+        : state.status === 'running' && !summary ? '执行中' : null;
+    const measured = ['completed', 'failed'].includes(state.status) && isMeasured(tool.durationMs);
+    return { ...state, summary, note, duration: measured ? formatAgentToolDuration(tool.durationMs!) : null };
+}
+
 export function getAgentToolState(tool: AgentTool, runStatus: AgentRunStatus) {
     if (['running', 'pending', 'awaiting_input'].includes(tool.status) && ['completed', 'cancelled', 'failed'].includes(runStatus)) {
         return { status: 'interrupted', label: '已结束' } as const;
@@ -146,8 +225,8 @@ export function formatAgentValue(value: unknown): string {
 
 /** Short tags shown on process steps, one per tool family. */
 export const AGENT_TOOL_FAMILY_LABELS: Record<AgentToolFamily, string> = {
-    chart: '命盘', calculation: '推演', search: '检索', data: '资料', method: '方法', plan: '计划',
-    question: '提问', collaboration: '协作', memory: '记忆', artifacts: '成果', external: '外部', other: '工具',
+    chart: '命盘', calculation: '推演', search: '依据', data: '资料', method: '指引', plan: '计划',
+    question: '问题', collaboration: '协作', memory: '记忆', artifacts: '成果', external: '外部', other: '工具',
 };
 
 /** Results the answer can cite: completed web and knowledge searches of one task. */
