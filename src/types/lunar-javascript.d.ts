@@ -115,6 +115,11 @@ declare module 'lunar-javascript' {
         getDayInGanZhi(): string;
 
         /**
+         * 获取年干支（以正月初一为界）
+         */
+        getYearInGanZhi(): string;
+
+        /**
          * 获取月干支（精确到节气）
          */
         getMonthInGanZhiExact(): string;
