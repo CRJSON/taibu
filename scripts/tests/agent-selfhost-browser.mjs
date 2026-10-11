@@ -104,15 +104,11 @@ try {
     throw new Error(`task did not reach ${status}`);
   };
   const selectAgentMode = async () => {
-    const mode = page.getByRole("button", { name: "Agent", exact: true });
+    const mode = page.getByRole("radio", { name: "Agent", exact: true });
     await mode.waitFor();
-    if (await mode.getAttribute('aria-pressed') !== 'true') await mode.click();
+    if (await mode.getAttribute('aria-checked') !== 'true') await mode.click();
     await page.waitForFunction(() =>
-      [...document.querySelectorAll("button")].some(
-        (button) =>
-          button.textContent === "Agent" &&
-          button.getAttribute("aria-pressed") === "true",
-      ),
+      document.querySelector('[role="radiogroup"][aria-label="对话方式"] [aria-checked="true"]')?.textContent === "Agent",
     );
   };
   const newChat = async () => {
@@ -286,22 +282,27 @@ try {
   assert.ok(finished.message.content.includes('Agent 离线验收'));
   assert.ok(finished.message.agent.runtime.context.tokens > 0, 'Pi projects the real active transcript');
   assert.equal(finished.message.agent.runtime.model.contextWindow, null, 'unconfigured models have no invented capacity');
-  const modelTrigger = page.getByRole('button', { name: /^选择模型：/ });
-  await modelTrigger.click();
-  const usagePanel = page.getByRole('dialog', { name: '模型与分析设置', exact: true });
+  // The composer meter reads the latest projected context and opens its counters.
+  const contextMeter = page.getByRole('button', { name: /^上下文用量 / });
+  await contextMeter.click();
+  const usagePanel = page.getByRole('dialog', { name: '上下文用量', exact: true });
   await usagePanel.waitFor();
-  await usagePanel.getByLabel('上下文用量', { exact: true }).click();
   assert.ok((await usagePanel.innerText()).includes('容量未知'));
-  assert.ok(await usagePanel.locator('.agent-context-details').getAttribute('data-context-source') !== 'unavailable');
+  assert.ok(['usage', 'mixed', 'estimated'].includes(await contextMeter.getAttribute('data-context-source')), 'the meter reads the projected context');
   await page.screenshot({ path: path.join(directory, 'agent-context-acceptance.png'), fullPage: true });
   await page.keyboard.press('Escape');
+  assert.ok(await contextMeter.evaluate(element => element === document.activeElement), 'closing the context counters restores the meter focus');
+  const modelTrigger = page.getByRole('button', { name: /^选择模型：/ });
+  await modelTrigger.click();
+  await page.getByRole('dialog', { name: '模型与分析设置', exact: true }).waitFor();
+  await page.keyboard.press('Escape');
   assert.ok(await modelTrigger.evaluate(element => element === document.activeElement), 'closing model settings restores its trigger focus');
-  const modelBounds = await page.getByRole('button', { name: /^选择模型：/ }).boundingBox();
-  const sendBounds = await page.getByRole('button', { name: '发送消息', exact: true }).boundingBox();
+  const modelBounds = await modelTrigger.boundingBox();
+  const sendBounds = await page.getByRole('button', { name: '发送', exact: true }).boundingBox();
   assert.ok(modelBounds && sendBounds && modelBounds.x < sendBounds.x, 'model settings precede Send on the right');
-  const toolsTrigger = page.getByRole('button', { name: '更多选项', exact: true });
+  const toolsTrigger = page.getByRole('button', { name: '添加图片或文本资料', exact: true });
   await toolsTrigger.click();
-  await page.getByRole('menu', { name: '更多选项', exact: true }).waitFor();
+  await page.getByRole('menu', { name: '添加图片或文本资料', exact: true }).waitFor();
   await page.keyboard.press('Escape');
   assert.ok(await toolsTrigger.evaluate(element => element === document.activeElement), 'keyboard dismissal returns focus even when menu actions focus the composer');
   const duplicate = await context.request.post(
@@ -456,22 +457,24 @@ try {
   await waitForRun(second.run.id, "awaiting_input");
   await page.goto(`${config.APP_ORIGIN}/chat?id=${second.run.conversationId}`);
   await page.locator('[data-agent-status="awaiting_input"]').waitFor();
-  await page.getByText("补充信息后继续同一任务", { exact: true }).waitFor();
-  const questionDialog = page.getByRole('dialog', { name: '需要你的补充', exact: true });
-  await questionDialog.waitFor();
-  await questionDialog.getByText('请补充出生年月日、出生时刻和性别。', { exact: true }).waitFor();
-  await questionDialog.getByLabel('你的回答', { exact: true }).fill('1990年1月15日9时，男。');
+  await page.getByText("等待你回答 · 任务已暂停", { exact: true }).waitFor();
+  // The questions take the composer's place until answered or folded away.
+  const questionDock = page.getByRole('region', { name: /^太卜需要补充 \d+ 项信息$/ });
+  await questionDock.waitFor();
+  await questionDock.getByText('请补充出生年月日、出生时刻和性别。').waitFor();
+  await questionDock.getByRole('textbox').fill('1990年1月15日9时，男。');
   await page.setViewportSize({ width: 390, height: 844 });
-  for (let index = 0; index < 10; index++) await page.keyboard.press('Tab');
-  assert.ok(await questionDialog.evaluate(element => element.contains(document.activeElement)), 'question modal traps keyboard focus');
+  const dockBounds = await questionDock.boundingBox();
+  assert.ok(dockBounds && dockBounds.x >= 0 && dockBounds.x + dockBounds.width <= 390, 'the question dock fits a 390px viewport');
   await page.screenshot({ path: path.join(directory, 'agent-question-mobile-acceptance.png'), fullPage: true });
-  await page.keyboard.press('Escape');
-  await questionDialog.waitFor({ state: 'hidden' });
-  assert.equal((await get(`/api/agent/runs/${second.run.id}`)).status, 'awaiting_input', 'dismissing leaves the same task waiting');
-  const answerTrigger = page.getByRole('button', { name: '回答问题', exact: true });
-  assert.ok(await answerTrigger.evaluate(element => element === document.activeElement), 'modal dismissal restores trigger focus');
+  await questionDock.getByRole('button', { name: '稍后回答', exact: true }).click();
+  await questionDock.waitFor({ state: 'hidden' });
+  assert.equal((await get(`/api/agent/runs/${second.run.id}`)).status, 'awaiting_input', 'answering later leaves the same task waiting');
+  const answerTrigger = page.getByRole('group', { name: '等待回答', exact: true }).getByRole('button', { name: '回答问题', exact: true });
+  await page.waitForFunction(() => document.activeElement?.textContent === '回答问题');
+  assert.ok(await composer().isVisible(), 'folding the questions hands the input back for a free-text reply');
   await answerTrigger.click();
-  assert.equal(await questionDialog.getByLabel('你的回答', { exact: true }).inputValue(), '1990年1月15日9时，男。', 'reopening keeps the answer draft');
+  assert.equal(await questionDock.getByRole('textbox').inputValue(), '1990年1月15日9时，男。', 'reopening keeps the answer draft');
   await uiReady();
   const replyResponse = page.waitForResponse(
     (response) =>
@@ -479,14 +482,14 @@ try {
         `/api/agent/runs/${second.run.id}/messages` &&
       response.request().method() === "POST",
   );
-  await questionDialog.getByRole('button', { name: '下一步', exact: true }).click();
-  await page.getByRole('dialog', { name: '确认回答', exact: true }).getByRole('button', { name: '提交并继续', exact: true }).click();
+  await questionDock.getByRole('button', { name: '检查回答', exact: true }).click();
+  await questionDock.getByRole('button', { name: '提交并继续', exact: true }).click();
   const reply = await replyResponse;
   assert.ok(reply.ok());
   assert.equal(reply.request().postDataJSON().mode, 'reply');
   const replyPayload = await reply.json();
   assert.equal(replyPayload.message.metadata.agentRunId, second.run.id);
-  await questionDialog.waitFor({ state: 'hidden' });
+  await questionDock.waitFor({ state: 'hidden' });
   await waitForRun(second.run.id, "completed");
   await page.locator('[data-agent-status="completed"]').waitFor();
   const assertReplyOrder = async () => {
@@ -582,14 +585,13 @@ try {
   const third = await send("Agent验收：补充信息，请先询问，等待时停止。");
   await waitForRun(third.run.id, "awaiting_input");
   await page.locator('[data-agent-status="awaiting_input"]').waitFor();
-  await page.getByRole('dialog', { name: '需要你的补充', exact: true }).waitFor();
-  await page.keyboard.press('Escape');
+  await page.getByRole('region', { name: /^太卜需要补充 \d+ 项信息$/ }).getByRole('button', { name: '稍后回答', exact: true }).click();
   const cancelResponse = page.waitForResponse(
     (response) =>
       new URL(response.url()).pathname ===
       `/api/agent/runs/${third.run.id}/cancel`,
   );
-  await page.getByRole("button", { name: "停止任务", exact: true }).click();
+  await page.getByRole('group', { name: '等待回答', exact: true }).getByRole("button", { name: "停止任务", exact: true }).click();
   assert.ok((await cancelResponse).ok());
   await waitForRun(third.run.id, "cancelled");
   await page.locator('[data-agent-status="cancelled"]').waitFor();
@@ -673,7 +675,7 @@ try {
 
   await newChat();
   await uiReady();
-  await page.getByRole("button", { name: "普通对话", exact: true }).click();
+  await page.getByRole("radio", { name: "对话", exact: true }).click();
   const plainResponse = page.waitForResponse(
     (response) =>
       new URL(response.url()).pathname === "/api/chat" &&

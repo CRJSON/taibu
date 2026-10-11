@@ -52,12 +52,12 @@ import RecordsPage from '@/app/records/page';
 import * as chartClient from '@/lib/user/charts-client';
 import { useSelectedBaziChart } from '@/lib/hooks/useUserCharts';
 import { TimeInputModal } from '@/components/bazi/form/TimeInputModal';
-import { AgentQuestionDialog } from '@/components/chat/agent/AgentQuestionDialog';
+import { AgentQuestionDock } from '@/components/chat/agent/AgentQuestionDock';
 import { AgentMessage } from '@/components/chat/AgentMessage';
 import { AgentWorkspacePanel } from '@/components/chat/agent/AgentWorkspacePanel';
 import { AgentResultContext } from '@/components/chat/agent/AgentResultContext';
 import { ModelSelector } from '@/components/ui/ModelSelector';
-import { AgentContextDetails } from '@/components/chat/agent/AgentContextUsage';
+import { AgentContextMeter } from '@/components/chat/agent/AgentContextUsage';
 import { getAgentChart } from '@/lib/agent/tool-presentation';
 import { getChartTargets } from '@/lib/agent/chart-interaction';
 import { ANALYSIS_GUIDES, ANALYSIS_METHODS } from '@/lib/agent/analysis-methods.generated';
@@ -154,13 +154,16 @@ const empty = [];
 function StructuredQuestionProbe() {
   const { user } = useSessionSafe();
   const [attachments, setAttachments] = useState({ webSearchEnabled: false });
-  return <AgentQuestionDialog question="选择分析范围" questionId="same-tool-call" scopeKey={(user?.id ?? '') + ':structured'}
+  const [collapsed, setCollapsed] = useState(false);
+  return <AgentQuestionDock question="选择分析范围" questionId="same-tool-call" scopeKey={(user?.id ?? '') + ':structured'} collapsed={collapsed} onCollapsedChange={setCollapsed}
     questions={[
       { id: 'topics', question: '选择分析范围', options: [{ id: 'work', label: '工作' }, { id: 'life', label: '生活' }], multiple: true, allowCustom: true },
       { id: 'optional', question: '补充其他资料', allowCustom: true, allowSkip: true },
     ]} disabled={false} attachmentState={attachments} onAttachmentChange={setAttachments} onStop={() => window.fixture.mount.question(false)}
     onAnswer={async (text, answers) => { window.fixture.structuredAnswers = { text, answers }; window.fixture.mount.question(false); }} />;
 }
+const CONTEXT_FIXTURE_RUNTIME = { model: { id: 'fixture-analysis', name: '分析模型', contextWindow: 200000, limitSource: 'configured' },
+  context: { tokens: 76000, measuredTokens: 70000, estimatedTokens: 6000, source: 'mixed', input: 52000, output: 18000, compactions: 1 } };
 function AgentChatProbe() {
   const { user } = useSessionSafe();
   const router = useMemo(() => ({ replace() {}, push() {} }), []);
@@ -172,7 +175,8 @@ function AgentChatProbe() {
   return <section data-testid="agent-chat"><input aria-label="Agent fixture draft" value={state.inputValue} onChange={event => state.setInputValue(event.target.value)} />
     <ModelSelector selectedModel={state.selectedModel} onModelChange={state.setSelectedModel} reasoningEnabled={state.reasoningEnabled} onReasoningChange={state.setReasoningEnabled}
       reasoningEffort={state.reasoningEffort} onReasoningEffortChange={state.setReasoningEffort} collaborators={state.collaborators} onCollaboratorsChange={state.setCollaborators}
-      userId={user?.id} membershipType="plus" contextDetails={<AgentContextDetails runtime={messaging.agent.run?.message.agent?.runtime} />} toolbarStyle />
+      userId={user?.id} membershipType="plus" toolbarStyle />
+    <AgentContextMeter runtime={CONTEXT_FIXTURE_RUNTIME} />
     <output data-testid="agent-status">{messaging.agent.run?.status ?? 'none'}</output>
     <output data-testid="agent-messages">{JSON.stringify(state.messages)}</output></section>;
 }
@@ -554,7 +558,7 @@ export async function run(existingPage, bundlePath) {
   page.on('console', message => {
     if (message.text().includes('No queryFn was passed')) queryWarnings.push(message.text());
   });
-  const settings = { notificationsEnabled: true, language: 'zh', expressionStyle: 'direct', customInstructions: '', chartPromptDetailLevel: 'default', userProfile: null, promptKbIds: [], notifyEmail: true, notifySite: true, defaultBaziChartId: null, defaultZiweiChartId: null, chatPreferences: { width: 760, fontScale: 100, desktopNotifications: false } };
+  const settings = { notificationsEnabled: true, language: 'zh', expressionStyle: 'direct', customInstructions: '', chartPromptDetailLevel: 'default', userProfile: null, promptKbIds: [], notifyEmail: true, notifySite: true, defaultBaziChartId: null, defaultZiweiChartId: null, chatPreferences: { width: 700, fontScale: 100, desktopNotifications: false } };
   const settingsByUser = { alice: { ...settings }, bob: { ...settings, customInstructions: 'Bob preferences', notificationsEnabled: false } };
   const chart = (id, name) => ({ id, name, gender: 'male', birth_date: '1990-01-01', birth_time: '12:00',
     birth_place: 'Beijing', longitude: 116.4, calendar_type: 'solar', is_leap_month: false, created_at: '2026-01-01T00:00:00Z' });
@@ -1384,25 +1388,40 @@ export async function run(existingPage, bundlePath) {
     await page.evaluate(() => window.fixture.mount.records(false));
 
     await page.evaluate(() => window.fixture.mount.question(true));
-    let structuredDialog = page.getByRole('dialog', { name: '需要你的补充', exact: true });
-    await structuredDialog.getByLabel('工作', { exact: true }).check();
-    await structuredDialog.getByLabel('生活', { exact: true }).check();
-    await structuredDialog.getByLabel('自行填写', { exact: true }).fill('具体项目');
-    await structuredDialog.getByRole('button', { name: '下一步', exact: true }).click();
-    await structuredDialog.getByRole('button', { name: '跳过', exact: true }).click();
-    const answerSummary = page.getByRole('dialog', { name: '确认回答', exact: true });
-    await answerSummary.getByText('已跳过', { exact: true }).waitFor();
-    await answerSummary.getByRole('button', { name: '选择分析范围 · 修改', exact: true }).click();
-    check('Structured question summary returns to stable choices and custom input', await structuredDialog.getByLabel('工作', { exact: true }).isChecked() && await structuredDialog.getByLabel('生活', { exact: true }).isChecked() && await structuredDialog.getByLabel('自行填写', { exact: true }).inputValue() === '具体项目');
+    // Locators resolve lazily, so they also find the remounted dock.
+    const structuredDock = page.getByRole('region', { name: '太卜需要补充 2 项信息', exact: true });
+    const questionSteps = structuredDock.getByRole('navigation', { name: '问题导航', exact: true });
+    const reviewAnswers = () => structuredDock.locator('.agent-question-review dd').allInnerTexts();
+    await structuredDock.getByLabel('工作', { exact: true }).check();
+    await structuredDock.getByLabel('生活', { exact: true }).check();
+    await structuredDock.getByLabel('自行填写', { exact: true }).fill('具体项目');
+    await structuredDock.getByRole('button', { name: '下一题', exact: true }).click();
+    check('The last question leads to a review instead of submitting', await structuredDock.getByRole('button', { name: '检查回答', exact: true }).isVisible() &&
+      await questionSteps.getByRole('button', { name: '补充其他资料', exact: true }).getAttribute('aria-current') === 'step');
+    await structuredDock.getByRole('button', { name: '跳过此题', exact: true }).click();
+    await structuredDock.getByText('提交前检查', { exact: true }).waitFor();
+    check('Question review lists choices, custom text and the explicit skip', JSON.stringify(await reviewAnswers()) === JSON.stringify(['工作、生活、具体项目', '已跳过']));
+    await questionSteps.getByRole('button', { name: '选择分析范围', exact: true }).click();
+    check('Question navigation returns to stable choices and custom input', await structuredDock.getByLabel('工作', { exact: true }).isChecked() && await structuredDock.getByLabel('生活', { exact: true }).isChecked() && await structuredDock.getByLabel('自行填写', { exact: true }).inputValue() === '具体项目');
+    await structuredDock.getByRole('button', { name: '稍后回答', exact: true }).click();
+    const questionStrip = page.getByRole('group', { name: '等待回答', exact: true });
+    const answerLater = questionStrip.getByRole('button', { name: '回答问题', exact: true });
+    await until(() => document.activeElement?.textContent === '回答问题');
+    check('Answering later folds the questions into a strip that keeps stop and answer', await structuredDock.count() === 0 &&
+      await questionStrip.getByRole('button', { name: '停止任务', exact: true }).isEnabled() && await questionStrip.innerText().then(text => text.includes('回答 2 个问题后继续任务')));
+    await answerLater.click();
+    await until(() => document.activeElement?.textContent === '稍后回答');
+    check('Reopening the strip restores the same question and its draft', await structuredDock.getByLabel('自行填写', { exact: true }).inputValue() === '具体项目');
     await page.evaluate(() => window.fixture.mount.question(false));
-    await structuredDialog.waitFor({ state: 'hidden' });
+    await structuredDock.waitFor({ state: 'hidden' });
     await page.evaluate(() => window.fixture.mount.question(true));
-    structuredDialog = page.getByRole('dialog', { name: '需要你的补充', exact: true });
-    check('Remounting the same question restores its choices and draft', await structuredDialog.getByLabel('工作', { exact: true }).isChecked() && await structuredDialog.getByLabel('自行填写', { exact: true }).inputValue() === '具体项目');
-    await structuredDialog.getByRole('button', { name: '下一步', exact: true }).click();
-    await structuredDialog.getByRole('button', { name: '跳过', exact: true }).click();
-    await answerSummary.getByRole('button', { name: '提交并继续', exact: true }).click();
-    await answerSummary.waitFor({ state: 'hidden' });
+    await structuredDock.getByText('提交前检查', { exact: true }).waitFor();
+    check('Remounting a fully answered question resumes at its review with the saved draft', JSON.stringify(await reviewAnswers()) === JSON.stringify(['工作、生活、具体项目', '已跳过']));
+    await questionSteps.getByRole('button', { name: '选择分析范围', exact: true }).click();
+    check('Remounting the same question restores its choices and draft', await structuredDock.getByLabel('工作', { exact: true }).isChecked() && await structuredDock.getByLabel('自行填写', { exact: true }).inputValue() === '具体项目');
+    await questionSteps.getByRole('button', { name: '检查', exact: true }).click();
+    await structuredDock.getByRole('button', { name: '提交并继续', exact: true }).click();
+    await structuredDock.waitFor({ state: 'hidden' });
     check('Structured answer submission binds selected IDs and explicit skip to the tool call', await page.evaluate(() => JSON.stringify(window.fixture.structuredAnswers.answers) === JSON.stringify({ topics: ['work', 'life', '具体项目'], optional: null }) && localStorage.getItem('taibu.question:alice:structured:same-tool-call') === null));
 
     await page.evaluate(() => window.fixture.mount.agent(true));
@@ -1441,23 +1460,39 @@ export async function run(existingPage, bundlePath) {
     check('Model keyboard navigation skips disabled models', await modelSettings.getByRole('menuitemradio', { name: '仅支持推理开关', exact: true }).evaluate(button => button === document.activeElement));
     await modelSettings.getByRole('menuitemradio', { name: '仅支持推理开关', exact: true }).click();
     await settingsTrigger.click();
-    check('Models with only a reasoning switch do not offer unsupported effort levels', await modelSettings.getByLabel('推理档位', { exact: true }).locator('option').count() === 2);
+    const reasoningLevels = modelSettings.getByRole('radiogroup', { name: '推理档位', exact: true });
+    check('Models with only a reasoning switch do not offer unsupported effort levels', JSON.stringify(await reasoningLevels.getByRole('radio').allInnerTexts()) === JSON.stringify(['关闭', '开启']));
     await modelSettings.getByRole('menuitemradio', { name: '分析模型', exact: true }).click();
     await settingsTrigger.click();
-    await modelSettings.getByLabel('推理档位', { exact: true }).selectOption('max');
-    await modelSettings.locator('.chat-collaboration-settings > summary').click();
+    await reasoningLevels.getByRole('radio', { name: '高', exact: true }).focus();
+    await page.keyboard.press('End');
+    check('Reasoning levels select with the arrow, Home and End keys', await reasoningLevels.getByRole('radio', { name: '最高', exact: true }).getAttribute('aria-checked') === 'true' &&
+      await reasoningLevels.getByRole('radio', { name: '最高', exact: true }).evaluate(button => button === document.activeElement && button.tabIndex === 0));
     await modelSettings.getByLabel('启用多模型协作', { exact: true }).check();
+    const collaborationMembers = modelSettings.getByRole('group', { name: '协作成员', exact: true });
+    check('Enabling collaboration adds two members and opens the first for editing', await collaborationMembers.locator('button[aria-pressed]').count() === 2 &&
+      await collaborationMembers.locator('button[aria-pressed="true"]').innerText().then(text => text.startsWith('专项分析 · ')) && await modelSettings.locator('fieldset.chat-collaborator legend').innerText() === 'Agent 1');
     await modelSettings.getByLabel('Agent 1 名称', { exact: true }).fill('八字分析');
     await modelSettings.getByLabel('Agent 1 分工', { exact: true }).fill('核对天干、日支与生克关系');
     await modelSettings.getByLabel('Agent 1 推理档位', { exact: true }).selectOption('high');
+    await collaborationMembers.getByRole('button', { name: /^独立复核 · / }).click();
+    check('Member chips switch the single collaborator editor', await modelSettings.locator('fieldset.chat-collaborator').count() === 1 && await modelSettings.locator('fieldset.chat-collaborator legend').innerText() === 'Agent 2' &&
+      await collaborationMembers.getByRole('button', { name: /^八字分析 · / }).getAttribute('aria-pressed') === 'false');
     await modelSettings.getByLabel('Agent 2 名称', { exact: true }).fill('跨术数复核');
     await modelSettings.getByLabel('Agent 2 模型', { exact: true }).selectOption('fixture-review');
     const settingsSaved = page.waitForResponse(response => response.request().method() === 'PATCH' && new URL(response.url()).pathname === '/api/conversations/agent-settings/configuration' && response.request().postDataJSON()?.collaborators?.[1]?.reasoningEffort === 'xhigh');
     await modelSettings.getByLabel('Agent 2 推理档位', { exact: true }).selectOption('xhigh');
-    await modelSettings.getByLabel('上下文用量', { exact: true }).click();
-    check('Context, reasoning and collaborators share the model dialog', await modelSettings.locator('.agent-context-details[open]').count() === 1 && await modelSettings.getByLabel('推理档位', { exact: true }).inputValue() === 'max');
+    check('Reasoning and collaborators share the model dialog', await reasoningLevels.getByRole('radio', { name: '最高', exact: true }).getAttribute('aria-checked') === 'true' &&
+      await collaborationMembers.getByRole('button', { name: /^跨术数复核 · 复核模型$/ }).getAttribute('aria-pressed') === 'true');
     await page.keyboard.press('Escape');
     check('Closing the combined settings dialog restores model trigger focus', await settingsTrigger.evaluate(button => button === document.activeElement));
+    const contextMeter = page.locator('[data-testid="agent-chat"]').getByRole('button', { name: '上下文用量 38%', exact: true });
+    await contextMeter.click();
+    const contextCounters = page.getByRole('dialog', { name: '上下文用量', exact: true });
+    check('The context meter opens the measured counters against the configured window', await contextMeter.getAttribute('aria-expanded') === 'true' &&
+      await contextCounters.innerText().then(text => text.includes('已测基准 + 后续估算') && text.includes('76,000 / 200,000 tokens · 分析模型') && text.includes('1 次')));
+    await page.keyboard.press('Escape');
+    check('Closing the context counters restores the meter focus', await contextCounters.count() === 0 && await contextMeter.evaluate(button => button === document.activeElement));
     await until(() => window.fixture.agentChat.state.collaborators[1]?.reasoningEffort === 'xhigh');
     assert.ok((await settingsSaved).ok());
     // Switching away and back reloads the saved whole configuration, rather than sharing a mutable running-task config.
@@ -1486,10 +1521,10 @@ export async function run(existingPage, bundlePath) {
     await selectAgentConversation('agent-settings');
     await until(() => window.fixture.agentChat.state.collaborators.length === 2);
     await settingsTrigger.click();
-    await modelSettings.locator('.chat-collaboration-settings > summary').click();
-    await modelSettings.getByRole('button', { name: '添加 Agent', exact: true }).click();
-    await modelSettings.getByRole('button', { name: '添加 Agent', exact: true }).click();
-    check('Collaboration supports four independently configurable members and a bounded limit', await modelSettings.locator('fieldset.chat-collaborator').count() === 4 && await modelSettings.getByRole('button', { name: '添加 Agent', exact: true }).isDisabled());
+    await collaborationMembers.getByRole('button', { name: '添加成员', exact: true }).click();
+    await collaborationMembers.getByRole('button', { name: '添加成员', exact: true }).click();
+    check('Collaboration supports four independently configurable members and a bounded limit', await collaborationMembers.locator('button[aria-pressed]').count() === 4 &&
+      await modelSettings.locator('fieldset.chat-collaborator legend').innerText() === 'Agent 4' && await collaborationMembers.getByRole('button', { name: '添加成员', exact: true }).isDisabled());
     await modelSettings.getByLabel('启用多模型协作', { exact: true }).uncheck();
     await page.keyboard.press('Escape');
     await page.evaluate(() => window.fixture.agentChat.state.setReasoningEffort(null));

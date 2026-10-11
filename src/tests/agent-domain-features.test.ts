@@ -11,7 +11,7 @@ import { executeAgentRun } from '../lib/agent/runtime.server';
 import { emptyPiAssistant } from '../lib/agent/pi-stream.server';
 import { row, config, MemoryStore } from './helpers/agent-runtime-fixture';
 import type { PiStreamFn } from '../lib/agent/types';
-import { parallelAnalysisResults } from '../lib/agent/parallel-results';
+import { collaborationProgress, parallelAnalysisResults } from '../lib/agent/parallel-results';
 
 test('templates are bounded and substitute draft text literally; speech never overwrites a changed draft', () => {
     const template = { id: 'career', name: '事业', content: '请分析：{{question}}' };
@@ -23,6 +23,17 @@ test('templates are bounded and substitute draft text literally; speech never ov
     assert.equal(mergeSpeechDraft('原问题', '原问题', '补充'), '原问题\n补充');
     assert.equal(mergeSpeechDraft('原问题', '手动编辑', '补充'), null);
     assert.equal(speechConstructor({} as Window), undefined);
+});
+
+test('collaboration progress counts finished members of the running analysis and the configured size', () => {
+    const member = (status: string, conversationId: number) => ({ system: 'bazi', conversationId, status });
+    const tool = (status: string, analyses: unknown[]) => ({ type: 'tool', name: 'parallel_analysis', status, output: { analyses } });
+    assert.deepEqual(collaborationProgress([tool('running', [member('completed', 1), member('failed', 2), member('running', 3)])], 3), { completed: 2, total: 3 });
+    assert.deepEqual(collaborationProgress([tool('running', [])], 3), { completed: 0, total: 3 }, 'configured members count before any reports');
+    assert.equal(collaborationProgress([tool('completed', [member('completed', 1)])], 2), null, 'a finished analysis no longer reports progress');
+    assert.equal(collaborationProgress([tool('running', [])], 0), null, 'nothing to count without members');
+    assert.deepEqual(collaborationProgress([tool('completed', [member('completed', 1)]), tool('running', [member('running', 2), member('running', 3)])]), { completed: 0, total: 2 }, 'only the latest analysis counts');
+    assert.equal(collaborationProgress([{ type: 'text' }]), null);
 });
 
 test('MCP configuration rejects private URLs, URL credentials, duplicate names and implicit tool access', () => {

@@ -24,3 +24,12 @@ export function parallelAnalysisResults(value: unknown): ParallelAnalysisResult[
     ['running', 'completed', 'failed'].includes(item.status) &&
     OPTIONAL_TEXT.every(key => item[key] === undefined || typeof item[key] === 'string'));
 }
+
+/** Members finished out of those analysing while the task's latest collaboration runs; null otherwise. */
+export function collaborationProgress(parts: ReadonlyArray<{ type: string; name?: string; status?: string; output?: unknown }>, configured = 0): { completed: number; total: number } | null {
+  const tool = parts.findLast(part => part.type === 'tool' && part.name === 'parallel_analysis');
+  if (!tool || (tool.status !== 'pending' && tool.status !== 'running')) return null;
+  const results = parallelAnalysisResults(tool.output);
+  const total = Math.max(configured, results.length);
+  return total ? { completed: results.filter(result => result.status !== 'running').length, total } : null;
+}

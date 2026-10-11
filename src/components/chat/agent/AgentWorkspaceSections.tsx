@@ -7,6 +7,7 @@ import { getAgentToolFamily } from '@/lib/agent/tool-catalog';
 import { getAgentChart, getAgentFinalSelection, getAgentSearchResults, getAgentToolArtifactId, getAgentUnrepresentedArtifacts, type AgentToolPart } from '@/lib/agent/tool-presentation';
 import type { AgentWorkspaceModel, AgentWorkspaceResource } from '@/lib/agent/workspace';
 import { REASONING_EFFORT_LABELS } from '@/lib/chat/model-settings';
+import { requestConversationExport } from '@/lib/chat/conversation-export';
 import { AgentArtifactCard } from './AgentArtifactCard';
 import { AgentStatus } from './AgentStatus';
 import { AgentActivityIndicator } from './AgentActivityGroup';
@@ -92,7 +93,7 @@ export function WorkspaceResultsSection({ model, artifacts, data, run, onOpen, c
                 {timing && <div><dt>模型响应</dt><dd>{formatAgentToolDuration(timing.durationMs)} · {timing.count} 次</dd></div>}
                 {run?.billing && <div><dt>计费</dt><dd>{BILLING_LABELS[run.billing]}</dd></div>}
             </dl>
-            {canExport && <button type="button" className="agent-secondary-button" onClick={() => window.dispatchEvent(new Event('taibu:export'))}><Download size={12} aria-hidden="true" />导出对话</button>}
+            {canExport && <button type="button" className="agent-secondary-button" onClick={requestConversationExport}><Download size={12} aria-hidden="true" />导出对话</button>}
         </section>}
     </>;
 }

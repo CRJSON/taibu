@@ -537,8 +537,8 @@ export async function createAgentTools(
   tools.push(
     wrap(
       "ask_user",
-      "缺少必要信息时向用户提出问题并暂停任务；不能猜测出生数据",
-      Type.Object({ question: Type.Optional(Type.String({ minLength: 1 })), questions: Type.Optional(Type.Array(Type.Object({ id: Type.String(), question: Type.String(), options: Type.Optional(Type.Array(Type.Object({ id: Type.String(), label: Type.String() }))), multiple: Type.Optional(Type.Boolean()), allowCustom: Type.Optional(Type.Boolean()), allowSkip: Type.Optional(Type.Boolean()) }), { minItems: 1, maxItems: 10 })) }),
+      "缺少必要信息时向用户提出问题并暂停任务；不能猜测出生数据。每题给 header 短标签（2–6 字，如“出生时间”）；question 首行是问题，其后可写一行填写提示",
+      Type.Object({ question: Type.Optional(Type.String({ minLength: 1 })), questions: Type.Optional(Type.Array(Type.Object({ id: Type.String(), question: Type.String(), header: Type.Optional(Type.String({ description: "问题导航中的短标签，2–6 个字" })), options: Type.Optional(Type.Array(Type.Object({ id: Type.String(), label: Type.String() }))), multiple: Type.Optional(Type.Boolean()), allowCustom: Type.Optional(Type.Boolean()), allowSkip: Type.Optional(Type.Boolean()) }), { minItems: 1, maxItems: 10 })) }),
       async (args) => {
         const questions = normalizeQuestions(args.questions, args.question);
         return textResult({ question: questions.map(item => item.question).join('\n\n'), questions, awaitingUser: true });
