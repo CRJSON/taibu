@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>太卜 · 每日运势 2026-10-13</title>
+<style>
+  :root {
+    --accent: #1772B4;
+    --accent-rgb: 23,114,180;
+    --paper: #F8F4ED;
+    --ink: #2E2E2E;
+    --seal: #D92121;
+    --accent-dim: rgba(23,114,180,0.07);
+    --accent-border: #1772B4;
+    --step--1: clamp(0.83rem, 0.8rem + 0.15vw, 0.9rem);
+    --step-0: clamp(1rem, 0.95rem + 0.25vw, 1.125rem);
+    --step-1: clamp(1.25rem, 1.15rem + 0.5vw, 1.5rem);
+    --step-2: clamp(1.563rem, 1.4rem + 0.8vw, 2rem);
+    --step-3: clamp(1.953rem, 1.7rem + 1.2vw, 2.75rem);
+    --step-4: clamp(2.441rem, 2rem + 2vw, 3.75rem);
+    --space-1: 8px; --space-2: 16px; --space-3: 24px;
+    --space-4: 32px; --space-5: 48px; --space-6: 64px; --space-7: 96px;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--paper);
+    background-image:
+      radial-gradient(1200px 600px at 50% -5%, rgba(var(--accent-rgb),0.06), transparent 65%);
+    color: var(--ink);
+    font-family: "Noto Serif SC", "Songti SC", "STSong", serif;
+    padding: 64px 24px 120px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    letter-spacing: 0.02em;
+    line-height: 1.8;
+  }
+  .wrap { max-width: 720px; margin: 0 auto; }
+  header { text-align: center; padding: 24px 0 20px; position: relative; }
+  header .brand { color: var(--accent); letter-spacing: 10px; font-size: 14px; font-weight: 500; }
+  /* 竖排装饰 */
+  .vertical-deco {
+    writing-mode: vertical-rl;
+    letter-spacing: 0.35em;
+    font-size: 13px;
+    color: var(--accent);
+    opacity: 0.55;
+  }
+  /* 回纹分隔线 */
+  .pattern-divider {
+    height: 24px;
+    margin: 48px auto;
+    max-width: 200px;
+    background-image: repeating-linear-gradient(90deg,
+      var(--accent) 0 8px, transparent 8px 12px,
+      var(--accent) 12px 14px, transparent 14px 20px);
+    opacity: 0.18;
+  }
+  /* 备忘录 */
+  .memo-box {
+    margin: 20px 4px;
+    padding: 18px 20px;
+    background: rgba(var(--accent-rgb),0.05);
+    border: 1px solid rgba(var(--accent-rgb),0.2);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 12px 12px 0;
+  }
+  .memo-box .memo-date {
+    font-size: 12px; color: var(--accent);
+    letter-spacing: 2px; margin-bottom: 6px; font-weight: 600;
+  }
+  .memo-box .memo-event {
+    font-size: 15px; color: var(--ink); line-height: 1.7;
+  }
+  /* 印章 */
+  header .seal-mark {
+    display: inline-block;
+    margin-top: 20px;
+    padding: 8px 12px;
+    background: var(--seal);
+    color: #FFFEF8;
+    font-size: 14px;
+    letter-spacing: 4px;
+    border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+    transform: rotate(-3deg);
+  }
+  header h1 {
+    font-size: 44px;
+    margin: 10px 0 4px;
+    color: var(--ink);
+    font-weight: 700;
+    letter-spacing: 12px;
+    text-shadow: 0 2px 20px rgba(var(--accent-rgb),0.15);
+  }
+  header .date { color: #6f675d; font-size: 14px; white-space: nowrap; }
+  .gz-big { text-align: center; margin: 26px 0; }
+  .gz-big .pill { display: inline-block; border: 1px solid var(--accent); border-radius: 12px; padding: 14px 34px; background: linear-gradient(180deg, #f0e8d8, #e8dcc8); }
+  .gz-big .pill b { font-size: 40px; color: var(--accent); letter-spacing: 6px; }
+  .gz-big .pill span { display: block; margin-top: 6px; font-size: 13px; color: #6f675d; letter-spacing: 2px; }
+  .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 18px 0; }
+  @media (max-width: 640px) { .cards { grid-template-columns: 1fr; } }
+  .card { border-radius: 14px; padding: 20px 22px; background: rgba(var(--accent-rgb),0.06); border: 1px solid rgba(var(--accent-rgb),0.08); }
+  .card.yi { border-top: 3px solid #7ba05b; }
+  .card.ji { border-top: 3px solid #b0513f; }
+  .card h2 { font-size: 22px; margin-bottom: 12px; letter-spacing: 6px; }
+  .card.yi h2 { color: #2d6a3f; } .card.ji h2 { color: #b64232; }
+  .card p { line-height: 2; font-size: 16px; color: var(--ink); }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 18px 0; }
+  @media (max-width: 640px) { .grid { grid-template-columns: 1fr 1fr; } }
+  .item { background: #fffdf8; border: 1px solid rgba(var(--accent-rgb),0.15); border-radius: 12px; padding: 14px 16px; }
+  .item .k { font-size: 12px; color: #6f675d; letter-spacing: 2px; margin-bottom: 6px; }
+  .item .v { font-size: 15px; color: var(--ink); line-height: 1.7; font-weight: 500; }
+  .sec-title {
+    margin: 72px 0 28px;
+    font-size: 20px;
+    color: var(--ink);
+    letter-spacing: 10px;
+    font-weight: 600;
+    text-align: center;
+    position: relative;
+    padding-bottom: 16px;
+  }
+  .sec-title::after {
+    content: '';
+    position: absolute;
+    bottom: 0; left: 50%;
+    transform: translateX(-50%);
+    width: 48px; height: 2px;
+    background: var(--seal);
+    border-radius: 1px;
+  }
+  .sec-title small {
+    display: block;
+    margin-top: 8px;
+    font-size: 12px;
+    color: #6f675d;
+    letter-spacing: 2px;
+    font-weight: 400;
+  }
+  /* 印章 */
+  .seal {
+    display: inline-block;
+    padding: 6px 10px;
+    background: var(--seal);
+    color: #FFFEF8;
+    font-size: 13px;
+    letter-spacing: 2px;
+    border-radius: 3px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+    vertical-align: middle;
+  }
+  /* 分隔 */
+  .divider {
+    text-align: center;
+    margin: 48px 0;
+    color: rgba(var(--accent-rgb),0.4);
+    font-size: 14px;
+    letter-spacing: 12px;
+  }
+  .hours { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  @media (max-width: 640px) { .hours { grid-template-columns: repeat(2, 1fr); } }
+  .hour { background: rgba(var(--accent-rgb),0.06); border: 1px solid rgba(var(--accent-rgb),0.08); border-radius: 10px; padding: 12px; font-size: 13px; }
+  .hour.h-good { border-color: #4a5d3a; } .hour.h-bad { border-color: #5d3a32; }
+  .hour-name { font-size: 16px; color: var(--accent); margin-bottom: 4px; }
+  .hour-name small { color: #6f675d; font-size: 11px; }
+  .hour-gz { color: #6f675d; margin-bottom: 6px; }
+  .hour-god { margin-bottom: 8px; color: #6f675d; }
+  .hour-yj { color: #5a5244; line-height: 1.8; font-size: 12px; }
+  .hour-yj em { font-style: normal; color: #FFFEF8; background: #2d6a3f; border-radius: 4px; padding: 1px 6px; font-size: 11px; font-weight: 600; }
+  .hour-yj em.ji { color: #FFFEF8; background: #b64232; }
+  .badge { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 4px; padding: 2px 8px; margin-left: 6px; color: #FFFEF8; }
+  .badge.good { background: #2d6a3f; }
+  .badge.bad { background: #b64232; }
+  .badge.mid { background: #6f675d; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip { font-size: 13px; padding: 5px 12px; border-radius: 20px; background: rgba(255,255,255,0.6); border: 1px solid rgba(var(--accent-rgb),0.12); color: #6f675d; }
+  .chip.good { border-color: #4a5d3a; color: #2d6a3f; }
+  .chip.bad { border-color: #5d3a32; color: #b64232; }
+  .personal {
+    background: #fffdf8;
+    border: 1px solid rgba(var(--accent-rgb),0.25);
+    border-radius: 18px;
+    padding: 28px 30px;
+    margin: 24px 0;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.04);
+    backdrop-filter: blur(8px);
+  }
+  .personal h2 { color: var(--accent); font-size: 18px; letter-spacing: 3px; margin-bottom: 10px; }
+  .personal p { line-height: 2; font-size: 16px; color: var(--ink); }
+  .ai-text p { margin-bottom: 10px; }
+  .ai-oneliner {
+    font-size: 23px;
+    color: var(--ink);
+    line-height: 2;
+    padding: 12px 6px 20px;
+    font-weight: 500;
+    letter-spacing: 0.03em;
+  }
+  .daily-quote {
+    margin: 8px 4px 20px;
+    padding: 22px 26px;
+    position: relative;
+    background: linear-gradient(135deg, rgba(var(--accent-rgb),0.06), transparent 60%);
+    border-radius: 4px 16px 16px 4px;
+  }
+  .daily-quote::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 12px; bottom: 12px;
+    width: 2px;
+    background: linear-gradient(180deg, var(--accent), transparent);
+    border-radius: 1px;
+  }
+  .dq-label { font-size: 13px; color: var(--accent); letter-spacing: 2px; margin-bottom: 8px; }
+  .dq-text {
+    font-size: 20px;
+    color: var(--ink);
+    line-height: 1.9;
+    font-weight: 500;
+    letter-spacing: 0.05em;
+  }
+  .dq-src { font-size: 13px; color: #6f675d; margin-top: 6px; text-align: right; }
+  .dq-comment { font-size: 14px; color: #6f675d; margin-top: 8px; line-height: 1.7; }
+  .kp-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 4px 0 14px; }
+  @media (max-width: 640px) { .kp-grid { grid-template-columns: 1fr; } }
+  .kp-card {
+    background: #fffdf8;
+    border: 1px solid rgba(var(--accent-rgb),0.18);
+    border-radius: 14px;
+    padding: 20px;
+    transition: transform 0.2s ease, border-color 0.2s ease;
+  }
+  .kp-card:hover { transform: translateY(-2px); border-color: rgba(var(--accent-rgb),0.35); }
+  .kp-title { color: var(--accent); font-size: 16px; letter-spacing: 2px; margin-bottom: 8px; font-weight: bold; }
+  .kp-body { font-size: 15px; color: var(--ink); line-height: 1.9; }
+  .kp-why { font-size: 12px; color: #6f675d; margin-top: 8px; line-height: 1.7; }
+  .kp-why summary { cursor: pointer; color: #6f675d; }
+  .kp-why summary:hover { color: var(--accent); }
+  .agenda-why { font-size: 12px; color: #6f675d; margin-top: 6px; line-height: 1.7; }
+  .agenda-why summary { cursor: pointer; color: #6f675d; }
+  .agenda-why summary:hover { color: var(--accent); }
+  .ai-rows { margin: 4px 0 12px; }
+  .ai-row { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; color: #6f675d; line-height: 1.9; margin: 8px 0; }
+  .ai-tag { flex-shrink: 0; font-size: 12px; border-radius: 6px; padding: 2px 8px; margin-top: 2px; }
+  .ai-tag.good { background: #2c3d24; color: #2d6a3f; }
+  .ai-tag.bad { background: #3d2620; color: #b64232; }
+  .ai-tag.time { background: rgba(255,255,255,0.6); border: 1px solid rgba(var(--accent-rgb),0.12); }
+  .agenda-title { font-size: 20px; color: var(--ink); letter-spacing: 10px; font-weight: 600; text-align: center; margin: 72px 0 28px; position: relative; padding-bottom: 16px; }
+  .agenda-title::after { content: ''; position: absolute; bottom: 0; left: 50%; transform: translateX(-50%); width: 48px; height: 2px; background: var(--seal); border-radius: 1px; }
+  .agenda-title small { display: block; margin-top: 8px; font-size: 12px; color: #6f675d; letter-spacing: 2px; font-weight: 400; }
+  .agenda { margin: 4px 0 12px; }
+  .agenda { background: #fffdf8; border: 1px solid rgba(var(--accent-rgb),0.15); border-radius: 14px; padding: 6px 18px; margin: 12px 0; }
+  .agenda-row { display: flex; gap: 16px; padding: 16px 4px; border-bottom: 1px dashed rgba(var(--accent-rgb),0.12); align-items: flex-start; }
+  .agenda-row:last-child { border-bottom: none; }
+  .tuiyan-num {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 22px; height: 22px; border-radius: 50%;
+    background: var(--accent); color: #FFFEF8;
+    font-size: 12px; font-weight: 600; margin-right: 6px;
+  }
+  .agenda-time { flex-shrink: 0; width: 64px; padding-top: 3px; }
+  .agenda-time .prob { display: inline-block; font-size: 11px; padding: 3px 10px; border-radius: 12px; letter-spacing: 1px; font-weight: 600; }
+  .prob-high { background: rgba(193,102,107,0.12); color: #b0513f; border: 1px solid rgba(193,102,107,0.25); }
+  .prob-mid { background: rgba(var(--accent-rgb),0.1); color: var(--accent); border: 1px solid rgba(var(--accent-rgb),0.2); }
+  .prob-low { background: rgba(127,176,105,0.1); color: #4a6a3a; border: 1px solid rgba(127,176,105,0.2); }
+  .agenda-body { flex: 1; min-width: 0; }
+  .agenda-do { font-size: 15px; color: var(--ink); line-height: 1.8; }
+  .agenda-act { font-size: 13px; color: #5a6b4a; margin-top: 6px; line-height: 1.7; padding-left: 2px; border-left: 2px solid rgba(127,176,105,0.3); padding-left: 10px; }
+  .agenda-do { font-size: 15px; color: var(--ink); line-height: 1.8; }
+  .agenda-why { font-size: 12px; color: #6f675d; margin-top: 4px; line-height: 1.7; }
+  .tarot { display: flex; justify-content: center; margin: 18px 0; }
+  .tarot-card { width: 300px; border-radius: 16px; padding: 28px 22px; text-align: center;
+    background: linear-gradient(160deg, #2b2114, #e8dcc8); border: 1px solid var(--accent);
+    box-shadow: 0 8px 30px rgba(201,168,106,.15); }
+  .tarot-name { font-size: 34px; color: var(--accent); letter-spacing: 8px; margin-bottom: 6px; }
+  .tarot-en { font-size: 12px; color: #6f675d; letter-spacing: 1px; }
+  .tarot-meaning { font-size: 14px; color: #6f675d; line-height: 2; margin-top: 6px; }
+  .dash { display: flex; gap: 18px; align-items: center; background: rgba(var(--accent-rgb),0.06); border: 1px solid rgba(var(--accent-rgb),0.08); border-radius: 14px; padding: 20px 24px; margin: 18px 0; }
+  @media (max-width: 640px) { .dash { flex-direction: column; } }
+  .dial { flex-shrink: 0; }
+  .bars { flex: 1; width: 100%; }
+  .bar-row { display: flex; align-items: center; gap: 10px; margin: 12px 0; }
+  .bar-label { width: 40px; font-size: 14px; color: #6f675d; }
+  .bar-track { flex: 1; height: 10px; background: rgba(var(--accent-rgb),0.08); border-radius: 6px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 6px; transition: width 1s; }
+  .bar-num { width: 32px; text-align: right; font-size: 15px; color: var(--accent); font-weight: bold; }
+  .timeline { display: flex; gap: 4px; margin: 6px 0 4px; }
+  .tl-seg { flex: 1; text-align: center; }
+  .tl-bar { height: 38px; border-radius: 6px 6px 0 0; }
+  .tl-label { font-size: 12px; color: #6f675d; margin-top: 4px; }
+  .tl-legend { display: flex; gap: 16px; justify-content: center; font-size: 12px; color: #6f675d; margin-bottom: 8px; }
+  .tl-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 4px; }
+  .algo { background: rgba(var(--accent-rgb),0.06); border: 1px solid rgba(var(--accent-rgb),0.08); border-radius: 12px; padding: 14px 18px; margin: 2px 0 18px; }
+  .algo summary { cursor: pointer; color: var(--accent); font-size: 15px; letter-spacing: 2px; }
+  .algo-note { font-size: 12.5px; color: #6f675d; line-height: 1.9; margin: 10px 0 4px; }
+  .algo-dim { margin: 12px 0; font-size: 13px; }
+  .algo-dim b { color: var(--accent); font-size: 14px; }
+  .algo-f { display: inline-block; background: rgba(255,255,255,0.6); border: 1px solid rgba(var(--accent-rgb),0.12); border-radius: 14px; padding: 3px 10px; margin: 5px 6px 0 0; font-size: 12px; color: #6f675d; }
+  .algo-f em { font-style: normal; font-weight: bold; margin-left: 2px; }
+  .algo-f .plus { color: #2d6a3f; } .algo-f .minus { color: #b64232; }
+  .algo-calib { font-size: 12.5px; color: #6f675d; line-height: 2; margin: 4px 0 10px; padding: 10px 12px; background: #141009; border-radius: 8px; border: 1px dashed rgba(var(--accent-rgb),0.12); }
+  .algo-calib b { color: var(--accent); }
+  /* ---- 动效 ---- */
+  #bg-stars { position: fixed; inset: 0; z-index: -1; pointer-events: none; }
+  .reveal { opacity: 1; }
+  header h1 { color: var(--accent); }
+  @keyframes shimmer { to { background-position: 200% center; } }
+  .gz-big .pill { animation: floaty 5s ease-in-out infinite; }
+  @keyframes floaty { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+  .bar-fill { transition: width 1.3s cubic-bezier(.2,.8,.2,1); }
+  .flip { perspective: 1000px; cursor: pointer; }
+  .flip-inner { position: relative; width: 300px; height: 400px; transform-style: preserve-3d; transition: transform .9s cubic-bezier(.2,.8,.25,1); }
+  .flip.flipped .flip-inner { transform: rotateY(180deg); }
+  .flip-face { position: absolute; inset: 0; backface-visibility: hidden; -webkit-backface-visibility: hidden; }
+  .flip-back { transform: rotateY(180deg); }
+  .flip-back .tarot-card { height: 100%; }
+  .card-back { height: 100%; border-radius: 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+    background: linear-gradient(160deg, #2b3a4f 0%, #1e2a3a 60%, #16202e 100%);
+    border: 1px solid rgba(var(--accent-rgb),0.4);
+    box-shadow: 0 8px 30px rgba(0,0,0,0.2), inset 0 0 0 6px rgba(255,255,255,0.03), inset 0 0 0 7px rgba(var(--accent-rgb),0.25); }
+  .back-symbol { font-size: 64px; color: #d4af37; text-shadow: 0 2px 12px rgba(212,175,55,0.3); }
+  .back-hint { font-size: 13px; color: rgba(255,255,255,0.75); letter-spacing: 6px; }
+  .pick-row { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; margin: 18px 0 4px; }
+  .pick .flip-inner { width: 210px; height: 330px; }
+  .tarot-card.small .tarot-name { font-size: 24px; letter-spacing: 4px; }
+  .tarot-card.small .tarot-meaning { font-size: 12.5px; }
+  .card-back.small .back-symbol { font-size: 44px; }
+  .pick.dimmed { opacity: .28; pointer-events: none; filter: grayscale(.7); transition: opacity .5s; }
+  .pick.picked .card-back { box-shadow: 0 0 24px rgba(201,168,106,.35); }
+  .hour { transition: transform .25s ease, box-shadow .25s ease; }
+  .hour:hover { transform: translateY(-4px); box-shadow: 0 6px 18px rgba(0,0,0,.4); }
+  @media (prefers-reduced-motion: reduce) {
+    .reveal { opacity: 1; transform: none; transition: none; }
+    header h1, .gz-big .pill, .back-symbol { animation: none; }
+    .bar-fill { transition: none; }
+  }
+  footer { text-align: center; margin-top: 40px; color: #6f675d; font-size: 12px; line-height: 2; }
+</style>
+<style>:root{--accent:#1772B4;--accent-rgb:23,114,180;--paper:#F8F4ED;--ink:#2E2E2E;--seal:#D92121;}</style>
+</head>
+<body>
+<canvas id="bg-stars"></canvas>
+<div class="wrap">
+  <header class="reveal" style="position:relative">
+    <div class="vertical-deco" style="position:absolute;right:8px;top:40px">太卜日签</div>
+    <div class="brand">太 卜 · 每 日 运 势</div>
+    <h1>今日宜忌</h1>
+    <div class="date">2026-10-13 · 星期二<br>农历二〇二六年九月初四 · 生肖马</div>
+    <div><span class="seal-mark">庚申</span></div>
+    <div style="margin-top:10px;font-size:12px;color:#6f675d;letter-spacing:3px">日柱干支 · 纳音 石榴木</div>
+  </header>
+
+  <div class="personal reveal" style="border-width:2px">
+    <h2>今日综合分析</h2>
+    <div class="ai-oneliner">"今天适合把拖了好几天的那件正事往前推一把，但别跟自己较劲，见好就收。"</div>
+    <div class="daily-quote"><div class="dq-label">今日一句</div><div class="dq-text">「此事宜急办者，须如救焚拯溺；此事宜缓办者，须如养鹰养虎」</div><div class="dq-src">——《菜根谭》</div><div class="dq-comment">今天有的活该快刀斩乱麻，有的念头该放一放，分清这两样就不累。</div></div>
+    <div class="kp-grid">
+      <div class="kp-card"><div class="kp-title">该推的事别拖</div><div class="kp-body">执行力和拍板欲都在线，适合把搁置的活往前推一把。</div><details class="kp-why"><summary>📖 为什么这么说</summary><div style="margin-top:6px">流日带化权（主执行、拍板），正财日主稳扎稳打。</div></details></div><div class="kp-card"><div class="kp-title">分钱的事多留心</div><div class="kp-body">正财日还算顺，但小破财风险在，几十块钱级别，别做大额决定。</div><details class="kp-why"><summary>📖 为什么这么说</summary><div style="margin-top:6px">日柱神煞劫煞（防破财被坑），流霞（防见血），武曲化忌。</div></details></div><div class="kp-card"><div class="kp-title">别给自己加戏</div><div class="kp-body">容易为还没发生的事焦虑，越想越真，其实多半没事。</div><details class="kp-why"><summary>📖 为什么这么说</summary><div style="margin-top:6px">空亡逢化忌主白焦虑，天同化忌主情绪低。</div></details></div>
+    </div>
+    <div class="ai-rows">
+      <div class="ai-row"><span class="ai-tag good">宜</span><span>上午把论文里拖了最久的那部分打开，先写两小时，别管质量；傍晚去签字那事按通知的时间到就行，犯不着早去愁着等</span></div>
+      <div class="ai-row"><span class="ai-tag bad">忌</span><span>别一个人闷着想最坏的结果，想三遍不如找人说一遍</span></div>
+      <div class="ai-row"><span class="ai-tag time">时</span><span>上午八点到十点适合推进论文或跟导师沟通，脑子清楚，正事顺。</span></div>
+    </div>
+    <div class="agenda-title">备忘录 <small>未来7天待办</small></div>
+      <div class="memo-box">
+        <div class="memo-date">今天 19:00</div>
+        <div class="memo-event">平安校园建设告知书签字（19:00-21:00，甘棠园D-120，26级博士生男生场）</div>
+      </div>
+    <div class="agenda-title">今日核心建议</div><div class="ai-text"><p>▸ 扬长：上午把论文打开写两小时，今天执行力在线，推进论文比平时顺手</p><p>▸ 扬长：晚上签字那事正常去，这个时段见人办事有贵人运，态度放软反而好办</p><p>▸ 避短：今天所有跟钱有关的决定都缓一缓，几十块钱的小钱也别替人垫，别网购大件</p></div>
+    <div class="agenda-title">今日推演 <small>倾向性预测，晚上可验证</small></div><div class="agenda">
+      <div class="agenda-row" id="tuiyan-1">
+        <div class="agenda-time"><span class="tuiyan-num">1</span><span class="prob prob-mid">中</span></div>
+        <div class="agenda-body"><div class="agenda-do">今天执行力和拍板欲在线，适合推进搁置的事，比如论文里一直没动的部分。</div><div class="agenda-act">→ 上午就打开论文写两小时，别管写得好不好，先动起来。</div><details class="agenda-why"><summary>📖 为什么这么说</summary><div style="margin-top:4px">依据：化权主执行力、决断力，是今天最明显的正向信号。 <span style="color:#6a5f48">(规则 R004)</span></div></details></div>
+      </div>
+      <div class="agenda-row" id="tuiyan-2">
+        <div class="agenda-time"><span class="tuiyan-num">2</span><span class="prob prob-mid">中</span></div>
+        <div class="agenda-body"><div class="agenda-do">容易为还没发生的事焦虑，越想越真，比如担心论文进度或者签字那事出岔子。</div><div class="agenda-act">→ 把担心的写下来，问自己最坏能怎样，写完多半会发现没事。</div><details class="agenda-why"><summary>📖 为什么这么说</summary><div style="margin-top:4px">依据：空亡逢化忌，主白焦虑，事情往往没想的那么糟。 <span style="color:#6a5f48">(规则 R144)</span></div></details></div>
+      </div>
+      <div class="agenda-row" id="tuiyan-3">
+        <div class="agenda-time"><span class="tuiyan-num">3</span><span class="prob prob-mid">中</span></div>
+        <div class="agenda-body"><div class="agenda-do">小破财风险，几十块钱级别，可能是不小心丢了什么或者买错东西。</div><div class="agenda-act">→ 今天不网购、不转账，出门前默念手机钥匙钱包。</div><details class="agenda-why"><summary>📖 为什么这么说</summary><div style="margin-top:4px">依据：劫煞、流霞、武曲化忌，都是小破财和决策失误的信号。 <span style="color:#6a5f48">(规则 R051)</span></div></details></div>
+      </div>
+      <div class="agenda-row" id="tuiyan-4">
+        <div class="agenda-time"><span class="tuiyan-num">4</span><span class="prob prob-mid">中</span></div>
+        <div class="agenda-body"><div class="agenda-do">情绪容易低落，尤其是晚上一个人待着的时候。</div><div class="agenda-act">→ 晚上别一个人闷着，找个人说说话，哪怕微信聊几句。</div><details class="agenda-why"><summary>📖 为什么这么说</summary><div style="margin-top:4px">依据：天同化忌，主情绪低、福气受损，容易打不起精神。 <span style="color:#6a5f48">(规则 R058)</span></div></details></div>
+      </div>
+      <div class="agenda-row" id="tuiyan-5">
+        <div class="agenda-time"><span class="tuiyan-num">5</span><span class="prob prob-mid">中</span></div>
+        <div class="agenda-body"><div class="agenda-do">有得有失，先好后坏，事情开头顺，后半段容易出小问题。</div><div class="agenda-act">→ 见好就收，事情办到七成满意就可以停了，别追求完美。</div><details class="agenda-why"><summary>📖 为什么这么说</summary><div style="margin-top:4px">依据：禄忌交战，化禄和化忌同现，主先好后坏。 <span style="color:#6a5f48">(规则 R085)</span></div></details></div>
+      </div>
+      <div class="agenda-row" id="tuiyan-6">
+        <div class="agenda-time"><span class="tuiyan-num">6</span><span class="prob prob-mid">中</span></div>
+        <div class="agenda-body"><div class="agenda-do">感情上容易失落，看到别人成双成对可能心里不是滋味。</div><div class="agenda-act">→ 难受就找朋友聊聊，别一个人刷朋友圈给自己添堵。</div><details class="agenda-why"><summary>📖 为什么这么说</summary><div style="margin-top:4px">依据：天同化忌，在感情层面主失落、受伤。 <span style="color:#6a5f48">(规则 R184)</span></div></details></div>
+      </div>
+    </div>
+    <div class="agenda-title">今日行动计划 <small>推演 → 应对 → 时间线</small></div><div class="agenda">
+      <div class="agenda-row">
+        <div class="agenda-time">8:00-10:00<br><span style="font-size:11px;color:#9a8a6a">写论文</span></div>
+        <div class="agenda-body"><div class="agenda-do">把豆自给率论文里拖最久的章节打开，写两小时，不管质量先写</div><div style="margin-top:6px"><span style="display:inline-block;font-size:11px;color:var(--accent);border:1px solid rgba(var(--accent-rgb),0.35);border-radius:10px;padding:1px 8px">↳ 针对推演1</span></div></div>
+      </div>
+      <div class="agenda-row">
+        <div class="agenda-time">19:00-21:00<br><span style="font-size:11px;color:#9a8a6a">甘棠园D-120签字</span></div>
+        <div class="agenda-body"><div class="agenda-do">按通知时间去，排队等的时候别琢磨这个事，签完直接回</div><div style="margin-top:6px"><span style="display:inline-block;font-size:11px;color:var(--accent);border:1px solid rgba(var(--accent-rgb),0.35);border-radius:10px;padding:1px 8px">↳ 针对推演7</span></div></div>
+      </div>
+    </div>
+    <details class="reveal" style="margin-top:12px"><summary style="cursor:pointer;color:#8a7a5a;font-size:13px;letter-spacing:1px">命理推演过程（技术层，点击展开）</summary><div class="ai-text" style="margin-top:8px"><p>流日庚申，正财坐沐浴。正财主正经收入、稳定进财，宜守不宜投机，故今日财上以稳为主，不做大额决定。沐浴为败地，主感情波动、虚耗，叠加流霞煞主血光，劫煞主破财——破财刻度依应验校准，约为几十元量级。</p><p>紫微流日四化落迁移宫：太阳化禄、武曲化权、太阴化科、天同化忌。化禄入迁移，出外有贵人，利出行、外出办事。化权入迁移，在外有影响力，利展示、发言。化科入迁移，出外有声望。天同化忌，福气受损、情绪低落，主今日易懒散、情绪低，忌一个人闷着。</p><p>流日化忌为天同。天同化忌主情绪低，感情上容易失落，别钻牛角尖。叠加空亡——小六壬今日落空亡，主虚空、白费，谋事难成。空亡逢化忌，白焦虑，为还没发生的事焦虑，越想越真。</p><p>化禄化忌同现为禄忌交战，有得有失、先好后坏，宜见好就收、别贪。今日既有太阳化禄的顺遂，又有天同化忌的低落，白天顺、晚上容易多想。</p><p>武曲化权主执行力在线、决策果断，但今日武曲亦与化忌相应（推演3：武曲化忌主破财），故执行力可用，但涉及钱的决策要谨慎。</p><p>日九星一白水，坎位吉。神煞金舆主贵气出行，驿马主走动，天后、六仪利见人办事。晚间酉时凶，戌时吉——19:00到21:00签字那个时段，开场可能有点小状况（酉时凶），后半段顺（戌时吉），别赶，按部就班就行。</p></div></details>
+  </div>
+
+  <div class="pattern-divider"></div>
+  <div class="sec-title reveal">今日运势指数 <small style="font-size:11px;color:#6a5f48;letter-spacing:1px">规则公开 · 仅供娱乐</small></div>
+  <div class="dash reveal">
+    <div class="dial">
+      <svg viewBox="0 0 140 140" width="150" height="150">
+        <circle cx="70" cy="70" r="58" fill="none" stroke="rgba(var(--accent-rgb),0.08)" stroke-width="12"/>
+        <circle class="dial-arc" data-score="86" cx="70" cy="70" r="58" fill="none" stroke="#2d6a3f" stroke-width="12" stroke-linecap="round"
+          stroke-dasharray="0 364.4" transform="rotate(-90 70 70)"/>
+        <text class="dial-num" data-score="86" x="70" y="68" text-anchor="middle" fill="var(--ink)" font-size="34" font-weight="bold">0</text>
+        <text x="70" y="90" text-anchor="middle" fill="#6f675d" font-size="12">综合指数</text>
+      </svg>
+    </div>
+    <div class="bars">
+      
+      <div class="bar-row">
+        <span class="bar-label">事业</span>
+        <div class="bar-track"><div class="bar-fill" data-w="95" style="width:0;background:#7ba05b"></div></div>
+        <span class="bar-num">95</span>
+      </div>
+      <div class="bar-row">
+        <span class="bar-label">财运</span>
+        <div class="bar-track"><div class="bar-fill" data-w="99" style="width:0;background:#7ba05b"></div></div>
+        <span class="bar-num">99</span>
+      </div>
+      <div class="bar-row">
+        <span class="bar-label">感情</span>
+        <div class="bar-track"><div class="bar-fill" data-w="74" style="width:0;background:var(--accent)"></div></div>
+        <span class="bar-num">74</span>
+      </div>
+      <div class="bar-row">
+        <span class="bar-label">健康</span>
+        <div class="bar-track"><div class="bar-fill" data-w="53" style="width:0;background:#b0513f"></div></div>
+        <span class="bar-num">53</span>
+      </div>
+    </div>
+  </div>
+
+  <details class="reveal algo">
+    <summary>评分算法说明（点击展开）</summary>
+    <p class="algo-note">分数 = 各项加减分之和，结果钳制在 5–99 之间。所有输入信号均来自当日真实排盘（太卜引擎）；权重按传统典籍吉凶分级标定（见下），非凭空拍定，仅供娱乐。同一套规则每天自动重算。</p>
+    <div class="algo-calib"><b>权重标定依据</b><br>
+    · 十神：《渊海子平》《三命通会》以正官、正印为贵格（+10）；食神泄秀、偏印主钻研为吉（+6）；比劫帮身亦分财为平（+2）；伤官、七杀需制化为凶（-4）；财星另计。<br>
+    · 四化：紫微斗数传统以禄、权、科为三吉，忌为凶；化忌主是非阻滞、影响面广，负权重取正向约1.5倍；流月、流年为背景影响，权重递减。<br>
+    · 十二长生：按传统旺衰，长生、临官、帝旺为旺（事业+3~+5），病、死、墓、绝为衰（健康-4）。<br>
+    · 月令：按旺相休囚死——得令（旺）+6、相+3、休0、囚-3、死-5。<br>
+    · 纳音：以日主为体、纳音为环境，按五行生克——生我+4、同我+2、我克+2、我生-2、克我-5。<br>
+    · 神煞：按《协纪辨方书》分类并分级——大吉神（天德/月德/天赦/母仓）+4/个，普通吉神+2/个；重煞（白虎/丧门/吊客/天狗/五鬼）-4/个，普通凶煞-2/个；红鸾、天喜、六合为桃花类专计感情。<br>
+    · 建除十二值：按"除危定执黄、建满平收黑"，吉+4、凶-4；二十八星宿按值日吉凶，吉+4、凶-4。<br>
+    · 紫微星曜：文星（流昌/流曲）利事业+3，桃花（流鸾/流喜）利感情+4，煞星（流羊/流陀）损健康-3；落夫妻宫/财帛宫对应加分。<br>
+    · 小六壬、梅花体用：按传统占法吉凶（体克用小吉、比和吉、用克体凶）；时辰按值神吉凶计数。<br>
+    · 身强弱：月令旺+3/相+2/休0/囚-1/死-2，天干帮身+1/耗身-1（不计日主），地支帮身+1/耗身-1；总分正为身强、负为身弱。<br>
+    · 喜用神：身强喜克泄耗（克我、我生、我克），身弱喜生扶（生我、同我）；纳音遇喜用+5、遇忌神-5；流日干支喜用+2/个、忌神-2/个；身强逢印比过旺-3、逢克泄得宜+3（身弱反之）。幸运色取第一喜用之色。<br>
+    · 日柱神煞：贵人（天乙/太极）利事业+4，桃花利感情+4，羊刃/劫煞损健康-3，孤辰/寡宿损感情-3。<br>
+    · 紫微落宫：落命宫综合+4/+2，落官禄宫事业+4/+2，落疾厄宫健康-3/-2（流日/流月权重递减；夫妻、财帛另计）。<br>
+    · 流年星曜：流禄主财+4，流魁/流钺为贵人+3。<br>
+    · 未进分数项：彭祖百忌、胎神（仅作展示参考）；黄历宜忌仅取与五维直接相关的核心事项；塔罗由用户亲手抽取，不参与评分。</div>
+    
+    <div class="algo-dim"><b>综合 86分</b>
+      <div><span class="algo-f">四维平均分 <em class="plus">+80.3</em></span><span class="algo-f">小六壬空亡（凶） <em class="minus">-8</em></span><span class="algo-f">日值神金匮（吉） <em class="plus">+6</em></span><span class="algo-f">吉神11位（大吉0） <em class="plus">+12</em></span><span class="algo-f">凶煞4位（重煞0） <em class="minus">-8</em></span><span class="algo-f">吉时7个 <em class="plus">+6</em></span><span class="algo-f">凶时6个 <em class="minus">-6</em></span><span class="algo-f">流日庚申（喜用2·忌神0） <em class="plus">+4</em></span><span class="algo-f">建除「开」 <em class="plus">+4</em></span><span class="algo-f">星宿翼（凶） <em class="minus">-4</em></span></div>
+    </div>
+    <div class="algo-dim"><b>事业 95分</b>
+      <div><span class="algo-f">基础分 <em class="plus">+60</em></span><span class="algo-f">紫微流日化禄 <em class="plus">+8</em></span><span class="algo-f">紫微流日化权 <em class="plus">+8</em></span><span class="algo-f">紫微流日化科 <em class="plus">+5</em></span><span class="algo-f">紫微流日化忌 <em class="minus">-12</em></span><span class="algo-f">紫微流月化禄 <em class="plus">+4</em></span><span class="algo-f">紫微流月化权 <em class="plus">+4</em></span><span class="algo-f">紫微流月化科 <em class="plus">+3</em></span><span class="algo-f">紫微流月化忌 <em class="minus">-6</em></span><span class="algo-f">紫微流年化禄 <em class="plus">+3</em></span><span class="algo-f">紫微流年化权 <em class="plus">+3</em></span><span class="algo-f">紫微流年化科 <em class="plus">+2</em></span><span class="algo-f">紫微流年化忌 <em class="minus">-4</em></span><span class="algo-f">黄历宜赴任/开市 <em class="plus">+5</em></span><span class="algo-f">身强逢克泄（得宜） <em class="plus">+3</em></span><span class="algo-f">月令戌月相 <em class="plus">+3</em></span><span class="algo-f">文星流昌/流曲 <em class="plus">+3</em></span><span class="algo-f">流年贵人流魁/流钺 <em class="plus">+3</em></span></div>
+    </div>
+    <div class="algo-dim"><b>财运 99分</b>
+      <div><span class="algo-f">基础分 <em class="plus">+60</em></span><span class="algo-f">十神带财星 <em class="plus">+12</em></span><span class="algo-f">黄历宜求财开市 <em class="plus">+8</em></span><span class="algo-f">藏干透财星 <em class="plus">+4</em></span><span class="algo-f">紫微流月化禄 <em class="plus">+6</em></span><span class="algo-f">紫微流年化禄 <em class="plus">+4</em></span><span class="algo-f">流年落财帛宫 <em class="plus">+2</em></span><span class="algo-f">流年流禄 <em class="plus">+4</em></span></div>
+    </div>
+    <div class="algo-dim"><b>感情 74分</b>
+      <div><span class="algo-f">基础分 <em class="plus">+60</em></span><span class="algo-f">黄历宜嫁娶订婚 <em class="plus">+10</em></span><span class="algo-f">流年桃花流鸾/流喜 <em class="plus">+4</em></span></div>
+    </div>
+    <div class="algo-dim"><b>健康 53分</b>
+      <div><span class="algo-f">基础分 <em class="plus">+65</em></span><span class="algo-f">逢冲煞 <em class="minus">-5</em></span><span class="algo-f">黄历宜祭祀祈福 <em class="plus">+4</em></span><span class="algo-f">纳音石榴木为忌神 <em class="minus">-5</em></span><span class="algo-f">流年煞星流羊/流陀 <em class="minus">-3</em></span><span class="algo-f">日柱羊刃/劫煞 <em class="minus">-3</em></span></div>
+    </div>
+  </details>
+
+  <div class="personal reveal"><h2>🧧 命主专属</h2><p>你的日主为 <b style="color:var(--accent)">丁</b>（丁亥日生 · 纳音屋上土），命局<b style="color:var(--accent)">身强</b>，喜用神为<b style="color:var(--accent)">水、土、金</b>；今日 庚申 日，流日十神为 <b style="color:var(--accent)">正财</b>。</p></div>
+
+  <div class="sec-title reveal">八字流日详批</div>
+  <div class="grid reveal" style="grid-template-columns:1fr 1fr 1fr 1fr">
+    <div class="item"><div class="k">流日十神</div><div class="v" style="font-size:20px;color:var(--accent)">正财</div></div>
+    <div class="item"><div class="k">日柱纳音</div><div class="v">石榴木</div></div>
+    <div class="item"><div class="k">十二长生</div><div class="v">沐浴</div></div>
+    <div class="item"><div class="k">日柱神煞</div><div class="v">金舆 · 流霞 · 劫煞</div></div>
+  </div>
+  <div class="item" style="margin-bottom:18px"><div class="k">地支藏干</div><div class="chips" style="margin-top:8px"><span class="chip ">庚(正财)</span><span class="chip ">壬(正官)</span><span class="chip ">戊(伤官)</span></div></div>
+
+  <div class="cards reveal">
+    <div class="card yi"><h2>宜</h2><p>嫁娶 · 祭祀 · 祈福 · 求嗣 · 开光 · 出行 · 解除 · 出火 · 进人口 · 开市 · 交易 · 立券 · 挂匾 · 纳财 · 入宅 · 移徙 · 栽种 · 破土 · 谢土</p></div>
+    <div class="card ji"><h2>忌</h2><p>安床 · 安葬</p></div>
+  </div>
+
+  <div class="grid reveal">
+    <div class="item"><div class="k">冲煞</div><div class="v">冲(甲寅)虎 · 煞南</div></div>
+    <div class="item"><div class="k">胎神占方</div><div class="v">碓磨炉 外东南</div></div>
+    <div class="item"><div class="k">值日星神</div><div class="v">金匮 · 吉 <span class="badge good">吉</span></div></div>
+    <div class="item"><div class="k">二十八星宿</div><div class="v">翼 <span class="badge bad">凶</span></div></div>
+    <div class="item"><div class="k">建除十二值</div><div class="v">开</div></div>
+    <div class="item"><div class="k">彭祖百忌</div><div class="v">庚不经络织机虚张 · 申不安床鬼祟入房</div></div>
+  </div>
+
+  <div class="sec-title reveal">时辰吉凶</div>
+  <div class="hours reveal">
+  <div class="hour h-good">
+    <div class="hour-name">子时 <small>23-1</small></div>
+    <div class="hour-gz">丙子</div>
+    <div class="hour-god">青龙<span class="badge good">吉</span></div>
+    <div class="hour-yj"><em>宜</em> 祈福 · 求嗣 · 订婚</div>
+    <div class="hour-yj"><em class="ji">忌</em> 上梁 · 盖屋 · 入殓</div>
+  </div>
+  <div class="hour h-good">
+    <div class="hour-name">丑时 <small>1-3</small></div>
+    <div class="hour-gz">丁丑</div>
+    <div class="hour-god">明堂<span class="badge good">吉</span></div>
+    <div class="hour-yj"><em>宜</em> 祭祀 · 祈福 · 酬神</div>
+    <div class="hour-yj"><em class="ji">忌</em> 赴任 · 出行 · 求财</div>
+  </div>
+  <div class="hour h-bad">
+    <div class="hour-name">寅时 <small>3-5</small></div>
+    <div class="hour-gz">戊寅</div>
+    <div class="hour-god">天刑<span class="badge bad">凶</span></div>
+    <div class="hour-yj"><em>宜</em> 无</div>
+    <div class="hour-yj"><em class="ji">忌</em> 诸事不宜</div>
+  </div>
+  <div class="hour h-bad">
+    <div class="hour-name">卯时 <small>5-7</small></div>
+    <div class="hour-gz">己卯</div>
+    <div class="hour-god">朱雀<span class="badge bad">凶</span></div>
+    <div class="hour-yj"><em>宜</em> 求嗣 · 订婚 · 嫁娶</div>
+    <div class="hour-yj"><em class="ji">忌</em> 祭祀 · 祈福 · 斋醮</div>
+  </div>
+  <div class="hour h-good">
+    <div class="hour-name">辰时 <small>7-9</small></div>
+    <div class="hour-gz">庚辰</div>
+    <div class="hour-god">金匮<span class="badge good">吉</span></div>
+    <div class="hour-yj"><em>宜</em> 祈福 · 求嗣 · 订婚</div>
+    <div class="hour-yj"><em class="ji">忌</em> 修造 · 动土</div>
+  </div>
+  <div class="hour h-good">
+    <div class="hour-name">巳时 <small>9-11</small></div>
+    <div class="hour-gz">辛巳</div>
+    <div class="hour-god">天德<span class="badge good">吉</span></div>
+    <div class="hour-yj"><em>宜</em> 祭祀 · 祈福 · 斋醮</div>
+    <div class="hour-yj"><em class="ji">忌</em> 赴任 · 出行</div>
+  </div>
+  <div class="hour h-bad">
+    <div class="hour-name">午时 <small>11-13</small></div>
+    <div class="hour-gz">壬午</div>
+    <div class="hour-god">白虎<span class="badge bad">凶</span></div>
+    <div class="hour-yj"><em>宜</em> 求财 · 见贵 · 酬神</div>
+    <div class="hour-yj"><em class="ji">忌</em> 祭祀 · 祈福 · 斋醮</div>
+  </div>
+  <div class="hour h-good">
+    <div class="hour-name">未时 <small>13-15</small></div>
+    <div class="hour-gz">癸未</div>
+    <div class="hour-god">玉堂<span class="badge good">吉</span></div>
+    <div class="hour-yj"><em>宜</em> 修造 · 盖屋 · 移徙</div>
+    <div class="hour-yj"><em class="ji">忌</em> 祭祀 · 祈福 · 斋醮</div>
+  </div>
+  <div class="hour h-bad">
+    <div class="hour-name">申时 <small>15-17</small></div>
+    <div class="hour-gz">甲申</div>
+    <div class="hour-god">天牢<span class="badge bad">凶</span></div>
+    <div class="hour-yj"><em>宜</em> 求财 · 见贵 · 订婚</div>
+    <div class="hour-yj"><em class="ji">忌</em> 赴任 · 修造 · 移徙</div>
+  </div>
+  <div class="hour h-bad">
+    <div class="hour-name">酉时 <small>17-19</small></div>
+    <div class="hour-gz">乙酉</div>
+    <div class="hour-god">玄武<span class="badge bad">凶</span></div>
+    <div class="hour-yj"><em>宜</em> 求嗣 · 嫁娶 · 移徙</div>
+    <div class="hour-yj"><em class="ji">忌</em> 赴任 · 出行 · 修造</div>
+  </div>
+  <div class="hour h-good">
+    <div class="hour-name">戌时 <small>19-21</small></div>
+    <div class="hour-gz">丙戌</div>
+    <div class="hour-god">司命<span class="badge good">吉</span></div>
+    <div class="hour-yj"><em>宜</em> 祈福 · 求嗣 · 订婚</div>
+    <div class="hour-yj"><em class="ji">忌</em> 上梁 · 盖屋 · 入殓</div>
+  </div>
+  <div class="hour h-bad">
+    <div class="hour-name">亥时 <small>21-23</small></div>
+    <div class="hour-gz">丁亥</div>
+    <div class="hour-god">勾陈<span class="badge bad">凶</span></div>
+    <div class="hour-yj"><em>宜</em> 修造 · 入宅 · 安葬</div>
+    <div class="hour-yj"><em class="ji">忌</em> 赴任 · 出行</div>
+  </div>
+  <div class="hour h-good">
+    <div class="hour-name">子时 <small>0-1·次日</small></div>
+    <div class="hour-gz">戊子</div>
+    <div class="hour-god">司命<span class="badge good">吉</span></div>
+    <div class="hour-yj"><em>宜</em> 嫁娶 · 移徙 · 入宅</div>
+    <div class="hour-yj"><em class="ji">忌</em> 祈福 · 求嗣 · 赴任</div>
+  </div></div>
+
+  <div class="sec-title reveal">神煞参考</div>
+  <div class="grid reveal" style="grid-template-columns:1fr 1fr">
+    <div class="item"><div class="k">吉神宜趋</div><div class="chips" style="margin-top:8px"><span class="chip good">月恩</span><span class="chip good">王日</span><span class="chip good">驿马</span><span class="chip good">天后</span><span class="chip good">时阳</span><span class="chip good">生气</span><span class="chip good">六仪</span><span class="chip good">金堂</span><span class="chip good">除神</span><span class="chip good">金匮</span><span class="chip good">鸣吠</span></div></div>
+    <div class="item"><div class="k">凶煞宜忌</div><div class="chips" style="margin-top:8px"><span class="chip bad">厌对</span><span class="chip bad">招摇</span><span class="chip bad">五离</span><span class="chip bad">八专</span></div></div>
+  </div>
+
+  <div class="pattern-divider"></div>
+  <div class="sec-title reveal">塔罗日签 <small style="font-size:12px;color:#6f675d;letter-spacing:2px">凭直觉抽一张</small></div>
+  <div class="pick-row reveal">
+    
+    <div class="flip pick" title="点我翻牌">
+      <div class="flip-inner">
+        <div class="flip-face flip-front"><div class="card-back small"><div class="back-symbol">☯</div><div class="back-hint">选 我</div></div></div>
+        <div class="flip-face flip-back"><div class="tarot-card small">
+          <div class="tarot-name">权杖八</div>
+          <div class="tarot-en">Eight of Wands · 正位</div>
+          <div class="chips" style="justify-content:center;margin:8px 0"><span class="chip good">迅速行动</span><span class="chip good">进展</span><span class="chip good">果断决策</span></div>
+          <div class="tarot-meaning">权杖八正位：今天有股往前冲的劲，正好用在论文上，别犹豫，打开文档就是干。</div>
+        </div></div>
+      </div>
+    </div>
+    <div class="flip pick" title="点我翻牌">
+      <div class="flip-inner">
+        <div class="flip-face flip-front"><div class="card-back small"><div class="back-symbol">☯</div><div class="back-hint">选 我</div></div></div>
+        <div class="flip-face flip-back"><div class="tarot-card small">
+          <div class="tarot-name">星币八</div>
+          <div class="tarot-en">Eight of Pentacles · 逆位</div>
+          <div class="chips" style="justify-content:center;margin:8px 0"><span class="chip bad">迷失方向</span><span class="chip bad">过度执着细节</span><span class="chip bad">视野狭隘</span></div>
+          <div class="tarot-meaning">星币八逆位：别在细枝末节上磨太久，写出来的东西糙一点没关系，今天不适合精雕细琢。</div>
+        </div></div>
+      </div>
+    </div>
+    <div class="flip pick" title="点我翻牌">
+      <div class="flip-inner">
+        <div class="flip-face flip-front"><div class="card-back small"><div class="back-symbol">☯</div><div class="back-hint">选 我</div></div></div>
+        <div class="flip-face flip-back"><div class="tarot-card small">
+          <div class="tarot-name">圣杯十</div>
+          <div class="tarot-en">Ten of Cups · 逆位</div>
+          <div class="chips" style="justify-content:center;margin:8px 0"><span class="chip bad">梦想破碎</span><span class="chip bad">家庭不和</span><span class="chip bad">关系失调</span></div>
+          <div class="tarot-meaning">圣杯十逆位：对感情期待别放太高，一个人也可以过得不赖，今晚早点睡比瞎想强。</div>
+        </div></div>
+      </div>
+    </div>
+  </div>
+  <p class="reveal" style="text-align:center;color:#9a8a6a;font-size:13px;margin:10px 0 4px;letter-spacing:1px">深呼吸，凭第一直觉点一张 —— 翻开的就是你的今日牌</p>
+  
+  
+
+  <div class="sec-title reveal">紫微流日</div>
+  <div class="grid reveal" style="grid-template-columns:1fr 1fr 1fr">
+    <div class="item"><div class="k">流日 庚申</div><div class="v">落迁移宫</div><div class="chips" style="margin-top:8px"><span class="chip good">太阳[化禄]</span><span class="chip good">武曲[化权]</span><span class="chip good">太阴[化科]</span><span class="chip bad">天同[化忌]</span></div></div>
+    <div class="item"><div class="k">流月 戊戌 · 农历九月</div><div class="v">落子女宫</div><div class="chips" style="margin-top:8px"><span class="chip good">贪狼[化禄]</span><span class="chip good">太阴[化权]</span><span class="chip good">右弼[化科]</span><span class="chip bad">天机[化忌]</span></div></div>
+    <div class="item"><div class="k">流年 丙午 · 2026年 (马年)</div><div class="v">落财帛宫</div><div class="chips" style="margin-top:8px"><span class="chip good">天同[化禄]</span><span class="chip good">天机[化权]</span><span class="chip good">文昌[化科]</span><span class="chip bad">廉贞[化忌]</span></div></div>
+  </div>
+
+  <div class="sec-title reveal">小六壬 · 今日一占</div>
+  <div class="personal reveal">
+    <h2>空亡 <span class="badge bad">凶</span></h2>
+    <p>月上起速喜 → 日上落空亡 → 时上落空亡（农历9月4日 · 午时起课）<br>五行土 · 方位中央</p>
+  </div>
+
+  <div class="sec-title reveal">梅花易数 · 每日一卦</div>
+  <div class="grid reveal" style="grid-template-columns:1fr 1fr 1fr">
+    <div class="item"><div class="k">本卦 · 震上离下</div><div class="v" style="font-size:20px;color:var(--accent)">雷火丰</div><div class="v" style="margin-top:6px;font-size:13px;color:#9a8a6a">丰：亨，王假之，勿忧，宜日中。</div></div>
+    <div class="item"><div class="k">互卦</div><div class="v" style="font-size:20px;color:var(--accent)">泽风大过</div><div class="v" style="margin-top:6px;font-size:13px;color:#9a8a6a">兑上巽下</div></div>
+    <div class="item"><div class="k">变卦 · 动爻九三</div><div class="v" style="font-size:20px;color:var(--accent)">震为雷</div><div class="v" style="margin-top:6px;font-size:13px;color:#9a8a6a">震：亨。震来虩虩，笑言哑哑。震惊百里，不丧匕鬯。</div></div>
+  </div>
+  <div class="personal reveal">
+    <h2>体用关系：体生用</h2>
+    <p>体卦(震木) 生 用卦(离火)；月令：体卦囚、用卦休。</p>
+    <p style="margin-top:8px">【初段】体卦(震木) 生 用卦(离火)<br>【中段】体互(兑金) 克 体卦(震木)；体卦(震木) 与 用互(巽木) 比和<br>【后段】体卦(震木) 与 变卦整卦(震为雷/木) 比和</p>
+  </div>
+
+  <div class="sec-title reveal">今日幸运物</div>
+  <div class="grid reveal" style="grid-template-columns:1fr 1fr 1fr">
+    <div class="item"><div class="k">幸运色</div><div class="v">黑色 · 蓝色（喜用）</div></div>
+    <div class="item"><div class="k">幸运数字</div><div class="v">5</div></div>
+    <div class="item"><div class="k">喜神方位</div><div class="v">正南</div></div>
+  </div>
+
+  <footer>
+    由太卜 taibu-core 传统历法引擎排盘 · deterministic 计算，非随机生成<br>
+    内容仅供娱乐，请理性看待 · 每天早上自动更新
+  </footer>
+</div>
+<script>
+// 星空粒子背景
+(function () {
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  var cv = document.getElementById('bg-stars'), ctx = cv.getContext('2d'), W, H, ps = [];
+  function rs() { W = cv.width = innerWidth; H = cv.height = innerHeight; }
+  rs(); addEventListener('resize', rs);
+  for (var i = 0; i < 70; i++) ps.push({ x: Math.random() * innerWidth, y: Math.random() * innerHeight, r: Math.random() * 1.8 + .4, s: Math.random() * .35 + .08, o: Math.random() * .5 + .15, ph: Math.random() * 6.28 });
+  (function tick(t) {
+    ctx.clearRect(0, 0, W, H);
+    for (var k = 0; k < ps.length; k++) {
+      var p = ps[k]; p.y -= p.s; if (p.y < -4) { p.y = H + 4; p.x = Math.random() * W; }
+      var tw = p.o * (0.6 + 0.4 * Math.sin(t / 900 + p.ph));
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, 6.28);
+      ctx.fillStyle = 'rgba(201,168,106,' + tw.toFixed(3) + ')'; ctx.fill();
+    }
+    requestAnimationFrame(tick);
+  })(0);
+})();
+// 滚动渐入
+(function () {
+  var io = new IntersectionObserver(function (es) {
+    es.forEach(function (e) { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } });
+  }, { threshold: .1 });
+  document.querySelectorAll('.reveal').forEach(function (el) { io.observe(el); });
+})();
+// 仪表盘数字滚动 + 圆弧生长
+(function () {
+  var C = 364.4;
+  function ease(p) { return 1 - Math.pow(1 - p, 3); }
+  document.querySelectorAll('.dial-arc').forEach(function (c) {
+    var s = +c.dataset.score, st = null;
+    function step(t) { if (!st) st = t; var p = Math.min(1, (t - st) / 1500), e = ease(p);
+      c.setAttribute('stroke-dasharray', (s / 100 * C * e).toFixed(1) + ' ' + C);
+      if (p < 1) requestAnimationFrame(step); }
+    requestAnimationFrame(step);
+  });
+  document.querySelectorAll('.dial-num').forEach(function (el) {
+    var s = +el.dataset.score, st = null;
+    function step(t) { if (!st) st = t; var p = Math.min(1, (t - st) / 1500), e = ease(p);
+      el.textContent = Math.round(s * e);
+      if (p < 1) requestAnimationFrame(step); }
+    requestAnimationFrame(step);
+  });
+  setTimeout(function () {
+    document.querySelectorAll('.bar-fill').forEach(function (b) { b.style.width = b.dataset.w + '%'; });
+  }, 350);
+})();
+// 塔罗三选一：点中一张翻开，其余变暗锁定
+document.querySelectorAll('.flip.pick').forEach(function (card) {
+  card.addEventListener('click', function () {
+    if (document.querySelector('.flip.pick.picked')) return;
+    card.classList.add('picked', 'flipped');
+    document.querySelectorAll('.flip.pick').forEach(function (o) { if (o !== card) o.classList.add('dimmed'); });
+  });
+});
+</script>
+<script>
+// Lenis已移除
+// 滚动显现已移除，保证内容直接可见
+</script>
+</body>
+</html>
